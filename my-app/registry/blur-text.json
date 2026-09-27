@@ -1,0 +1,40 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "blur-text",
+  "type": "registry:component",
+  "title": "Blur Text",
+  "description": "Text that starts blurred and sharpens on hover.",
+  "categories": [
+    "text"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/blur-text.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport type { ReactNode } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\nimport { useHoverCapable } from \"../lib/use-hover-capable\";\n\nexport interface BlurTextProps {\n  children: ReactNode;\n  className?: string;\n}\n\nexport function BlurText({ children, className }: BlurTextProps) {\n  const reduceMotion = useReducedMotion();\n  const hoverCapable = useHoverCapable();\n\n  return (\n    <motion.span\n      initial={reduceMotion ? false : { filter: \"blur(6px)\", opacity: 0.5 }}\n      whileHover={hoverCapable && !reduceMotion ? { filter: \"blur(0px)\", opacity: 1 } : undefined}\n      transition={{ duration: 300, ease: [0.23, 1, 0.32, 1] }}\n      className={cn(\"inline-block\", className)}\n    >\n      {children}\n    </motion.span>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "use-hover-capable",
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Text content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    }
+  ],
+  "accessibility": "The blur is decorative; the text is present in the DOM and readable regardless.",
+  "touch": "Hover de-blur is gated behind a (hover: hover) and (pointer: fine) check.",
+  "reducedMotion": "The blur is not applied.",
+  "playground": []
+}

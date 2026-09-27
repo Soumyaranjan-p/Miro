@@ -1,0 +1,57 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "tilt-card",
+  "type": "registry:component",
+  "title": "Tilt Card",
+  "description": "A card that tilts in 3D to follow the cursor.",
+  "categories": [
+    "cards",
+    "interactive"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/tilt-card.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useRef, useState, useCallback, type ReactNode, type MouseEvent } from \"react\";\nimport { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\nimport { useHoverCapable } from \"../lib/use-hover-capable\";\n\nexport interface TiltCardProps {\n  children: ReactNode;\n  className?: string;\n  max?: number;\n}\n\nexport function TiltCard({ children, className, max = 10 }: TiltCardProps) {\n  const ref = useRef<HTMLDivElement>(null);\n  const reduceMotion = useReducedMotion();\n  const hoverCapable = useHoverCapable();\n  const [hovering, setHovering] = useState(false);\n\n  const mx = useMotionValue(0.5);\n  const my = useMotionValue(0.5);\n  const spring = { stiffness: 150, damping: 20 };\n  const rotateX = useSpring(useTransform(my, [0, 1], [max, -max]), spring);\n  const rotateY = useSpring(useTransform(mx, [0, 1], [-max, max]), spring);\n\n  const onMouseMove = useCallback(\n    (e: MouseEvent) => {\n      if (reduceMotion || !ref.current) return;\n      const rect = ref.current.getBoundingClientRect();\n      mx.set((e.clientX - rect.left) / rect.width);\n      my.set((e.clientY - rect.top) / rect.height);\n    },\n    [reduceMotion, mx, my]\n  );\n\n  const onMouseLeave = useCallback(() => {\n    setHovering(false);\n    mx.set(0.5);\n    my.set(0.5);\n  }, [mx, my]);\n\n  return (\n    <div style={{ perspective: 800 }}>\n      <motion.div\n        ref={ref}\n        onMouseMove={hoverCapable ? onMouseMove : undefined}\n        onMouseEnter={() => setHovering(true)}\n        onMouseLeave={onMouseLeave}\n        style={{ rotateX, rotateY, transformStyle: \"preserve-3d\" }}\n        animate={{ scale: hovering && !reduceMotion ? 1.02 : 1 }}\n        transition={{ type: \"spring\", stiffness: 200, damping: 24 }}\n        className={cn(\"relative rounded-xl border border-border bg-card\", className)}\n      >\n        {children}\n      </motion.div>\n    </div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "use-hover-capable",
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Card content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    },
+    {
+      "name": "max",
+      "type": "number",
+      "default": "10",
+      "description": "Maximum tilt angle in degrees."
+    }
+  ],
+  "accessibility": "Card content keeps its own semantics; the tilt is decorative and aria-hidden.",
+  "touch": "Pointer-following tilt is disabled on touch via a (hover: hover) and (pointer: fine) check.",
+  "reducedMotion": "The tilt is disabled; a subtle scale remains.",
+  "playground": [
+    {
+      "key": "max",
+      "label": "Max tilt",
+      "type": "slider",
+      "min": 0,
+      "max": 20,
+      "step": 1,
+      "default": 10
+    }
+  ]
+}

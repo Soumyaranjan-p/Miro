@@ -1,0 +1,39 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "gradient-text",
+  "type": "registry:component",
+  "title": "Gradient Text",
+  "description": "Text with a smoothly panning gradient fill.",
+  "categories": [
+    "text"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/gradient-text.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport type { ReactNode } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface GradientTextProps {\n  children: ReactNode;\n  className?: string;\n}\n\nexport function GradientText({ children, className }: GradientTextProps) {\n  const reduceMotion = useReducedMotion();\n\n  return (\n    <motion.span\n      className={cn(\"inline-block bg-clip-text text-transparent\", className)}\n      style={{\n        backgroundImage: reduceMotion\n          ? \"var(--accent)\"\n          : \"linear-gradient(120deg, var(--accent), #ff7a5c, var(--accent))\",\n        backgroundSize: reduceMotion ? \"auto\" : \"200% 100%\",\n        animation: reduceMotion ? \"none\" : \"mirro-gradient-pan 3s ease infinite\",\n      }}\n    >\n      {children}\n    </motion.span>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Text content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    }
+  ],
+  "accessibility": "The gradient is decorative; the text is present in the DOM and readable.",
+  "touch": "No pointer-following.",
+  "reducedMotion": "The gradient is static under reduced motion.",
+  "playground": []
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "eye",
+  "type": "registry:icon",
+  "title": "Eye",
+  "description": "An eye icon that draws a slash and hides the pupil when toggled off.",
+  "categories": [
+    "icons",
+    "interface"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/icons/eye.tsx",
+      "type": "registry:icon",
+      "content": "\"use client\";\n\nimport { useState } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\nimport { useHoverCapable } from \"../lib/use-hover-capable\";\n\nconst EYE_PATH =\n  \"M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z\";\nconst SLASH_PATH = \"M4 4l16 16\";\n\nexport interface EyeIconProps {\n  size?: number;\n  color?: string;\n  strokeWidth?: number;\n  visible?: boolean;\n  defaultVisible?: boolean;\n  onToggle?: (visible: boolean) => void;\n  label?: string;\n  className?: string;\n}\n\nexport function EyeIcon({\n  size = 24,\n  color = \"currentColor\",\n  strokeWidth = 1.5,\n  visible,\n  defaultVisible = true,\n  onToggle,\n  label = \"Toggle visibility\",\n  className,\n}: EyeIconProps) {\n  const [internal, setInternal] = useState(defaultVisible);\n  const isControlled = visible !== undefined;\n  const isVisible = isControlled ? visible : internal;\n  const reduceMotion = useReducedMotion();\n  const hoverCapable = useHoverCapable();\n\n  const toggle = () => {\n    const next = !isVisible;\n    if (!isControlled) setInternal(next);\n    onToggle?.(next);\n  };\n\n  return (\n    <motion.div\n      role=\"button\"\n      tabIndex={0}\n      aria-pressed={isVisible}\n      aria-label={label}\n      onClick={toggle}\n      onKeyDown={(e) => {\n        if (e.key === \"Enter\" || e.key === \" \") {\n          e.preventDefault();\n          toggle();\n        }\n      }}\n      whileHover={hoverCapable && !reduceMotion ? { scale: 1.06 } : undefined}\n      whileTap={{ scale: 0.94 }}\n      transition={{ type: \"spring\", stiffness: 400, damping: 22 }}\n      className={cn(\"inline-flex cursor-pointer items-center justify-center\", className)}\n      style={{ width: size, height: size }}\n    >\n      <motion.svg\n        viewBox=\"0 0 24 24\"\n        width={size}\n        height={size}\n        fill=\"none\"\n        stroke={color}\n        strokeWidth={strokeWidth}\n        strokeLinecap=\"round\"\n        strokeLinejoin=\"round\"\n      >\n        <path d={EYE_PATH} />\n        <motion.path\n          d={SLASH_PATH}\n          animate={reduceMotion ? { opacity: isVisible ? 0 : 1 } : { pathLength: isVisible ? 0 : 1 }}\n          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}\n        />\n        <motion.circle\n          cx={12}\n          cy={12}\n          r={3}\n          style={{ originX: 0.5, originY: 0.5 }}\n          animate={\n            reduceMotion\n              ? { opacity: isVisible ? 1 : 0 }\n              : { scale: isVisible ? 1 : 0, opacity: isVisible ? 1 : 0 }\n          }\n          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}\n        />\n      </motion.svg>\n    </motion.div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn",
+    "use-hover-capable"
+  ],
+  "props": [
+    {
+      "name": "size",
+      "type": "number",
+      "default": "24",
+      "description": "Width and height in pixels."
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "default": "\"currentColor\"",
+      "description": "Stroke color."
+    },
+    {
+      "name": "strokeWidth",
+      "type": "number",
+      "default": "1.5",
+      "description": "Stroke width."
+    },
+    {
+      "name": "visible",
+      "type": "boolean",
+      "description": "Controlled visibility state."
+    },
+    {
+      "name": "defaultVisible",
+      "type": "boolean",
+      "default": "true",
+      "description": "Initial visibility when uncontrolled."
+    },
+    {
+      "name": "onToggle",
+      "type": "(visible: boolean) => void",
+      "description": "Called with the visibility state on change."
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "default": "\"Toggle visibility\"",
+      "description": "Accessible label."
+    }
+  ],
+  "accessibility": "Renders as a button with aria-pressed reflecting the visibility state. Toggles on Enter and Space.",
+  "touch": "Hover scale is gated behind a (hover: hover) and (pointer: fine) check. Tapping toggles.",
+  "reducedMotion": "The slash draw is skipped; opacity indicates the state.",
+  "playground": [
+    {
+      "key": "size",
+      "label": "Size",
+      "type": "slider",
+      "min": 16,
+      "max": 64,
+      "step": 1,
+      "default": 24
+    },
+    {
+      "key": "strokeWidth",
+      "label": "Stroke width",
+      "type": "slider",
+      "min": 1,
+      "max": 3,
+      "step": 0.25,
+      "default": 1.5
+    },
+    {
+      "key": "color",
+      "label": "Stroke color",
+      "type": "color",
+      "default": "#fafafa"
+    }
+  ]
+}

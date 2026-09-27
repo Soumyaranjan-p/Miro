@@ -1,0 +1,44 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "gradient-button",
+  "type": "registry:component",
+  "title": "Gradient Button",
+  "description": "A button with a smoothly panning gradient background.",
+  "categories": [
+    "buttons"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/gradient-button.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport type { ReactNode } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface GradientButtonProps {\n  children: ReactNode;\n  className?: string;\n  onClick?: () => void;\n}\n\nexport function GradientButton({ children, className, onClick }: GradientButtonProps) {\n  const reduceMotion = useReducedMotion();\n\n  return (\n    <motion.button\n      type=\"button\"\n      onClick={onClick}\n      whileTap={{ scale: 0.97 }}\n      transition={{ type: \"spring\", stiffness: 400, damping: 22 }}\n      className={cn(\n        \"relative overflow-hidden rounded-lg px-5 py-2.5 text-sm font-medium text-accent-foreground\",\n        className\n      )}\n      style={{\n        background: reduceMotion\n          ? \"var(--accent)\"\n          : \"linear-gradient(120deg, var(--accent), #ff7a5c, var(--accent))\",\n        backgroundSize: reduceMotion ? \"auto\" : \"200% 100%\",\n        animation: reduceMotion ? \"none\" : \"mirro-gradient-pan 3s ease infinite\",\n      }}\n    >\n      <span className=\"relative z-10\">{children}</span>\n    </motion.button>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Button content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    },
+    {
+      "name": "onClick",
+      "type": "() => void",
+      "description": "Click handler."
+    }
+  ],
+  "accessibility": "A real button, keyboard focusable and activatable on Enter and Space. The gradient is decorative.",
+  "touch": "The gradient pan is disabled on touch; press feedback remains.",
+  "reducedMotion": "The gradient is static under reduced motion.",
+  "playground": []
+}

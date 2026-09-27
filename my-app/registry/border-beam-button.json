@@ -1,0 +1,44 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "border-beam-button",
+  "type": "registry:component",
+  "title": "Border Beam Button",
+  "description": "A button with a rotating gradient beam traveling around its border.",
+  "categories": [
+    "buttons"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/border-beam-button.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport type { ReactNode } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface BorderBeamButtonProps {\n  children: ReactNode;\n  className?: string;\n  onClick?: () => void;\n}\n\nexport function BorderBeamButton({ children, className, onClick }: BorderBeamButtonProps) {\n  const reduceMotion = useReducedMotion();\n\n  return (\n    <div className=\"relative inline-flex rounded-lg p-px\">\n      {!reduceMotion && (\n        <div\n          aria-hidden=\"true\"\n          className=\"absolute inset-0 rounded-lg\"\n          style={{\n            background:\n              \"conic-gradient(from 0deg, transparent 0%, var(--accent) 20%, transparent 40%)\",\n            animation: \"mirro-border-beam 2.4s linear infinite\",\n          }}\n        />\n      )}\n      <motion.button\n        type=\"button\"\n        onClick={onClick}\n        whileTap={{ scale: 0.97 }}\n        transition={{ type: \"spring\", stiffness: 400, damping: 22 }}\n        className={cn(\n          \"relative rounded-[7px] bg-card px-5 py-2.5 text-sm font-medium text-foreground\",\n          className\n        )}\n      >\n        {children}\n      </motion.button>\n    </div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Button content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    },
+    {
+      "name": "onClick",
+      "type": "() => void",
+      "description": "Click handler."
+    }
+  ],
+  "accessibility": "A real button, keyboard focusable and activatable on Enter and Space. The beam is decorative.",
+  "touch": "The beam is disabled on touch; press feedback remains.",
+  "reducedMotion": "The beam is disabled; press feedback remains.",
+  "playground": []
+}

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "arrow",
+  "type": "registry:icon",
+  "title": "Arrow",
+  "description": "An arrow that slides in its direction on hover.",
+  "categories": [
+    "icons",
+    "interface"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/icons/arrow.tsx",
+      "type": "registry:icon",
+      "content": "\"use client\";\n\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\nimport { useHoverCapable } from \"../lib/use-hover-capable\";\n\nconst ARROW_LINE = \"M4 12h16\";\nconst ARROW_HEAD = \"M13 5l7 7-7 7\";\n\ntype Direction = \"up\" | \"right\" | \"down\" | \"left\";\n\nconst ROTATION: Record<Direction, number> = {\n  right: 0,\n  down: 90,\n  left: 180,\n  up: 270,\n};\n\nconst HOVER_OFFSET: Record<Direction, { x?: number; y?: number }> = {\n  right: { x: 3 },\n  left: { x: -3 },\n  up: { y: -3 },\n  down: { y: 3 },\n};\n\nexport interface ArrowIconProps {\n  size?: number;\n  color?: string;\n  strokeWidth?: number;\n  direction?: Direction;\n  label?: string;\n  className?: string;\n}\n\nexport function ArrowIcon({\n  size = 24,\n  color = \"currentColor\",\n  strokeWidth = 1.5,\n  direction = \"right\",\n  label = \"Arrow\",\n  className,\n}: ArrowIconProps) {\n  const reduceMotion = useReducedMotion();\n  const hoverCapable = useHoverCapable();\n\n  return (\n    <motion.div\n      role=\"img\"\n      aria-label={label}\n      whileHover={hoverCapable && !reduceMotion ? HOVER_OFFSET[direction] : undefined}\n      whileTap={{ scale: 0.94 }}\n      transition={{ type: \"spring\", stiffness: 400, damping: 22 }}\n      className={cn(\"inline-flex items-center justify-center\", className)}\n      style={{ width: size, height: size }}\n    >\n      <motion.svg\n        viewBox=\"0 0 24 24\"\n        width={size}\n        height={size}\n        fill=\"none\"\n        stroke={color}\n        strokeWidth={strokeWidth}\n        strokeLinecap=\"round\"\n        strokeLinejoin=\"round\"\n      >\n        <motion.g\n          animate={{ rotate: ROTATION[direction] }}\n          transition={{ duration: 220, ease: [0.23, 1, 0.32, 1] }}\n          style={{ originX: \"50%\", originY: \"50%\" }}\n        >\n          <path d={ARROW_LINE} />\n          <path d={ARROW_HEAD} />\n        </motion.g>\n      </motion.svg>\n    </motion.div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn",
+    "use-hover-capable"
+  ],
+  "props": [
+    {
+      "name": "size",
+      "type": "number",
+      "default": "24",
+      "description": "Width and height in pixels."
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "default": "\"currentColor\"",
+      "description": "Stroke color."
+    },
+    {
+      "name": "strokeWidth",
+      "type": "number",
+      "default": "1.5",
+      "description": "Stroke width."
+    },
+    {
+      "name": "direction",
+      "type": "\"up\" | \"right\" | \"down\" | \"left\"",
+      "default": "\"right\"",
+      "description": "Arrow orientation."
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "default": "\"Arrow\"",
+      "description": "Accessible label."
+    }
+  ],
+  "accessibility": "Renders as an image with an accessible label. Decorative unless given a meaningful label.",
+  "touch": "Directional slide is gated behind a (hover: hover) and (pointer: fine) check.",
+  "reducedMotion": "The directional slide is dropped.",
+  "playground": [
+    {
+      "key": "size",
+      "label": "Size",
+      "type": "slider",
+      "min": 16,
+      "max": 64,
+      "step": 1,
+      "default": 24
+    },
+    {
+      "key": "strokeWidth",
+      "label": "Stroke width",
+      "type": "slider",
+      "min": 1,
+      "max": 3,
+      "step": 0.25,
+      "default": 1.5
+    },
+    {
+      "key": "color",
+      "label": "Stroke color",
+      "type": "color",
+      "default": "#fafafa"
+    },
+    {
+      "key": "direction",
+      "label": "Direction",
+      "type": "select",
+      "options": [
+        {
+          "label": "Right",
+          "value": "right"
+        },
+        {
+          "label": "Up",
+          "value": "up"
+        },
+        {
+          "label": "Down",
+          "value": "down"
+        },
+        {
+          "label": "Left",
+          "value": "left"
+        }
+      ],
+      "default": "right"
+    }
+  ]
+}

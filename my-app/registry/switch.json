@@ -1,0 +1,56 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "switch",
+  "type": "registry:component",
+  "title": "Switch",
+  "description": "A toggle switch with a spring-animated thumb.",
+  "categories": [
+    "interactive",
+    "forms"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/switch.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useState } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface SwitchProps {\n  checked?: boolean;\n  defaultChecked?: boolean;\n  onCheckedChange?: (checked: boolean) => void;\n  label?: string;\n  className?: string;\n}\n\nexport function Switch({\n  checked,\n  defaultChecked = false,\n  onCheckedChange,\n  label,\n  className,\n}: SwitchProps) {\n  const [internal, setInternal] = useState(defaultChecked);\n  const isControlled = checked !== undefined;\n  const isChecked = isControlled ? checked : internal;\n  const reduceMotion = useReducedMotion();\n\n  const toggle = () => {\n    const next = !isChecked;\n    if (!isControlled) setInternal(next);\n    onCheckedChange?.(next);\n  };\n\n  return (\n    <button\n      type=\"button\"\n      role=\"switch\"\n      aria-checked={isChecked}\n      aria-label={label}\n      onClick={toggle}\n      onKeyDown={(e) => {\n        if (e.key === \"Enter\" || e.key === \" \") {\n          e.preventDefault();\n          toggle();\n        }\n      }}\n      className={cn(\n        \"relative h-6 w-11 rounded-full transition-colors duration-200 ease-out\",\n        isChecked ? \"bg-accent\" : \"bg-muted\",\n        className\n      )}\n    >\n      <motion.span\n        className=\"absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow\"\n        initial={false}\n        animate={{ x: isChecked ? 20 : 0 }}\n        transition={reduceMotion ? { duration: 0 } : { type: \"spring\", stiffness: 500, damping: 32 }}\n      />\n    </button>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "checked",
+      "type": "boolean",
+      "description": "Controlled checked state."
+    },
+    {
+      "name": "defaultChecked",
+      "type": "boolean",
+      "default": "false",
+      "description": "Initial checked state when uncontrolled."
+    },
+    {
+      "name": "onCheckedChange",
+      "type": "(checked: boolean) => void",
+      "description": "Called with the checked state on change."
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "description": "Accessible label."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    }
+  ],
+  "accessibility": "Implements role=\"switch\" with aria-checked. Toggles on Enter and Space.",
+  "touch": "Tapping toggles the switch.",
+  "reducedMotion": "The thumb snaps instantly instead of springing.",
+  "playground": []
+}

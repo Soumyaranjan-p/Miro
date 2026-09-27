@@ -1,0 +1,35 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "feature-showcase",
+  "type": "registry:block",
+  "title": "Feature Showcase",
+  "description": "A features section with a text-reveal heading and a grid of spotlight cards.",
+  "categories": [
+    "blocks",
+    "features"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/blocks/feature-showcase.tsx",
+      "type": "registry:block",
+      "content": "\"use client\";\n\nimport { SpotlightCard } from \"../components/spotlight-card\";\nimport { TextReveal } from \"../components/text-reveal\";\nimport { HeartIcon } from \"../icons/heart\";\nimport { CheckIcon } from \"../icons/check\";\nimport { CopyIcon } from \"../icons/copy\";\nimport { SunMoonIcon } from \"../icons/sun-moon\";\nimport { MenuIcon } from \"../icons/menu\";\n\nconst FEATURES = [\n  {\n    icon: HeartIcon,\n    title: \"Animated icons\",\n    description:\n      \"Every icon has its own intentional motion — hover, click, and state transitions that feel right.\",\n  },\n  {\n    icon: CheckIcon,\n    title: \"Production components\",\n    description:\n      \"Buttons, cards, tabs and accordions with tuned springs and custom easings. Copy, paste, ship.\",\n  },\n  {\n    icon: CopyIcon,\n    title: \"Copy-paste, not a dependency\",\n    description:\n      \"The CLI drops source into your project and resolves dependencies. You own the code, fully.\",\n  },\n  {\n    icon: SunMoonIcon,\n    title: \"Accessible by default\",\n    description:\n      \"Reduced motion, keyboard navigation and touch behavior are built in — not bolted on after.\",\n  },\n  {\n    icon: MenuIcon,\n    title: \"UI blocks that feel real\",\n    description:\n      \"Heroes, showcases and pricing sections assembled from Mirro components. Drop them into your next build.\",\n  },\n  {\n    icon: CheckIcon,\n    title: \"Performance-first motion\",\n    description:\n      \"Transform and opacity only, GPU-friendly, with springs where motion should feel alive.\",\n  },\n];\n\nexport function FeatureShowcase() {\n  return (\n    <section className=\"border-b border-border\">\n      <div className=\"mx-auto max-w-6xl px-4 py-24 sm:px-6\">\n        <div className=\"max-w-2xl\">\n          <p className=\"font-mono text-[11px] font-medium uppercase tracking-widest text-accent\">\n            Features\n          </p>\n          <h2 className=\"mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl\">\n            <TextReveal as=\"span\">Everything you need to make it move.</TextReveal>\n          </h2>\n          <p className=\"mt-4 text-base leading-relaxed text-muted-foreground\">\n            A complete animation toolkit for React — designed to feel intentional, not decorative.\n          </p>\n        </div>\n\n        <div className=\"mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3\">\n          {FEATURES.map((feature) => (\n            <SpotlightCard key={feature.title} spotlightColor=\"255, 77, 41\" className=\"group\">\n              <div className=\"p-6\">\n                <div className=\"flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted text-foreground transition-colors duration-200 ease-out group-hover:text-accent\">\n                  <feature.icon size={20} />\n                </div>\n                <h3 className=\"mt-5 text-base font-medium text-foreground\">{feature.title}</h3>\n                <p className=\"mt-2 text-sm leading-relaxed text-muted-foreground\">\n                  {feature.description}\n                </p>\n              </div>\n            </SpotlightCard>\n          ))}\n        </div>\n      </div>\n    </section>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "spotlight-card",
+    "text-reveal",
+    "heart",
+    "check",
+    "copy",
+    "sun-moon",
+    "menu"
+  ],
+  "props": [],
+  "accessibility": "Card content keeps its own semantics; the spotlight glow is decorative. The heading reveal is decorative and the text is always present.",
+  "touch": "Spotlight cards disable pointer-following on touch; card content remains fully usable.",
+  "reducedMotion": "The heading reveal fades without blur or slide; spotlight glows fade without spring smoothing.",
+  "playground": []
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "cta-section",
+  "type": "registry:block",
+  "title": "CTA Section",
+  "description": "A call-to-action section with a text-reveal headline and magnetic buttons.",
+  "categories": [
+    "blocks",
+    "cta"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/blocks/cta-section.tsx",
+      "type": "registry:block",
+      "content": "\"use client\";\n\nimport { MagneticButton } from \"../components/magnetic-button\";\nimport { TextReveal } from \"../components/text-reveal\";\n\nexport function CtaSection() {\n  return (\n    <section className=\"border-b border-border\">\n      <div className=\"mx-auto max-w-6xl px-4 py-28 text-center sm:px-6\">\n        <h2 className=\"mx-auto max-w-2xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl\">\n          <TextReveal as=\"span\">Ready to make it move?</TextReveal>\n        </h2>\n        <p className=\"mx-auto mt-5 max-w-md text-base leading-relaxed text-muted-foreground\">\n          Copy your first component and ship something that feels intentional.\n        </p>\n        <div className=\"mt-9 flex flex-wrap items-center justify-center gap-4\">\n          <MagneticButton strength={0.35}>Start building</MagneticButton>\n          <MagneticButton strength={0.35} variant=\"outline\">\n            Browse the library\n          </MagneticButton>\n        </div>\n      </div>\n    </section>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "magnetic-button",
+    "text-reveal"
+  ],
+  "props": [],
+  "accessibility": "Buttons are real and keyboard-accessible; the headline reveal is decorative.",
+  "touch": "Magnetic buttons disable pointer-following on touch and keep press feedback.",
+  "reducedMotion": "Headline reveal fades without blur; magnetic follow is disabled.",
+  "playground": []
+}

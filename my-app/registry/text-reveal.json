@@ -1,0 +1,62 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "text-reveal",
+  "type": "registry:component",
+  "title": "Text Reveal",
+  "description": "Reveals text with a blur, fade, and slide when it scrolls into view.",
+  "categories": [
+    "text",
+    "scroll"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/text-reveal.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport type { ReactNode } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface TextRevealProps {\n  children: ReactNode;\n  className?: string;\n  delay?: number;\n  as?: \"span\" | \"div\" | \"h1\" | \"h2\" | \"h3\" | \"p\";\n}\n\nexport function TextReveal({ children, className, delay = 0, as = \"span\" }: TextRevealProps) {\n  const reduceMotion = useReducedMotion();\n  const Component = motion[as];\n\n  return (\n    <Component\n      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: \"blur(8px)\", y: 10 }}\n      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: \"blur(0px)\", y: 0 }}\n      viewport={{ once: true, margin: \"-40px\" }}\n      transition={{ duration: 600, delay, ease: [0.23, 1, 0.32, 1] }}\n      className={cn(\"inline-block\", className)}\n    >\n      {children}\n    </Component>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Text to reveal."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    },
+    {
+      "name": "delay",
+      "type": "number",
+      "default": "0",
+      "description": "Delay in seconds before the reveal starts."
+    },
+    {
+      "name": "as",
+      "type": "\"span\" | \"div\" | \"h1\" | \"h2\" | \"h3\" | \"p\"",
+      "default": "\"span\"",
+      "description": "Element to render."
+    }
+  ],
+  "accessibility": "The reveal is decorative; the text is present in the DOM and readable by screen readers regardless of animation state.",
+  "touch": "No pointer-following. The reveal triggers on scroll into view, which works identically on touch.",
+  "reducedMotion": "Blur and slide are dropped; the text fades in with a short opacity transition.",
+  "playground": [
+    {
+      "key": "delay",
+      "label": "Delay",
+      "type": "slider",
+      "min": 0,
+      "max": 0.5,
+      "step": 0.05,
+      "default": 0
+    }
+  ]
+}

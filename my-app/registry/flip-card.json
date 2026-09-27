@@ -1,0 +1,45 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "flip-card",
+  "type": "registry:component",
+  "title": "Flip Card",
+  "description": "A card that flips in 3D to reveal a back face.",
+  "categories": [
+    "cards",
+    "interactive"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/flip-card.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useState, type ReactNode } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface FlipCardProps {\n  front: ReactNode;\n  back: ReactNode;\n  className?: string;\n}\n\nexport function FlipCard({ front, back, className }: FlipCardProps) {\n  const [flipped, setFlipped] = useState(false);\n  const reduceMotion = useReducedMotion();\n\n  return (\n    <div\n      style={{ perspective: 1000 }}\n      className={cn(\"relative h-56 w-full cursor-pointer\", className)}\n      onClick={() => setFlipped((f) => !f)}\n      role=\"button\"\n      tabIndex={0}\n      aria-pressed={flipped}\n      onKeyDown={(e) => {\n        if (e.key === \"Enter\" || e.key === \" \") {\n          e.preventDefault();\n          setFlipped((f) => !f);\n        }\n      }}\n    >\n      <motion.div\n        animate={{ rotateY: flipped ? 180 : 0 }}\n        transition={{ duration: reduceMotion ? 0.15 : 500, ease: [0.77, 0, 0.175, 1] }}\n        style={{ transformStyle: \"preserve-3d\" }}\n        className=\"relative h-full w-full\"\n      >\n        <div style={{ backfaceVisibility: \"hidden\" }} className=\"absolute inset-0\">\n          {front}\n        </div>\n        <div\n          style={{ backfaceVisibility: \"hidden\", transform: \"rotateY(180deg)\" }}\n          className=\"absolute inset-0\"\n        >\n          {back}\n        </div>\n      </motion.div>\n    </div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "front",
+      "type": "ReactNode",
+      "description": "Front face content."
+    },
+    {
+      "name": "back",
+      "type": "ReactNode",
+      "description": "Back face content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    }
+  ],
+  "accessibility": "Renders as a button with aria-pressed reflecting the flipped state. Toggles on Enter and Space.",
+  "touch": "Tapping the card flips it.",
+  "reducedMotion": "The flip is instant under reduced motion.",
+  "playground": []
+}

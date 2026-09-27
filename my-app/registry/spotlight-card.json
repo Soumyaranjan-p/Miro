@@ -1,0 +1,54 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "spotlight-card",
+  "type": "registry:component",
+  "title": "Spotlight Card",
+  "description": "A card with a soft radial glow that tracks the cursor.",
+  "categories": [
+    "cards",
+    "interactive"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/spotlight-card.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useRef, useState, useCallback, type ReactNode, type MouseEvent } from \"react\";\nimport { motion, useMotionValue, useSpring, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\nimport { useHoverCapable } from \"../lib/use-hover-capable\";\n\nexport interface SpotlightCardProps {\n  children: ReactNode;\n  className?: string;\n  spotlightColor?: string;\n}\n\nexport function SpotlightCard({\n  children,\n  className,\n  spotlightColor = \"255, 77, 41\",\n}: SpotlightCardProps) {\n  const ref = useRef<HTMLDivElement>(null);\n  const reduceMotion = useReducedMotion();\n  const hoverCapable = useHoverCapable();\n  const [hovering, setHovering] = useState(false);\n\n  const mx = useMotionValue(0);\n  const my = useMotionValue(0);\n  const sx = useSpring(mx, { stiffness: 120, damping: 20 });\n  const sy = useSpring(my, { stiffness: 120, damping: 20 });\n\n  const onMouseMove = useCallback(\n    (e: MouseEvent) => {\n      if (reduceMotion || !ref.current) return;\n      const rect = ref.current.getBoundingClientRect();\n      mx.set(e.clientX - rect.left);\n      my.set(e.clientY - rect.top);\n    },\n    [reduceMotion, mx, my]\n  );\n\n  const onMouseLeave = useCallback(() => {\n    setHovering(false);\n    mx.set(0);\n    my.set(0);\n  }, [mx, my]);\n\n  return (\n    <div\n      ref={ref}\n      onMouseMove={hoverCapable ? onMouseMove : undefined}\n      onMouseEnter={() => setHovering(true)}\n      onMouseLeave={onMouseLeave}\n      className={cn(\"relative overflow-hidden rounded-xl border border-border bg-card\", className)}\n    >\n      <motion.div\n        aria-hidden=\"true\"\n        className=\"pointer-events-none absolute left-0 top-0 -ml-[160px] -mt-[160px] h-[320px] w-[320px] rounded-full\"\n        style={{\n          x: sx,\n          y: sy,\n          background: `radial-gradient(320px circle, rgba(${spotlightColor}, 0.14), transparent 65%)`,\n        }}\n        animate={{ opacity: hovering ? 1 : 0 }}\n        transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}\n      />\n      <div className=\"relative\">{children}</div>\n    </div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "use-hover-capable",
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Card content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes for the card."
+    },
+    {
+      "name": "spotlightColor",
+      "type": "string",
+      "default": "\"255, 77, 41\"",
+      "description": "RGB triplet for the glow, e.g. \"255, 77, 41\"."
+    }
+  ],
+  "accessibility": "The spotlight is an aria-hidden decorative layer. Card content keeps its own semantics and remains fully readable with the glow disabled.",
+  "touch": "Pointer-following is disabled on touch devices via a (hover: hover) and (pointer: fine) check. The card content is fully usable without the glow.",
+  "reducedMotion": "The glow follows the cursor but fades in and out with a short 150ms transition instead of spring smoothing.",
+  "playground": [
+    {
+      "key": "spotlightColor",
+      "label": "Glow color",
+      "type": "color",
+      "default": "#ff4d29"
+    }
+  ]
+}

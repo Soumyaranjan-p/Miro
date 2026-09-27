@@ -1,0 +1,90 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "magnetic-button",
+  "type": "registry:component",
+  "title": "Magnetic Button",
+  "description": "A button that follows the cursor with spring physics and snaps back on leave.",
+  "categories": [
+    "buttons",
+    "interactive"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/magnetic-button.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport type { ReactNode, MouseEvent } from \"react\";\nimport Link from \"next/link\";\nimport { motion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\nimport { useMagnetic } from \"../lib/use-magnetic\";\nimport { useHoverCapable } from \"../lib/use-hover-capable\";\n\nconst MotionLink = motion(Link);\n\nexport interface MagneticButtonProps {\n  children: ReactNode;\n  strength?: number;\n  variant?: \"primary\" | \"outline\";\n  className?: string;\n  onClick?: () => void;\n  href?: string;\n}\n\nexport function MagneticButton({\n  children,\n  strength = 0.35,\n  variant = \"primary\",\n  className,\n  onClick,\n  href,\n}: MagneticButtonProps) {\n  const { ref, springX, springY, onMouseMove, onMouseLeave } = useMagnetic<HTMLSpanElement>(strength);\n  const hoverCapable = useHoverCapable();\n\n  const handleMouseMove = (e: MouseEvent) => {\n    if (hoverCapable) onMouseMove(e);\n  };\n\n  const classes = cn(\n    \"rounded-lg px-5 py-2.5 text-sm font-medium transition-colors duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring\",\n    variant === \"primary\"\n      ? \"bg-foreground text-background\"\n      : \"border border-border text-foreground hover:bg-muted\",\n    className\n  );\n\n  return (\n    <motion.span\n      ref={ref}\n      onMouseMove={handleMouseMove}\n      onMouseLeave={onMouseLeave}\n      style={{ x: springX, y: springY }}\n      className=\"inline-block\"\n    >\n      {href ? (\n        <MotionLink\n          href={href}\n          whileTap={{ scale: 0.97 }}\n          transition={{ type: \"spring\", stiffness: 400, damping: 22 }}\n          className={classes}\n        >\n          {children}\n        </MotionLink>\n      ) : (\n        <motion.button\n          type=\"button\"\n          onClick={onClick}\n          whileTap={{ scale: 0.97 }}\n          transition={{ type: \"spring\", stiffness: 400, damping: 22 }}\n          className={classes}\n        >\n          {children}\n        </motion.button>\n      )}\n    </motion.span>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "use-magnetic",
+    "use-hover-capable",
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Button content."
+    },
+    {
+      "name": "strength",
+      "type": "number",
+      "default": "0.35",
+      "description": "How strongly the button follows the cursor, 0 to 1."
+    },
+    {
+      "name": "variant",
+      "type": "\"primary\" | \"outline\"",
+      "default": "\"primary\"",
+      "description": "Visual variant."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes for the button."
+    },
+    {
+      "name": "onClick",
+      "type": "() => void",
+      "description": "Click handler."
+    },
+    {
+      "name": "href",
+      "type": "string",
+      "description": "When provided, renders as a link instead of a button."
+    }
+  ],
+  "accessibility": "The underlying element is a real button (or link when href is set), so it is keyboard focusable and activates on Enter and Space. The magnetic wrapper is purely decorative and exposes no extra semantics.",
+  "touch": "Pointer-following is disabled on touch devices via a (hover: hover) and (pointer: fine) check. Tapping the button still gives spring press feedback, so the interaction translates naturally.",
+  "reducedMotion": "The magnetic follow is disabled; the button keeps its press feedback and hover lift so state changes remain visible.",
+  "playground": [
+    {
+      "key": "strength",
+      "label": "Strength",
+      "type": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.35
+    },
+    {
+      "key": "variant",
+      "label": "Variant",
+      "type": "select",
+      "options": [
+        {
+          "label": "Primary",
+          "value": "primary"
+        },
+        {
+          "label": "Outline",
+          "value": "outline"
+        }
+      ],
+      "default": "primary"
+    }
+  ]
+}

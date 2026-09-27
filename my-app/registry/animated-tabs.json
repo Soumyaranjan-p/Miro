@@ -1,0 +1,55 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "animated-tabs",
+  "type": "registry:component",
+  "title": "Animated Tabs",
+  "description": "Tabs with a spring-animated indicator that slides between items.",
+  "categories": [
+    "interactive",
+    "navigation"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/animated-tabs.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useId, useRef, useState, type KeyboardEvent } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface TabItem {\n  label: string;\n  value: string;\n}\n\nexport interface AnimatedTabsProps {\n  tabs: TabItem[];\n  defaultValue?: string;\n  value?: string;\n  onChange?: (value: string) => void;\n  className?: string;\n}\n\nexport function AnimatedTabs({ tabs, defaultValue, value, onChange, className }: AnimatedTabsProps) {\n  const [internal, setInternal] = useState(defaultValue ?? tabs[0]?.value);\n  const isControlled = value !== undefined;\n  const active = isControlled ? value : internal;\n  const reduceMotion = useReducedMotion();\n  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);\n  const layoutId = useId();\n\n  const select = (v: string) => {\n    if (!isControlled) setInternal(v);\n    onChange?.(v);\n  };\n\n  const onKeyDown = (e: KeyboardEvent, index: number) => {\n    let next = index;\n    if (e.key === \"ArrowRight\") next = (index + 1) % tabs.length;\n    else if (e.key === \"ArrowLeft\") next = (index - 1 + tabs.length) % tabs.length;\n    else if (e.key === \"Home\") next = 0;\n    else if (e.key === \"End\") next = tabs.length - 1;\n    else return;\n    e.preventDefault();\n    select(tabs[next].value);\n    tabRefs.current[next]?.focus();\n  };\n\n  return (\n    <div\n      role=\"tablist\"\n      className={cn(\"inline-flex gap-1 rounded-lg border border-border bg-muted p-1\", className)}\n    >\n      {tabs.map((tab, i) => {\n        const isActive = tab.value === active;\n        return (\n          <button\n            key={tab.value}\n            ref={(el) => {\n              tabRefs.current[i] = el;\n            }}\n            role=\"tab\"\n            aria-selected={isActive}\n            tabIndex={isActive ? 0 : -1}\n            onClick={() => select(tab.value)}\n            onKeyDown={(e) => onKeyDown(e, i)}\n            className=\"relative rounded-md px-4 py-2 text-sm outline-none\"\n          >\n            {isActive && (\n              <motion.span\n                layoutId={layoutId}\n                className=\"absolute inset-0 rounded-md bg-foreground\"\n                transition={\n                  reduceMotion\n                    ? { duration: 0 }\n                    : { type: \"spring\", stiffness: 420, damping: 34 }\n                }\n              />\n            )}\n            <span\n              className={cn(\n                \"relative z-10 transition-colors duration-150 ease-out\",\n                isActive ? \"text-background\" : \"text-muted-foreground\"\n              )}\n            >\n              {tab.label}\n            </span>\n          </button>\n        );\n      })}\n    </div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "tabs",
+      "type": "{ label: string; value: string }[]",
+      "description": "Tab items."
+    },
+    {
+      "name": "defaultValue",
+      "type": "string",
+      "description": "Initial active tab when uncontrolled."
+    },
+    {
+      "name": "value",
+      "type": "string",
+      "description": "Controlled active tab."
+    },
+    {
+      "name": "onChange",
+      "type": "(value: string) => void",
+      "description": "Called with the active tab value on change."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    }
+  ],
+  "accessibility": "Implements the tabs pattern with role=\"tablist\"/\"tab\", aria-selected, and a roving tabindex. Arrow keys, Home, and End move between tabs.",
+  "touch": "No pointer-following. Tapping a tab activates it and slides the indicator.",
+  "reducedMotion": "The indicator snaps instantly instead of springing.",
+  "playground": []
+}

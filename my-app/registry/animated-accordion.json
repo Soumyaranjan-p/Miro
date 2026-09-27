@@ -1,0 +1,46 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "animated-accordion",
+  "type": "registry:component",
+  "title": "Animated Accordion",
+  "description": "An accordion with smooth height animation and a rotating chevron.",
+  "categories": [
+    "interactive",
+    "navigation"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/animated-accordion.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useState, type ReactNode } from \"react\";\nimport { AnimatePresence, motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface AccordionItemData {\n  title: string;\n  content: ReactNode;\n}\n\nexport interface AnimatedAccordionProps {\n  items: AccordionItemData[];\n  className?: string;\n  defaultOpen?: number | null;\n}\n\nexport function AnimatedAccordion({ items, className, defaultOpen = 0 }: AnimatedAccordionProps) {\n  const [open, setOpen] = useState<number | null>(defaultOpen);\n  const reduceMotion = useReducedMotion();\n\n  return (\n    <div className={cn(\"divide-y divide-border rounded-xl border border-border bg-card\", className)}>\n      {items.map((item, i) => {\n        const isOpen = open === i;\n        return (\n          <div key={i}>\n            <button\n              type=\"button\"\n              onClick={() => setOpen(isOpen ? null : i)}\n              aria-expanded={isOpen}\n              aria-controls={`mirro-acc-panel-${i}`}\n              id={`mirro-acc-button-${i}`}\n              className=\"flex w-full items-center justify-between gap-4 px-5 py-4 text-left\"\n            >\n              <span className=\"text-sm font-medium text-foreground\">{item.title}</span>\n              <motion.span\n                initial={false}\n                animate={{ rotate: isOpen ? 180 : 0 }}\n                transition={{ duration: 220, ease: [0.23, 1, 0.32, 1] }}\n                className=\"shrink-0 text-muted-foreground\"\n              >\n                <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"1.5\" className=\"h-4 w-4\" aria-hidden=\"true\">\n                  <path d=\"m6 9 6 6 6-6\" strokeLinecap=\"round\" strokeLinejoin=\"round\" />\n                </svg>\n              </motion.span>\n            </button>\n            <AnimatePresence initial={false}>\n              {isOpen && (\n                <motion.div\n                  id={`mirro-acc-panel-${i}`}\n                  role=\"region\"\n                  aria-labelledby={`mirro-acc-button-${i}`}\n                  initial={{ height: 0, opacity: 0 }}\n                  animate={{ height: \"auto\", opacity: 1 }}\n                  exit={{ height: 0, opacity: 0 }}\n                  transition={{ duration: reduceMotion ? 0.12 : 280, ease: [0.77, 0, 0.175, 1] }}\n                  className=\"overflow-hidden\"\n                >\n                  <div className=\"px-5 pb-5 text-sm leading-relaxed text-muted-foreground\">\n                    {item.content}\n                  </div>\n                </motion.div>\n              )}\n            </AnimatePresence>\n          </div>\n        );\n      })}\n    </div>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "items",
+      "type": "{ title: string; content: ReactNode }[]",
+      "description": "Accordion items."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    },
+    {
+      "name": "defaultOpen",
+      "type": "number | null",
+      "default": "0",
+      "description": "Index of the initially open item."
+    }
+  ],
+  "accessibility": "Each header is a button with aria-expanded and aria-controls; panels use role=\"region\" and aria-labelledby. Native button behavior gives Enter and Space support.",
+  "touch": "No pointer-following. Tapping a header toggles its panel.",
+  "reducedMotion": "The height animation shortens to 120ms and the chevron rotation is kept brief.",
+  "playground": []
+}

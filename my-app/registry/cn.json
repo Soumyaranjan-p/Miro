@@ -1,0 +1,21 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "cn",
+  "type": "registry:lib",
+  "title": "cn",
+  "description": "A tiny className joiner used across Mirro components.",
+  "categories": [
+    "lib"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/lib/cn.ts",
+      "type": "registry:lib",
+      "content": "type ClassValue = string | number | boolean | null | undefined | ClassValue[] | Record<string, boolean | null | undefined>;\n\nexport function cn(...inputs: ClassValue[]): string {\n  const out: string[] = [];\n\n  const push = (value: ClassValue) => {\n    if (!value) return;\n    if (typeof value === \"string\" || typeof value === \"number\") {\n      out.push(String(value));\n    } else if (Array.isArray(value)) {\n      for (const item of value) push(item);\n    } else if (typeof value === \"object\") {\n      for (const key in value) {\n        if (value[key]) out.push(key);\n      }\n    }\n  };\n\n  for (const input of inputs) push(input);\n  return out.join(\" \");\n}\n"
+    }
+  ],
+  "dependencies": [],
+  "registryDependencies": [],
+  "props": [],
+  "playground": []
+}

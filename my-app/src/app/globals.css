@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #fafafa;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --muted: #f4f4f5;
+  --muted-foreground: #6b7280;
+  --border: #e7e7ea;
+  --accent: #ff4d29;
+  --accent-foreground: #ffffff;
+  --success: #16a34a;
+  --ring: #ff4d29;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.dark {
+  --background: #0a0a0b;
+  --foreground: #fafafa;
+  --card: #101012;
+  --muted: #17171a;
+  --muted-foreground: #8e939c;
+  --border: #232327;
+  --accent: #ff4d29;
+  --accent-foreground: #ffffff;
+  --success: #22c55e;
+  --ring: #ff4d29;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+}
+
+@theme {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-spin-slow: spin 1.4s linear infinite;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+.dot-grid {
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+@keyframes logo-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.logo-orbit {
+  transform-origin: center;
+  animation: logo-orbit 8s linear infinite;
+}
+
+@keyframes mirro-ripple {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes mirro-border-beam {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes mirro-gradient-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes mirro-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.mirro-drift {
+  animation: mirro-drift 5s ease-in-out infinite;
+}
+
+.code-theme {
+  --code-bg: #0d0d0f;
+  --code-fg: #e4e4e7;
+  --code-comment: #6b7280;
+  --code-keyword: #ff7a5c;
+  --code-string: #a5d6a7;
+  --code-number: #f0b26b;
+  --code-function: #82aaff;
+  --code-tag: #ff7a5c;
+  --code-attr: #f0b26b;
+  --code-punctuation: #8e939c;
+}
+
+.code-theme {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  font-family: var(--font-mono);
+}
+
+.code-theme .token.comment,
+.code-theme .token.prolog,
+.code-theme .token.cdata {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.code-theme .token.keyword,
+.code-theme .token.important,
+.code-theme .token.rule {
+  color: var(--code-keyword);
+}
+
+.code-theme .token.string,
+.code-theme .token.char,
+.code-theme .token.attr-value {
+  color: var(--code-string);
+}
+
+.code-theme .token.number,
+.code-theme .token.boolean {
+  color: var(--code-number);
+}
+
+.code-theme .token.function,
+.code-theme .token.class-name {
+  color: var(--code-function);
+}
+
+.code-theme .token.tag,
+.code-theme .token.selector {
+  color: var(--code-tag);
+}
+
+.code-theme .token.attr-name,
+.code-theme .token.property {
+  color: var(--code-attr);
+}
+
+.code-theme .token.punctuation {
+  color: var(--code-punctuation);
+}
+
+.code-theme .token.operator {
+  color: var(--code-punctuation);
+  background: transparent;
+}
+
+.mirro-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+.mirro-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--foreground);
+  border: 2px solid var(--background);
+  box-shadow: 0 0 0 1px var(--border);
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.mirro-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.mirro-range::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--foreground);
+  border: 2px solid var(--background);
+  box-shadow: 0 0 0 1px var(--border);
+}

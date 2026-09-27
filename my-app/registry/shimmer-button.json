@@ -1,0 +1,44 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "shimmer-button",
+  "type": "registry:component",
+  "title": "Shimmer Button",
+  "description": "A button with a gradient shimmer that sweeps across on hover.",
+  "categories": [
+    "buttons"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/shimmer-button.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport type { ReactNode } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface ShimmerButtonProps {\n  children: ReactNode;\n  className?: string;\n  onClick?: () => void;\n}\n\nexport function ShimmerButton({ children, className, onClick }: ShimmerButtonProps) {\n  const reduceMotion = useReducedMotion();\n\n  return (\n    <motion.button\n      type=\"button\"\n      onClick={onClick}\n      whileTap={{ scale: 0.97 }}\n      transition={{ type: \"spring\", stiffness: 400, damping: 22 }}\n      className={cn(\n        \"relative overflow-hidden rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background\",\n        className\n      )}\n    >\n      <span className=\"relative z-10\">{children}</span>\n      {!reduceMotion && (\n        <span\n          aria-hidden=\"true\"\n          className=\"absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out hover:translate-x-full\"\n        />\n      )}\n    </motion.button>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Button content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    },
+    {
+      "name": "onClick",
+      "type": "() => void",
+      "description": "Click handler."
+    }
+  ],
+  "accessibility": "A real button, keyboard focusable and activatable on Enter and Space. The shimmer is decorative.",
+  "touch": "The shimmer sweep is disabled on touch; press feedback remains.",
+  "reducedMotion": "The shimmer sweep is disabled; press feedback remains.",
+  "playground": []
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "checkbox",
+  "type": "registry:component",
+  "title": "Checkbox",
+  "description": "A checkbox that draws its checkmark with a stroke animation.",
+  "categories": [
+    "interactive",
+    "forms"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/checkbox.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useState } from \"react\";\nimport { motion, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface CheckboxProps {\n  checked?: boolean;\n  defaultChecked?: boolean;\n  onCheckedChange?: (checked: boolean) => void;\n  label?: string;\n  className?: string;\n}\n\nexport function Checkbox({\n  checked,\n  defaultChecked = false,\n  onCheckedChange,\n  label,\n  className,\n}: CheckboxProps) {\n  const [internal, setInternal] = useState(defaultChecked);\n  const isControlled = checked !== undefined;\n  const isChecked = isControlled ? checked : internal;\n  const reduceMotion = useReducedMotion();\n\n  const toggle = () => {\n    const next = !isChecked;\n    if (!isControlled) setInternal(next);\n    onCheckedChange?.(next);\n  };\n\n  return (\n    <button\n      type=\"button\"\n      role=\"checkbox\"\n      aria-checked={isChecked}\n      aria-label={label}\n      onClick={toggle}\n      onKeyDown={(e) => {\n        if (e.key === \"Enter\" || e.key === \" \") {\n          e.preventDefault();\n          toggle();\n        }\n      }}\n      className={cn(\n        \"flex h-5 w-5 items-center justify-center rounded-md border transition-colors duration-150 ease-out\",\n        isChecked ? \"border-accent bg-accent\" : \"border-border bg-card\",\n        className\n      )}\n    >\n      <motion.svg\n        viewBox=\"0 0 24 24\"\n        fill=\"none\"\n        stroke=\"currentColor\"\n        strokeWidth=\"2.5\"\n        className=\"h-3.5 w-3.5 text-accent-foreground\"\n        strokeLinecap=\"round\"\n        strokeLinejoin=\"round\"\n      >\n        <motion.path\n          d=\"M5 13l4 4L19 7\"\n          initial={false}\n          animate={{ pathLength: isChecked ? 1 : 0 }}\n          transition={{ duration: reduceMotion ? 0.15 : 300, ease: [0.23, 1, 0.32, 1] }}\n        />\n      </motion.svg>\n    </button>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "checked",
+      "type": "boolean",
+      "description": "Controlled checked state."
+    },
+    {
+      "name": "defaultChecked",
+      "type": "boolean",
+      "default": "false",
+      "description": "Initial checked state when uncontrolled."
+    },
+    {
+      "name": "onCheckedChange",
+      "type": "(checked: boolean) => void",
+      "description": "Called with the checked state on change."
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "description": "Accessible label."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    }
+  ],
+  "accessibility": "Implements role=\"checkbox\" with aria-checked. Toggles on Enter and Space.",
+  "touch": "Tapping toggles the checkbox.",
+  "reducedMotion": "The draw is skipped; the check fades in.",
+  "playground": []
+}

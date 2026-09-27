@@ -1,0 +1,40 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "scramble-text",
+  "type": "registry:component",
+  "title": "Scramble Text",
+  "description": "Text that decodes from random characters when scrolled into view.",
+  "categories": [
+    "text",
+    "scroll"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/scramble-text.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useEffect, useState, useRef, type ReactNode } from \"react\";\nimport { useInView, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nconst CHARS = \"!<>-_\\\\/[]{}—=+*^?#01\";\n\nexport interface ScrambleTextProps {\n  children: ReactNode;\n  className?: string;\n}\n\nexport function ScrambleText({ children, className }: ScrambleTextProps) {\n  const reduceMotion = useReducedMotion();\n  const ref = useRef<HTMLSpanElement>(null);\n  const inView = useInView(ref, { once: true, margin: \"-40px\" });\n  const text = typeof children === \"string\" ? children : \"\";\n  const [display, setDisplay] = useState(text);\n\n  useEffect(() => {\n    if (reduceMotion || !inView) return;\n    let frame = 0;\n    const total = text.length;\n    const id = setInterval(() => {\n      frame++;\n      const settled = Math.floor((frame / (total * 1.5)) * total);\n      let next = \"\";\n      for (let i = 0; i < total; i++) {\n        if (i < settled || text[i] === \" \") {\n          next += text[i];\n        } else {\n          next += CHARS[Math.floor(Math.random() * CHARS.length)];\n        }\n      }\n      setDisplay(next);\n      if (settled >= total) {\n        setDisplay(text);\n        clearInterval(id);\n      }\n    }, 30);\n    return () => clearInterval(id);\n  }, [inView, text, reduceMotion]);\n\n  return (\n    <span ref={ref} className={cn(\"inline-block\", className)}>\n      {display}\n    </span>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Text content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    }
+  ],
+  "accessibility": "The scramble is decorative; the full text is present in the DOM and readable by screen readers.",
+  "touch": "No pointer-following; triggers on scroll into view.",
+  "reducedMotion": "The text appears immediately without scrambling.",
+  "playground": []
+}

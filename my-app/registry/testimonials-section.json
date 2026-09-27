@@ -1,0 +1,31 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "testimonials-section",
+  "type": "registry:block",
+  "title": "Testimonials Section",
+  "description": "A testimonials grid with spotlight cards and star ratings.",
+  "categories": [
+    "blocks",
+    "testimonials"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/blocks/testimonials-section.tsx",
+      "type": "registry:block",
+      "content": "\"use client\";\n\nimport { SpotlightCard } from \"../components/spotlight-card\";\nimport { StarIcon } from \"../icons/star\";\nimport { TextReveal } from \"../components/text-reveal\";\n\nconst TESTIMONIALS = [\n  {\n    quote: \"Mirro made our interface feel alive without us writing a single animation by hand.\",\n    name: \"Maya Chen\",\n    role: \"Staff Engineer, Northwind\",\n  },\n  {\n    quote: \"The copy-paste model is exactly right. We own the code and the motion is gorgeous.\",\n    name: \"Leo Park\",\n    role: \"Design Engineer, Arcadia\",\n  },\n  {\n    quote: \"Reduced-motion and accessibility were built in, not bolted on. That's rare.\",\n    name: \"Sofia Reyes\",\n    role: \"Accessibility Lead, Lumen\",\n  },\n];\n\nexport function TestimonialsSection() {\n  return (\n    <section className=\"border-b border-border\">\n      <div className=\"mx-auto max-w-6xl px-4 py-24 sm:px-6\">\n        <div className=\"max-w-2xl\">\n          <p className=\"font-mono text-[11px] font-medium uppercase tracking-widest text-accent\">\n            Testimonials\n          </p>\n          <h2 className=\"mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl\">\n            <TextReveal as=\"span\">Loved by people who ship.</TextReveal>\n          </h2>\n        </div>\n\n        <div className=\"mt-12 grid gap-6 md:grid-cols-3\">\n          {TESTIMONIALS.map((t) => (\n            <SpotlightCard key={t.name} spotlightColor=\"255, 77, 41\">\n              <div className=\"flex h-full flex-col p-7\">\n                <div className=\"flex gap-1 text-accent\">\n                  {Array.from({ length: 5 }).map((_, i) => (\n                    <StarIcon key={i} size={16} />\n                  ))}\n                </div>\n                <p className=\"mt-5 flex-1 text-sm leading-relaxed text-foreground\">\n                  &ldquo;{t.quote}&rdquo;\n                </p>\n                <div className=\"mt-6\">\n                  <p className=\"text-sm font-medium text-foreground\">{t.name}</p>\n                  <p className=\"text-xs text-muted-foreground\">{t.role}</p>\n                </div>\n              </div>\n            </SpotlightCard>\n          ))}\n        </div>\n      </div>\n    </section>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "spotlight-card",
+    "star",
+    "text-reveal"
+  ],
+  "props": [],
+  "accessibility": "Card content keeps its own semantics; spotlight glows are decorative.",
+  "touch": "Spotlight glows are disabled on touch; content remains usable.",
+  "reducedMotion": "Heading reveal fades without blur; spotlight glows fade without spring smoothing.",
+  "playground": []
+}

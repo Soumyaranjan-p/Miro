@@ -1,0 +1,24 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "use-magnetic",
+  "type": "registry:lib",
+  "title": "useMagnetic",
+  "description": "Spring-smoothed pointer tracking for magnetic interactions.",
+  "categories": [
+    "lib",
+    "hooks"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/lib/use-magnetic.ts",
+      "type": "registry:lib",
+      "content": "\"use client\";\n\nimport { useRef, useCallback, type MouseEvent } from \"react\";\nimport { useMotionValue, useSpring, useReducedMotion } from \"motion/react\";\n\nexport function useMagnetic<T extends HTMLElement = HTMLDivElement>(strength = 0.35) {\n  const ref = useRef<T>(null);\n  const reduceMotion = useReducedMotion();\n\n  const x = useMotionValue(0);\n  const y = useMotionValue(0);\n\n  const springX = useSpring(x, { stiffness: 150, damping: 15, mass: 0.1 });\n  const springY = useSpring(y, { stiffness: 150, damping: 15, mass: 0.1 });\n\n  const onMouseMove = useCallback(\n    (e: MouseEvent) => {\n      if (reduceMotion || !ref.current) return;\n      const rect = ref.current.getBoundingClientRect();\n      x.set((e.clientX - (rect.left + rect.width / 2)) * strength);\n      y.set((e.clientY - (rect.top + rect.height / 2)) * strength);\n    },\n    [reduceMotion, strength, x, y]\n  );\n\n  const onMouseLeave = useCallback(() => {\n    x.set(0);\n    y.set(0);\n  }, [x, y]);\n\n  return { ref, springX, springY, onMouseMove, onMouseLeave, reduceMotion };\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [],
+  "props": [],
+  "playground": []
+}

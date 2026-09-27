@@ -1,0 +1,56 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "typewriter-text",
+  "type": "registry:component",
+  "title": "Typewriter Text",
+  "description": "Text that types itself out character by character when scrolled into view.",
+  "categories": [
+    "text",
+    "scroll"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/components/typewriter-text.tsx",
+      "type": "registry:component",
+      "content": "\"use client\";\n\nimport { useEffect, useState, useRef, type ReactNode } from \"react\";\nimport { useInView, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface TypewriterTextProps {\n  children: ReactNode;\n  className?: string;\n  speed?: number;\n}\n\nexport function TypewriterText({ children, className, speed = 32 }: TypewriterTextProps) {\n  const reduceMotion = useReducedMotion();\n  const ref = useRef<HTMLSpanElement>(null);\n  const inView = useInView(ref, { once: true, margin: \"-40px\" });\n  const text = typeof children === \"string\" ? children : \"\";\n  const [count, setCount] = useState(() => (reduceMotion ? text.length : 0));\n\n  useEffect(() => {\n    if (reduceMotion || !inView) return;\n    if (count >= text.length) return;\n    const id = setTimeout(() => setCount((c) => c + 1), speed);\n    return () => clearTimeout(id);\n  }, [inView, count, text, speed, reduceMotion]);\n\n  return (\n    <span ref={ref} className={cn(\"inline-block\", className)}>\n      {text.slice(0, count)}\n      {count < text.length && <span className=\"animate-pulse\">|</span>}\n    </span>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "cn"
+  ],
+  "props": [
+    {
+      "name": "children",
+      "type": "ReactNode",
+      "description": "Text content."
+    },
+    {
+      "name": "className",
+      "type": "string",
+      "description": "Additional classes."
+    },
+    {
+      "name": "speed",
+      "type": "number",
+      "default": "32",
+      "description": "Milliseconds per character."
+    }
+  ],
+  "accessibility": "The typing is decorative; the full text is present in the DOM and readable by screen readers.",
+  "touch": "No pointer-following; triggers on scroll into view.",
+  "reducedMotion": "The text appears immediately without typing.",
+  "playground": [
+    {
+      "key": "speed",
+      "label": "Speed (ms)",
+      "type": "slider",
+      "min": 10,
+      "max": 100,
+      "step": 2,
+      "default": 32
+    }
+  ]
+}

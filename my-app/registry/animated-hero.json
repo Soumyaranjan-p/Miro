@@ -1,0 +1,35 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "animated-hero",
+  "type": "registry:block",
+  "title": "Animated Hero",
+  "description": "A complete hero section with a text-reveal headline, magnetic CTAs, and a live product visual.",
+  "categories": [
+    "blocks",
+    "hero"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/blocks/animated-hero.tsx",
+      "type": "registry:block",
+      "content": "\"use client\";\n\nimport { TextReveal } from \"../components/text-reveal\";\nimport { MagneticButton } from \"../components/magnetic-button\";\nimport { SpotlightCard } from \"../components/spotlight-card\";\nimport { HeartIcon } from \"../icons/heart\";\nimport { CheckIcon } from \"../icons/check\";\nimport { CopyIcon } from \"../icons/copy\";\nimport { SunMoonIcon } from \"../icons/sun-moon\";\n\nfunction HeroVisual() {\n  return (\n    <SpotlightCard className=\"overflow-hidden\" spotlightColor=\"255, 77, 41\">\n      <div className=\"border-b border-border px-5 py-3.5\">\n        <div className=\"flex items-center gap-2\">\n          <span className=\"flex gap-1.5\" aria-hidden=\"true\">\n            <span className=\"h-2.5 w-2.5 rounded-full bg-border\" />\n            <span className=\"h-2.5 w-2.5 rounded-full bg-border\" />\n            <span className=\"h-2.5 w-2.5 rounded-full bg-border\" />\n          </span>\n          <span className=\"ml-2 font-mono text-xs text-muted-foreground\">your-app</span>\n        </div>\n      </div>\n      <div className=\"dot-grid flex flex-col items-center gap-6 px-8 py-12\">\n        <TextReveal as=\"h3\" className=\"text-center text-2xl font-semibold tracking-tight text-foreground\">\n          Ship something great.\n        </TextReveal>\n        <p className=\"max-w-xs text-center text-sm leading-relaxed text-muted-foreground\">\n          Animated primitives that feel intentional, dropped straight into your project.\n        </p>\n        <MagneticButton strength={0.25}>Start building</MagneticButton>\n        <div className=\"mt-2 flex items-center gap-5 text-muted-foreground\">\n          <HeartIcon size={22} label=\"Like\" />\n          <CheckIcon size={22} label=\"Check\" />\n          <CopyIcon size={22} label=\"Copy\" />\n          <SunMoonIcon size={22} label=\"Toggle theme\" />\n        </div>\n      </div>\n    </SpotlightCard>\n  );\n}\n\nexport function AnimatedHero() {\n  return (\n    <section className=\"relative overflow-hidden border-b border-border\">\n      <div\n        aria-hidden=\"true\"\n        className=\"pointer-events-none absolute inset-0\"\n        style={{\n          background:\n            \"radial-gradient(ellipse 55% 45% at 50% 0%, rgba(255, 77, 41, 0.09), transparent 70%)\",\n        }}\n      />\n      <div className=\"relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32\">\n        <div className=\"grid items-center gap-16 lg:grid-cols-2\">\n          <div>\n            <p className=\"inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 font-mono text-[11px] text-muted-foreground\">\n              <span className=\"h-1.5 w-1.5 rounded-full bg-accent\" />\n              Mirro — Animation UI Library\n            </p>\n            <h1 className=\"mt-6 text-5xl font-semibold leading-[1.05] tracking-tight text-foreground sm:text-6xl\">\n              <TextReveal as=\"span\" delay={0}>\n                Motion for\n              </TextReveal>{\" \"}\n              <TextReveal as=\"span\" delay={0.08}>\n                modern\n              </TextReveal>{\" \"}\n              <TextReveal as=\"span\" delay={0.16}>\n                interfaces.\n              </TextReveal>\n            </h1>\n            <p className=\"mt-6 max-w-md text-lg leading-relaxed text-muted-foreground\">\n              Animated icons, components and UI blocks built for React. Copy the source, paste it in, ship it.\n            </p>\n            <div className=\"mt-9 flex flex-wrap items-center gap-4\">\n              <MagneticButton strength={0.35}>Get started</MagneticButton>\n              <MagneticButton strength={0.35} variant=\"outline\">\n                Browse components\n              </MagneticButton>\n            </div>\n            <p className=\"mt-8 font-mono text-xs text-muted-foreground\">\n              <span className=\"text-accent\">$</span> npx mirro-ui init\n            </p>\n          </div>\n          <div>\n            <HeroVisual />\n          </div>\n        </div>\n      </div>\n    </section>\n  );\n}\n"
+    }
+  ],
+  "dependencies": [
+    "motion"
+  ],
+  "registryDependencies": [
+    "text-reveal",
+    "magnetic-button",
+    "spotlight-card",
+    "heart",
+    "check",
+    "copy",
+    "sun-moon"
+  ],
+  "props": [],
+  "accessibility": "The headline uses TextReveal, which is decorative — the text is present in the DOM and readable regardless of animation. CTAs are real buttons with keyboard support.",
+  "touch": "Magnetic buttons disable pointer-following on touch and keep press feedback. The hero visual's spotlight glow is disabled on touch.",
+  "reducedMotion": "Text reveals fade without blur or slide; magnetic follow is disabled; the spotlight glow fades without spring smoothing.",
+  "playground": []
+}
