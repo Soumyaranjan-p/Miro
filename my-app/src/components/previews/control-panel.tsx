@@ -10,6 +10,13 @@ export function coerceControlValue(spec: ControlSpec, value: string | number | b
   return String(value);
 }
 
+export function hexToRgb(hex: string): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return "255, 77, 41";
+  const n = parseInt(m[1], 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
+
 interface ControlPanelProps {
   specs: ControlSpec[];
   values: ControlValues;
@@ -71,17 +78,19 @@ export function ControlPanel({ specs, values, onChange }: ControlPanelProps) {
         }
 
         if (spec.type === "color") {
+          const raw = String(value);
+          const pickerValue = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : "#808080";
           return (
             <div key={spec.key} className="flex items-center justify-between gap-4">
               <label htmlFor={`ctrl-${spec.key}`} className="text-sm text-foreground">
                 {spec.label}
               </label>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-muted-foreground">{String(value)}</span>
+                <span className="font-mono text-xs text-muted-foreground">{raw}</span>
                 <input
                   id={`ctrl-${spec.key}`}
                   type="color"
-                  value={String(value)}
+                  value={pickerValue}
                   onChange={(e) => onChange(spec.key, e.target.value)}
                   className="h-7 w-9 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
                 />

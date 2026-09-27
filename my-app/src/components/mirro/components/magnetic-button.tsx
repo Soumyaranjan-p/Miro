@@ -1,13 +1,10 @@
 "use client";
 
 import type { ReactNode, MouseEvent } from "react";
-import Link from "next/link";
 import { motion } from "motion/react";
 import { cn } from "../lib/cn";
 import { useMagnetic } from "../lib/use-magnetic";
 import { useHoverCapable } from "../lib/use-hover-capable";
-
-const MotionLink = motion(Link);
 
 export interface MagneticButtonProps {
   children: ReactNode;
@@ -50,14 +47,14 @@ export function MagneticButton({
       className="inline-block"
     >
       {href ? (
-        <MotionLink
+        <motion.a
           href={href}
           whileTap={{ scale: 0.97 }}
           transition={{ type: "spring", stiffness: 400, damping: 22 }}
           className={classes}
         >
           {children}
-        </MotionLink>
+        </motion.a>
       ) : (
         <motion.button
           type="button"

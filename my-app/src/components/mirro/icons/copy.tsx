@@ -92,7 +92,7 @@ export function CopyIcon({
           y="4.5"
           width="14"
           height="16"
-          rx="2.5"
+          rx="2"
           initial={false}
           animate={{ opacity: isCopied ? 0.3 : 1 }}
           transition={{ duration, ease }}

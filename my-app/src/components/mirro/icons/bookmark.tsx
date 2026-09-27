@@ -88,7 +88,7 @@ export function BookmarkIcon({
               ? { opacity: isFilled ? 1 : 0 }
               : { y: isFilled ? 0 : -24, opacity: isFilled ? 1 : 0 }
           }
-          transition={{ duration: reduceMotion ? 0 : 280, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.23, 1, 0.32, 1] }}
         >
           <path d={BOOKMARK_PATH} fill={fillColor} stroke="none" />
         </motion.g>

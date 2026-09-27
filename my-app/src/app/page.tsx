@@ -57,36 +57,6 @@ export default function Home() {
       />
 
       <section className="border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-          <div className="max-w-xl">
-            <p className="font-mono text-[11px] font-medium uppercase tracking-widest text-accent">Install</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
-              Start in seconds
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-              Mirro is copy-paste, not a dependency. The CLI merges design tokens into your project and drops in the source.
-            </p>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {[
-              { step: "01", title: "Init", desc: "Detects your setup and merges Mirro's design tokens.", cmd: "npx mirro-ui init" },
-              { step: "02", title: "Add", desc: "Copies component source into your project, resolving dependencies.", cmd: "npx mirro-ui add heart" },
-              { step: "03", title: "Ship", desc: "Import and use. No opaque dependency, full control.", cmd: 'import { HeartIcon } from "./components/mirro/icons/heart"' },
-            ].map((item) => (
-              <div key={item.step} className="rounded-xl border border-border bg-card p-5">
-                <span className="font-mono text-xs text-muted-foreground">{item.step}</span>
-                <h3 className="mt-2 text-base font-medium text-foreground">{item.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
-                <code className="code-theme mt-4 block truncate rounded-md border border-border px-3 py-2 font-mono text-xs text-zinc-300">
-                  {item.cmd}
-                </code>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-border">
         <div className="mx-auto max-w-6xl px-4 py-24 text-center sm:px-6">
           <h2 className="mx-auto max-w-2xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
             Make it move.

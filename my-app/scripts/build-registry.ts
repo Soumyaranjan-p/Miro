@@ -109,7 +109,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
       { key: "fillColor", label: "Fill color", type: "color", default: "#ff4d29" },
     ],
   },
@@ -142,7 +142,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -176,7 +176,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Clipboard color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Clipboard color", type: "color", default: "currentColor" },
       { key: "checkColor", label: "Check color", type: "color", default: "#ff4d29" },
     ],
   },
@@ -209,7 +209,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -241,7 +241,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -268,7 +268,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -295,7 +295,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -320,7 +320,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
       { key: "direction", label: "Direction", type: "select", options: [{ label: "Right", value: "right" }, { label: "Up", value: "up" }, { label: "Down", value: "down" }, { label: "Left", value: "left" }], default: "right" },
     ],
   },
@@ -348,7 +348,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -375,7 +375,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -402,7 +402,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -429,7 +429,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -457,7 +457,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
       { key: "fillColor", label: "Fill color", type: "color", default: "#ff4d29" },
     ],
   },
@@ -485,7 +485,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -512,7 +512,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -539,7 +539,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -566,7 +566,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
     ],
   },
   {
@@ -594,7 +594,7 @@ const entries: EntryMeta[] = [
     playground: [
       { key: "size", label: "Size", type: "slider", min: 16, max: 64, step: 1, default: 24 },
       { key: "strokeWidth", label: "Stroke width", type: "slider", min: 1, max: 3, step: 0.25, default: 1.5 },
-      { key: "color", label: "Stroke color", type: "color", default: "#fafafa" },
+      { key: "color", label: "Stroke color", type: "color", default: "currentColor" },
       { key: "fillColor", label: "Fill color", type: "color", default: "#ff4d29" },
     ],
   },

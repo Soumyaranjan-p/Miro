@@ -9,7 +9,7 @@ export function ArrowPreview({ controls }: PreviewProps) {
       <ArrowIcon
         size={Number(controls?.size ?? 24)}
         strokeWidth={Number(controls?.strokeWidth ?? 1.5)}
-        color={String(controls?.color ?? "#fafafa")}
+        color={String(controls?.color ?? "currentColor")}
         direction={controls?.direction === "up" || controls?.direction === "down" || controls?.direction === "left" ? controls.direction : "right"}
       />
     </div>

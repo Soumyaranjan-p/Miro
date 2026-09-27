@@ -77,7 +77,7 @@ export function PlayIcon({
             opacity: isPlaying ? 0 : 1,
             scale: reduceMotion ? 1 : isPlaying ? 0.6 : 1,
           }}
-          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
           style={{ transformOrigin: "center", transformBox: "fill-box" }}
         />
         <motion.line
@@ -89,7 +89,7 @@ export function PlayIcon({
             opacity: isPlaying ? 1 : 0,
             scale: reduceMotion ? 1 : isPlaying ? 1 : 0.6,
           }}
-          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
           style={{ transformOrigin: "center", transformBox: "fill-box" }}
         />
         <motion.line
@@ -101,7 +101,7 @@ export function PlayIcon({
             opacity: isPlaying ? 1 : 0,
             scale: reduceMotion ? 1 : isPlaying ? 1 : 0.6,
           }}
-          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
           style={{ transformOrigin: "center", transformBox: "fill-box" }}
         />
       </motion.svg>

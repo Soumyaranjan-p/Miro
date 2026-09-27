@@ -49,31 +49,42 @@ export interface PreviewDefinition {
   generateCode?: (controls: ControlValues) => string;
 }
 
+function hexToRgbTriplet(hex: string | number | boolean): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex).trim());
+  if (!m) return "255, 77, 41";
+  const n = parseInt(m[1], 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
+
+function colorProp(c: ControlValues): string {
+  return c.color && c.color !== "currentColor" ? `\n  color="${c.color}"` : "";
+}
+
 export const previews: Record<string, PreviewDefinition> = {
   heart: {
     component: HeartPreview,
     generateCode: (c) =>
-      `<HeartIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n  fillColor="${c.fillColor}"\n/>`,
+      `<HeartIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n  fillColor="${c.fillColor}"\n/>`,
   },
   menu: {
     component: MenuPreview,
     generateCode: (c) =>
-      `<MenuIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<MenuIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   copy: {
     component: CopyPreview,
     generateCode: (c) =>
-      `<CopyIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n  checkColor="${c.checkColor}"\n/>`,
+      `<CopyIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n  checkColor="${c.checkColor}"\n/>`,
   },
   check: {
     component: CheckPreview,
     generateCode: (c) =>
-      `<CheckIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<CheckIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   "sun-moon": {
     component: SunMoonPreview,
     generateCode: (c) =>
-      `<SunMoonIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<SunMoonIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   "magnetic-button": {
     component: MagneticButtonPreview,
@@ -83,7 +94,7 @@ export const previews: Record<string, PreviewDefinition> = {
   "spotlight-card": {
     component: SpotlightCardPreview,
     generateCode: (c) =>
-      `<SpotlightCard spotlightColor="${c.spotlightColor}">\n  <div className="p-6">Content</div>\n</SpotlightCard>`,
+      `<SpotlightCard spotlightColor="${hexToRgbTriplet(c.spotlightColor)}">\n  <div className="p-6">Content</div>\n</SpotlightCard>`,
   },
   "text-reveal": {
     component: TextRevealPreview,
@@ -111,62 +122,62 @@ export const previews: Record<string, PreviewDefinition> = {
   search: {
     component: SearchPreview,
     generateCode: (c) =>
-      `<SearchIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<SearchIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   bell: {
     component: BellPreview,
     generateCode: (c) =>
-      `<BellIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<BellIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   arrow: {
     component: ArrowPreview,
     generateCode: (c) =>
-      `<ArrowIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n  direction="${c.direction}"\n/>`,
+      `<ArrowIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n  direction="${c.direction}"\n/>`,
   },
   download: {
     component: DownloadPreview,
     generateCode: (c) =>
-      `<DownloadIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<DownloadIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   plus: {
     component: PlusPreview,
     generateCode: (c) =>
-      `<PlusIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<PlusIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   x: {
     component: XPreview,
     generateCode: (c) =>
-      `<XIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<XIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   eye: {
     component: EyePreview,
     generateCode: (c) =>
-      `<EyeIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<EyeIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   star: {
     component: StarPreview,
     generateCode: (c) =>
-      `<StarIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n  fillColor="${c.fillColor}"\n/>`,
+      `<StarIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n  fillColor="${c.fillColor}"\n/>`,
   },
   send: {
     component: SendPreview,
     generateCode: (c) =>
-      `<SendIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<SendIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   trash: {
     component: TrashPreview,
     generateCode: (c) =>
-      `<TrashIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<TrashIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   refresh: {
     component: RefreshPreview,
     generateCode: (c) =>
-      `<RefreshIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<RefreshIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   play: {
     component: PlayPreview,
     generateCode: (c) =>
-      `<PlayIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n/>`,
+      `<PlayIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n/>`,
   },
   "shimmer-button": {
     component: ShimmerButtonPreview,
@@ -238,7 +249,7 @@ export const previews: Record<string, PreviewDefinition> = {
   bookmark: {
     component: BookmarkPreview,
     generateCode: (c) =>
-      `<BookmarkIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  color="${c.color}"\n  fillColor="${c.fillColor}"\n/>`,
+      `<BookmarkIcon\n  size={${c.size}}\n  strokeWidth={${c.strokeWidth}}\n  ${colorProp(c)}\n  fillColor="${c.fillColor}"\n/>`,
   },
 };
 

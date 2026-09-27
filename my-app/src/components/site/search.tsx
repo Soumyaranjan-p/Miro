@@ -104,7 +104,7 @@ export function SearchButton() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: reduceMotion ? 120 : 150, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: reduceMotion ? 0.12 : 0.15, ease: [0.23, 1, 0.32, 1] }}
             className="fixed inset-0 z-[100] flex items-start justify-center bg-black/60 px-4 pt-[15vh]"
             onClick={() => setOpen(false)}
           >
@@ -112,7 +112,7 @@ export function SearchButton() {
               initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -8 }}
               animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -8 }}
-              transition={{ duration: reduceMotion ? 120 : 180, ease: [0.23, 1, 0.32, 1] }}
+              transition={{ duration: reduceMotion ? 0.12 : 0.18, ease: [0.23, 1, 0.32, 1] }}
               className="code-theme w-full max-w-lg overflow-hidden rounded-xl border border-border shadow-2xl"
               onClick={(e) => e.stopPropagation()}
               role="dialog"

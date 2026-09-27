@@ -65,7 +65,7 @@ export function ArrowIcon({
       >
         <motion.g
           animate={{ rotate: ROTATION[direction] }}
-          transition={{ duration: 220, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           style={{ originX: "50%", originY: "50%" }}
         >
           <path d={ARROW_LINE} />

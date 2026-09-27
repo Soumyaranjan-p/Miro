@@ -75,7 +75,7 @@ export function EyeIcon({
         <motion.path
           d={SLASH_PATH}
           animate={reduceMotion ? { opacity: isVisible ? 0 : 1 } : { pathLength: isVisible ? 0 : 1 }}
-          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
         />
         <motion.circle
           cx={12}
@@ -87,7 +87,7 @@ export function EyeIcon({
               ? { opacity: isVisible ? 1 : 0 }
               : { scale: isVisible ? 1 : 0, opacity: isVisible ? 1 : 0 }
           }
-          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
         />
       </motion.svg>
     </motion.div>

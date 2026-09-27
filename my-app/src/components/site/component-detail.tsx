@@ -15,35 +15,6 @@ function defaultValues(entry: RegistryEntry): ControlValues {
   return values;
 }
 
-function InstallCommand({ name }: { name: string }) {
-  const [copied, setCopied] = useState(false);
-  const cmd = `npx mirro-ui add ${name}`;
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(cmd);
-    } catch {}
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
-  };
-
-  return (
-    <div className="code-theme flex items-center justify-between rounded-lg border border-border px-4 py-3">
-      <code className="font-mono text-sm text-zinc-300">
-        <span className="text-zinc-500">$ </span>
-        {cmd}
-      </code>
-      <button
-        type="button"
-        onClick={copy}
-        className="ml-4 shrink-0 font-mono text-xs text-zinc-400 transition-colors duration-150 ease-out hover:text-zinc-200"
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
-    </div>
-  );
-}
-
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="font-mono text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -153,13 +124,6 @@ export function ComponentDetail({ entry }: { entry: RegistryEntry }) {
         </div>
 
         <aside className="space-y-8">
-          <div>
-            <SectionTitle>Install</SectionTitle>
-            <div className="mt-3">
-              <InstallCommand name={entry.name} />
-            </div>
-          </div>
-
           {hasControls && (
             <div>
               <SectionTitle>Customize</SectionTitle>

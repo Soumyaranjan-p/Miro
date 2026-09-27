@@ -49,7 +49,7 @@ export function StarIcon({
     if (reduceMotion) return;
     popControls.start({
       scale: [1, 1.25, 1],
-      transition: { duration: 320, ease: [0.23, 1, 0.32, 1] },
+      transition: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
     });
   };
 
@@ -100,7 +100,7 @@ export function StarIcon({
           stroke="none"
           initial={false}
           animate={{ opacity: isFilled ? 1 : 0 }}
-          transition={{ duration: reduceMotion ? 0 : 200 }}
+          transition={{ duration: reduceMotion ? 0 : 0.2 }}
         />
         <motion.circle
           cx="12"
@@ -115,7 +115,7 @@ export function StarIcon({
                 ? { opacity: [0, 0.7, 0], scale: [0.6, 1.15, 1] }
                 : { opacity: 0 }
           }
-          transition={{ duration: reduceMotion ? 0 : 400, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: reduceMotion ? 0 : 0.4, ease: [0.23, 1, 0.32, 1] }}
           style={{ originX: "50%", originY: "50%" }}
         />
       </motion.svg>

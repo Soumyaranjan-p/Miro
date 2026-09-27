@@ -13,11 +13,7 @@ const columns = [
   },
   {
     title: "Resources",
-    links: [
-      { label: "Documentation", href: "/docs" },
-      { label: "CLI", href: "/docs#cli" },
-      { label: "Installation", href: "/docs#installation" },
-    ],
+    links: [{ label: "Documentation", href: "/docs" }],
   },
 ];
 
@@ -68,7 +64,7 @@ export function Footer() {
                 <path d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.47l8.6-9.83L0 1.15h7.59l5.24 6.93 6.07-6.93Zm-1.29 19.5h2.04L6.49 3.24H4.3l13.31 17.41Z" />
               </svg>
             </a>
-            <span className="hidden font-mono text-xs text-muted-foreground sm:inline">npx mirro-ui init</span>
+            <span className="hidden font-mono text-xs text-muted-foreground sm:inline">Copy, paste, ship.</span>
           </div>
         </div>
       </div>

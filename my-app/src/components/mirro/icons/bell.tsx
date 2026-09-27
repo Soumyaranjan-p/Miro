@@ -49,7 +49,7 @@ export function BellIcon({
     if (reduceMotion) return;
     shakeControls.start({
       rotate: [0, -12, 12, -8, 8, 0],
-      transition: { duration: 500, ease: [0.36, 0.07, 0.19, 0.97] },
+      transition: { duration: 0.5, ease: [0.36, 0.07, 0.19, 0.97] },
     });
   };
 
@@ -102,7 +102,7 @@ export function BellIcon({
           }
           transition={
             reduceMotion
-              ? { duration: 200, ease: [0.23, 1, 0.32, 1] }
+              ? { duration: 0.2, ease: [0.23, 1, 0.32, 1] }
               : { type: "spring", stiffness: 500, damping: 18 }
           }
         />

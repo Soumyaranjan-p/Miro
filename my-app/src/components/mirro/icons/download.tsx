@@ -47,7 +47,7 @@ export function DownloadIcon({
     if (reduceMotion) return;
     dipControls.start({
       y: [0, 4, 0],
-      transition: { duration: 260, ease: [0.23, 1, 0.32, 1] },
+      transition: { duration: 0.26, ease: [0.23, 1, 0.32, 1] },
     });
   };
 
@@ -87,7 +87,7 @@ export function DownloadIcon({
         <path d={TRAY_PATH} />
         <motion.g
           animate={reduceMotion ? { opacity: isDownloaded ? 0.45 : 1 } : dipControls}
-          transition={{ duration: 180, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
         >
           <path d={ARROW_LINE} />
           <path d={ARROW_HEAD} />

@@ -14,7 +14,7 @@ export function ShimmerButton() {
       {!reduceMotion && (
         <span
           aria-hidden="true"
-          className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
+          className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-background/50 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
         />
       )}
     </button>
@@ -27,7 +27,7 @@ export function TextReveal() {
     <motion.p
       initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: "blur(8px)", y: 8 }}
       animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: "blur(0px)", y: 0 }}
-      transition={{ duration: reduceMotion ? 200 : 700, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ duration: reduceMotion ? 0.2 : 0.7, ease: [0.23, 1, 0.32, 1] }}
       className="text-sm font-medium text-foreground"
     >
       Motion for modern interfaces.

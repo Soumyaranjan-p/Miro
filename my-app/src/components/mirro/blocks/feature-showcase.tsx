@@ -25,7 +25,7 @@ const FEATURES = [
     icon: CopyIcon,
     title: "Copy-paste, not a dependency",
     description:
-      "The CLI drops source into your project and resolves dependencies. You own the code, fully.",
+      "Copy the source into your project. You own the code, fully.",
   },
   {
     icon: SunMoonIcon,

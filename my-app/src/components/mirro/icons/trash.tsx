@@ -73,7 +73,7 @@ export function TrashIcon({
             rotate: isDeleted && !reduceMotion ? -12 : 0,
             opacity: isDeleted && reduceMotion ? 0.35 : 1,
           }}
-          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
         >
           <path d="M3 6h18" />
           <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -81,7 +81,7 @@ export function TrashIcon({
         <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
         <motion.g
           animate={{ opacity: isDeleted ? 0 : 1 }}
-          transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
         >
           <path d="M10 11v6" />
           <path d="M14 11v6" />

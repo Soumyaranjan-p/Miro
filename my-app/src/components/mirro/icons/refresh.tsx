@@ -48,7 +48,7 @@ export function RefreshIcon({
     if (reduceMotion) {
       spinControls.start({
         opacity: [1, 0.55, 1],
-        transition: { duration: 320, ease: [0.23, 1, 0.32, 1] },
+        transition: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
       });
       return;
     }

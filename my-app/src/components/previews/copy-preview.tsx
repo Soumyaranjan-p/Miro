@@ -9,7 +9,7 @@ export function CopyPreview({ controls }: PreviewProps) {
       <CopyIcon
         size={Number(controls?.size ?? 24)}
         strokeWidth={Number(controls?.strokeWidth ?? 1.5)}
-        color={String(controls?.color ?? "#fafafa")}
+        color={String(controls?.color ?? "currentColor")}
         checkColor={String(controls?.checkColor ?? "#ff4d29")}
       />
     </div>

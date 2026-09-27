@@ -26,13 +26,15 @@ function Word({
       initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
       animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       transition={{
-        duration: reduceMotion ? 200 : 500,
-        delay: reduceMotion ? Math.min(index * 20, 100) : index * 50,
+        duration: reduceMotion ? 0.2 : 0.5,
+        delay: reduceMotion ? Math.min(index * 0.02, 0.1) : index * 0.05,
         ease: [0.23, 1, 0.32, 1],
       }}
       className={cn(
         "mr-[0.28em] inline-block",
-        muted ? "font-medium text-foreground/60" : "font-semibold text-foreground"
+        muted
+          ? "font-medium text-foreground/85 dark:text-foreground/60"
+          : "font-semibold text-foreground"
       )}
     >
       {text}

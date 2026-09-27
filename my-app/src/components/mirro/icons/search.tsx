@@ -73,7 +73,7 @@ export function SearchIcon({
           r={6.5}
           initial={false}
           animate={{ opacity: isScanning ? 0.85 : 1 }}
-          transition={{ duration: 180, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
         />
         <motion.line
           x1={15.8}
@@ -82,7 +82,7 @@ export function SearchIcon({
           y2={20}
           initial={false}
           animate={{ opacity: isScanning ? 0.85 : 1 }}
-          transition={{ duration: 180, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
         />
         <motion.line
           x1={8}
@@ -99,8 +99,8 @@ export function SearchIcon({
           }
           transition={
             reduceMotion
-              ? { duration: 160, ease: [0.23, 1, 0.32, 1] }
-              : { duration: 260, ease: [0.23, 1, 0.32, 1] }
+              ? { duration: 0.16, ease: [0.23, 1, 0.32, 1] }
+              : { duration: 0.26, ease: [0.23, 1, 0.32, 1] }
           }
         />
       </motion.svg>

@@ -79,7 +79,7 @@ export function AnimatedHero() {
               </MagneticButton>
             </div>
             <p className="mt-8 font-mono text-xs text-muted-foreground">
-              <span className="text-accent">$</span> npx mirro-ui init
+              Copy, paste, ship.
             </p>
           </div>
           <div>

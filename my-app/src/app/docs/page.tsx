@@ -72,14 +72,6 @@ function DocCode({ children }: { children: string }) {
   );
 }
 
-const cliRows = [
-  { cmd: "npx mirro-ui init", desc: "Detect your project and merge Mirro's design tokens into your Tailwind setup." },
-  { cmd: "npx mirro-ui add <name>", desc: "Copy a component's source into your project, resolving internal dependencies." },
-  { cmd: "npx mirro-ui add <a> <b>", desc: "Add multiple components at once." },
-  { cmd: "npx mirro-ui list", desc: "List everything in the registry." },
-  { cmd: "npx mirro-ui add <name> --force", desc: "Overwrite files that already exist." },
-];
-
 export default function DocsPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
@@ -89,40 +81,13 @@ export default function DocsPage() {
           Documentation
         </h1>
         <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-          Everything you need to install, use and customize Mirro in your own projects.
+          Everything you need to use and customize Mirro in your own projects.
         </p>
       </div>
 
       <LibraryIndex />
 
       <div className="mt-4 max-w-3xl">
-        <DocSection id="installation" title="Installation">
-          <p>
-            Mirro uses a shadcn-style copy-paste model. Components are copied into your project as source, not
-            installed as an opaque dependency. You own the code.
-          </p>
-          <p>Start by initializing your project:</p>
-          <div className="code-theme rounded-xl border border-border p-4">
-            <code className="font-mono text-sm text-zinc-300">
-              <span className="text-zinc-500">$ </span>npx mirro-ui init
-            </code>
-          </div>
-          <p>
-            This detects your Tailwind version and merges Mirro&apos;s design tokens — colors, easings and the
-            type system — into your existing config without overwriting it.
-          </p>
-          <p>Then add the components you want:</p>
-          <div className="code-theme rounded-xl border border-border p-4">
-            <code className="font-mono text-sm text-zinc-300">
-              <span className="text-zinc-500">$ </span>npx mirro-ui add heart
-            </code>
-          </div>
-          <p>
-            The CLI resolves internal dependencies automatically. A component that depends on a shared hook
-            copies that hook too, with no duplication.
-          </p>
-        </DocSection>
-
         <DocSection id="usage" title="Usage">
           <p>Import the component you copied and use it like any other React component:</p>
           <div className="code-theme rounded-xl border border-border p-4">
@@ -144,31 +109,9 @@ export function LikeButton() {
           </p>
         </DocSection>
 
-        <DocSection id="cli" title="CLI reference">
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="px-4 py-2.5 font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Command</th>
-                  <th className="px-4 py-2.5 font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cliRows.map((row) => (
-                  <tr key={row.cmd} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2.5 font-mono text-[13px] text-accent">{row.cmd}</td>
-                    <td className="px-4 py-2.5 text-[13px] text-muted-foreground">{row.desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </DocSection>
-
         <DocSection id="theming" title="Theming">
           <p>
-            Mirro&apos;s design tokens are plain CSS variables. The CLI merges them into your globals, but you
-            can override any of them:
+            Mirro&apos;s design tokens are plain CSS variables. Override any of them to match your brand:
           </p>
           <div className="code-theme rounded-xl border border-border p-4">
             <pre className="font-mono text-sm leading-relaxed text-zinc-300">

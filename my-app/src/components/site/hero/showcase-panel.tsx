@@ -2,12 +2,11 @@
 
 import { useRef, useEffect } from "react";
 import { useMotionValue, useSpring, useReducedMotion } from "motion/react";
-import { MagneticButton } from "@/components/mirro/components/magnetic-button";
 import { HeartIcon } from "@/components/mirro/icons/heart";
 import { StarIcon } from "@/components/mirro/icons/star";
-import { SpotlightCard } from "@/components/mirro/components/spotlight-card";
 import { useHoverCapable } from "@/components/mirro/lib/use-hover-capable";
 import { FloatingElement } from "./floating-element";
+import { HeroOrb } from "./hero-orb";
 
 export function ShowcasePanel() {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -79,7 +78,7 @@ export function ShowcasePanel() {
         reduceMotion={reduceMotion ? true : false}
         className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
       >
-        <MagneticButton strength={0.3}>Get started</MagneticButton>
+        <HeroOrb />
       </FloatingElement>
 
       <FloatingElement
@@ -91,22 +90,6 @@ export function ShowcasePanel() {
         className="right-[9%] top-[18%]"
       >
         <HeartIcon size={30} />
-      </FloatingElement>
-
-      <FloatingElement
-        depth={0.8}
-        springX={springX}
-        springY={springY}
-        hoverCapable={hoverCapable}
-        reduceMotion={reduceMotion ? true : false}
-        className="bottom-[10%] left-[5%]"
-      >
-        <SpotlightCard className="w-40">
-          <div className="p-3">
-            <p className="font-mono text-[10px] text-muted-foreground">spotlight</p>
-            <p className="mt-1 text-xs font-medium text-foreground">Motion, tuned.</p>
-          </div>
-        </SpotlightCard>
       </FloatingElement>
 
       <FloatingElement

@@ -79,8 +79,8 @@ export function XIcon({
           }
           transition={
             reduceMotion
-              ? { duration: 200, ease: [0.23, 1, 0.32, 1] }
-              : { duration: 300, ease: [0.23, 1, 0.32, 1] }
+              ? { duration: 0.2, ease: [0.23, 1, 0.32, 1] }
+              : { duration: 0.3, ease: [0.23, 1, 0.32, 1] }
           }
         />
         <motion.line
@@ -95,8 +95,8 @@ export function XIcon({
           }
           transition={
             reduceMotion
-              ? { duration: 200, ease: [0.23, 1, 0.32, 1] }
-              : { duration: 300, delay: 80, ease: [0.23, 1, 0.32, 1] }
+              ? { duration: 0.2, ease: [0.23, 1, 0.32, 1] }
+              : { duration: 0.3, delay: 0.08, ease: [0.23, 1, 0.32, 1] }
           }
         />
       </motion.svg>

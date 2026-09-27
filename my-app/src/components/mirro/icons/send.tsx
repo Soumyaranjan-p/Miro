@@ -46,7 +46,7 @@ export function SendIcon({
     if (reduceMotion) {
       launchControls.start({
         opacity: [1, 0.6, 1],
-        transition: { duration: 200, ease: [0.23, 1, 0.32, 1] },
+        transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] },
       });
       return;
     }
@@ -54,7 +54,7 @@ export function SendIcon({
       x: [0, 6, 0],
       y: [0, -6, 0],
       opacity: [1, 0, 1],
-      transition: { duration: 400, ease: [0.23, 1, 0.32, 1] },
+      transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
     });
   };
 

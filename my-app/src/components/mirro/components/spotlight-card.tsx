@@ -59,7 +59,7 @@ export function SpotlightCard({
           background: `radial-gradient(320px circle, rgba(${spotlightColor}, 0.14), transparent 65%)`,
         }}
         animate={{ opacity: hovering ? 1 : 0 }}
-        transition={{ duration: 250, ease: [0.23, 1, 0.32, 1] }}
+        transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
       />
       <div className="relative">{children}</div>
     </div>

@@ -18,7 +18,7 @@ export function BlurText({ children, className }: BlurTextProps) {
     <motion.span
       initial={reduceMotion ? false : { filter: "blur(6px)", opacity: 0.5 }}
       whileHover={hoverCapable && !reduceMotion ? { filter: "blur(0px)", opacity: 1 } : undefined}
-      transition={{ duration: 300, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
       className={cn("inline-block", className)}
     >
       {children}

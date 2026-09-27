@@ -20,7 +20,7 @@ export function TextReveal({ children, className, delay = 0, as = "span" }: Text
       initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: "blur(8px)", y: 10 }}
       whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: "blur(0px)", y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 600, delay, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ duration: 0.6, delay, ease: [0.23, 1, 0.32, 1] }}
       className={cn("inline-block", className)}
     >
       {children}

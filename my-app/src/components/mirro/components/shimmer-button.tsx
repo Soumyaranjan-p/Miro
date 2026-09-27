@@ -28,7 +28,7 @@ export function ShimmerButton({ children, className, onClick }: ShimmerButtonPro
       {!reduceMotion && (
         <span
           aria-hidden="true"
-          className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out hover:translate-x-full"
+          className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-background/50 to-transparent transition-transform duration-700 ease-out hover:translate-x-full"
         />
       )}
     </motion.button>

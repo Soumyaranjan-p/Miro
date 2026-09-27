@@ -49,7 +49,7 @@ export function HeartIcon({
     if (reduceMotion) return;
     beatControls.start({
       scale: [1, 1.28, 0.92, 1.12, 1],
-      transition: { duration: 520, ease: [0.23, 1, 0.32, 1] },
+      transition: { duration: 0.52, ease: [0.23, 1, 0.32, 1] },
     });
   };
 
@@ -99,7 +99,7 @@ export function HeartIcon({
               ? { opacity: isFilled ? 1 : 0 }
               : { scale: isFilled ? [0, 1.15, 1] : 0, opacity: isFilled ? 1 : 0 }
           }
-          transition={{ duration: reduceMotion ? 0 : 280, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.23, 1, 0.32, 1] }}
           style={{ originX: "50%", originY: "50%" }}
         />
       </motion.svg>

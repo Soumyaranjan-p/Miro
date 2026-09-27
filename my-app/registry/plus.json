@@ -90,7 +90,7 @@
       "key": "color",
       "label": "Stroke color",
       "type": "color",
-      "default": "#fafafa"
+      "default": "currentColor"
     }
   ]
 }

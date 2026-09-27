@@ -13,7 +13,7 @@ const ITEMS = [
   },
   {
     title: "How do I install it?",
-    content: "Run npx mirro-ui init, then add the components you want. The source is copied into your project.",
+    content: "Copy the component source into your project and use it like any other React component.",
   },
 ];
 

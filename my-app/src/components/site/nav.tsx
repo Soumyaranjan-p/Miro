@@ -74,7 +74,7 @@ function MobileMenu() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={reduceMotion ? { duration: 0 } : { duration: 200, ease: [0.23, 1, 0.32, 1] }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
             className="absolute inset-x-0 top-14 overflow-hidden border-b border-border bg-background"
           >
             <div className="flex flex-col gap-1 px-4 py-4">

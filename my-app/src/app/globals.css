@@ -9,10 +9,10 @@
   --muted: #f4f4f5;
   --muted-foreground: #6b7280;
   --border: #e7e7ea;
-  --accent: #ff4d29;
+  --accent: #c94019;
   --accent-foreground: #ffffff;
   --success: #16a34a;
-  --ring: #ff4d29;
+  --ring: #c94019;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
