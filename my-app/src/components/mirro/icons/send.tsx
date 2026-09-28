@@ -51,10 +51,9 @@ export function SendIcon({
       return;
     }
     launchControls.start({
-      x: [0, 6, 0],
-      y: [0, -6, 0],
-      opacity: [1, 0, 1],
-      transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
+      x: [0, 9, 0],
+      y: [0, -9, 0],
+      transition: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
     });
   };
 
@@ -77,7 +76,7 @@ export function SendIcon({
       }}
       whileHover={hoverCapable && !reduceMotion ? { x: 2, y: -2 } : undefined}
       whileTap={{ scale: 0.94 }}
-      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
       className={cn("inline-flex cursor-pointer items-center justify-center", className)}
       style={{ width: size, height: size }}
     >

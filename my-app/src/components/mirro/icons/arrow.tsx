@@ -49,7 +49,7 @@ export function ArrowIcon({
       aria-label={label}
       whileHover={hoverCapable && !reduceMotion ? HOVER_OFFSET[direction] : undefined}
       whileTap={{ scale: 0.94 }}
-      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
       className={cn("inline-flex items-center justify-center", className)}
       style={{ width: size, height: size }}
     >

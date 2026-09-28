@@ -53,7 +53,7 @@ export function SearchIcon({
       }}
       whileHover={hoverCapable && !reduceMotion ? { scale: 1.06 } : undefined}
       whileTap={{ scale: 0.94 }}
-      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
       className={cn("inline-flex cursor-pointer items-center justify-center", className)}
       style={{ width: size, height: size }}
     >

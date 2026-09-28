@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "../lib/cn";
 import { useHoverCapable } from "../lib/use-hover-capable";
@@ -38,6 +38,15 @@ export function TrashIcon({
     onDelete?.(next);
   };
 
+  useEffect(() => {
+    if (!isDeleted || isControlled) return;
+    const id = setTimeout(() => {
+      setInternal(false);
+      onDelete?.(false);
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [isDeleted, isControlled, onDelete]);
+
   return (
     <motion.div
       role="button"
@@ -53,7 +62,7 @@ export function TrashIcon({
       }}
       whileHover={hoverCapable && !reduceMotion ? { scale: 1.06 } : undefined}
       whileTap={{ scale: 0.94 }}
-      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
       className={cn("inline-flex cursor-pointer items-center justify-center", className)}
       style={{ width: size, height: size }}
     >
@@ -70,7 +79,7 @@ export function TrashIcon({
         <motion.g
           style={{ originX: 0, originY: 1 }}
           animate={{
-            rotate: isDeleted && !reduceMotion ? -12 : 0,
+            rotate: isDeleted && !reduceMotion ? -18 : 0,
             opacity: isDeleted && reduceMotion ? 0.35 : 1,
           }}
           transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}

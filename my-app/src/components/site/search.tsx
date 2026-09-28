@@ -16,6 +16,7 @@ export function SearchButton() {
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<SearchEntry[]>([]);
   const [selected, setSelected] = useState(0);
+  const [loading, setLoading] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const reduceMotion = useReducedMotion();
@@ -24,7 +25,8 @@ export function SearchButton() {
     fetch("/api/search")
       .then((r) => r.json())
       .then((d) => setEntries(d.entries ?? []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -138,8 +140,12 @@ export function SearchButton() {
                 <kbd className="rounded border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">ESC</kbd>
               </div>
               <div className="max-h-80 overflow-y-auto p-2">
-                {results.length === 0 && (
-                  <p className="px-3 py-8 text-center text-sm text-zinc-500">No results found.</p>
+                {loading ? (
+                  <p className="px-3 py-8 text-center text-sm text-zinc-500">Loading…</p>
+                ) : (
+                  results.length === 0 && (
+                    <p className="px-3 py-8 text-center text-sm text-zinc-500">No results found.</p>
+                  )
                 )}
                 {results.map((r, i) => (
                   <button
