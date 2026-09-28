@@ -936,7 +936,7 @@ const entries: EntryMeta[] = [
     name: "checkbox",
     type: "registry:component",
     title: "Checkbox",
-    description: "A checkbox that draws its checkmark with a stroke animation.",
+    description: "A checkbox whose background sweeps in before the checkmark stamps into place.",
     categories: ["interactive", "forms"],
     files: [{ source: "src/components/mirro/components/checkbox.tsx", target: "components/mirro/components/checkbox.tsx", type: "registry:component" }],
     dependencies: ["motion"],
@@ -950,7 +950,7 @@ const entries: EntryMeta[] = [
     ],
     accessibility: "Implements role=\"checkbox\" with aria-checked. Toggles on Enter and Space.",
     touch: "Tapping toggles the checkbox.",
-    reducedMotion: "The draw is skipped; the check fades in.",
+    reducedMotion: "The sweep and stamp are skipped; the checked state appears instantly.",
   },
   {
     name: "animated-hero",
