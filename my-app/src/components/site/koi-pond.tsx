@@ -88,71 +88,155 @@ function turnToward(angle: number, target: number, maxStep: number): number {
   return angle + Math.max(-maxStep, Math.min(maxStep, d));
 }
 
+function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, (n >> 16) + amt));
+  const gg = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+  const b = Math.max(0, Math.min(255, (n & 255) + amt));
+  return `rgb(${r},${gg},${b})`;
+}
+
 function drawKoi(
   g: CanvasRenderingContext2D,
   f: Koi,
   theme: PondTheme,
   scale: number
 ) {
-  const segs = 9;
+  const segs = 14;
   const len = f.size * scale;
+  const maxW = len * 0.16;
   const dirx = Math.cos(f.angle);
   const diry = Math.sin(f.angle);
   const nx = -diry;
   const ny = dirx;
 
-  const px: number[] = [];
-  const py: number[] = [];
-  const pw: number[] = [];
+  const cx: number[] = [];
+  const cy: number[] = [];
+  const cw: number[] = [];
   for (let i = 0; i <= segs; i++) {
     const s = i / segs;
     const back = s * len;
-    const sway = Math.sin(f.phase - s * 4.2) * len * 0.09 * s;
-    px.push(f.x - dirx * back - diry * sway);
-    py.push(f.y - diry * back + dirx * sway);
-    pw.push((1 - s * 0.78) * len * 0.155);
+    const sway = Math.sin(f.phase - s * 4.6) * len * 0.085 * s;
+    cx.push(f.x - dirx * back - diry * sway);
+    cy.push(f.y - diry * back + dirx * sway);
+    cw.push(maxW * Math.pow(Math.cos(s * Math.PI * 0.46), 0.8));
   }
 
-  g.beginPath();
-  for (let i = 0; i <= segs; i++) {
-    const X = px[i] + nx * pw[i];
-    const Y = py[i] + ny * pw[i];
-    if (i === 0) g.moveTo(X, Y);
-    else g.lineTo(X, Y);
-  }
-  for (let i = segs; i >= 0; i--) {
-    g.lineTo(px[i] - nx * pw[i], py[i] - ny * pw[i]);
-  }
-  g.closePath();
-  g.fillStyle = f.base;
-  g.fill();
-  g.strokeStyle = theme.outline;
-  g.lineWidth = 1;
-  g.stroke();
+  const nose = { x: cx[0] + dirx * maxW * 0.55, y: cy[0] + diry * maxW * 0.55 };
+  const ring: { x: number; y: number }[] = [nose];
+  for (let i = 0; i <= segs; i++) ring.push({ x: cx[i] + nx * cw[i], y: cy[i] + ny * cw[i] });
+  for (let i = segs; i >= 0; i--) ring.push({ x: cx[i] - nx * cw[i], y: cy[i] - ny * cw[i] });
 
+  const body = new Path2D();
+  body.moveTo(
+    (ring[0].x + ring[ring.length - 1].x) / 2,
+    (ring[0].y + ring[ring.length - 1].y) / 2
+  );
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i];
+    const q = ring[(i + 1) % ring.length];
+    body.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
+  }
+  body.closePath();
+
+  const mi = Math.floor(segs * 0.35);
+  const grad = g.createLinearGradient(
+    cx[mi] + nx * cw[mi],
+    cy[mi] + ny * cw[mi],
+    cx[mi] - nx * cw[mi],
+    cy[mi] - ny * cw[mi]
+  );
+  grad.addColorStop(0, shade(f.base, -26));
+  grad.addColorStop(0.5, shade(f.base, 16));
+  grad.addColorStop(1, shade(f.base, -26));
+  g.fillStyle = grad;
+  g.fill(body);
+
+  g.save();
+  g.clip(body);
   for (const pt of f.patches) {
-    const i = Math.max(0, Math.min(segs, Math.floor(pt.at * segs)));
+    const i = Math.max(1, Math.min(segs - 1, Math.round(pt.at * segs)));
+    const ta = Math.atan2(cy[i + 1] - cy[i - 1], cx[i + 1] - cx[i - 1]);
     g.beginPath();
-    g.ellipse(px[i], py[i], pw[i] * 0.92, pw[i] * 0.68, f.angle, 0, Math.PI * 2);
+    g.ellipse(cx[i], cy[i], cw[i] * 1.2, cw[i] * 0.82, ta, 0, Math.PI * 2);
     g.fillStyle = pt.color;
     g.fill();
   }
-
-  const wag = Math.sin(f.phase - 4.2) * 0.5;
-  const tl = len * 0.3;
-  const bx = px[segs];
-  const by = py[segs];
-  const tx = bx - dirx * tl * 0.9 + nx * wag * tl * 0.45;
-  const ty = by - diry * tl * 0.9 + ny * wag * tl * 0.45;
+  const di = Math.floor(segs * 0.52);
   g.beginPath();
-  g.moveTo(bx, by);
-  g.lineTo(tx + nx * tl * 0.4, ty + ny * tl * 0.4);
-  g.lineTo(tx - nx * tl * 0.4, ty - ny * tl * 0.4);
-  g.closePath();
-  g.fillStyle = f.base;
+  g.ellipse(cx[di], cy[di], len * 0.17, maxW * 0.3, f.angle, 0, Math.PI * 2);
+  g.fillStyle = shade(f.base, -34);
+  g.globalAlpha = 0.55;
   g.fill();
+  g.globalAlpha = 1;
+  g.restore();
+
   g.strokeStyle = theme.outline;
+  g.lineWidth = 1;
+  g.stroke(body);
+
+  const fi = Math.floor(segs * 0.3);
+  const flap = Math.sin(f.phase * 1.1 + 1.3) * 0.22;
+  const fl = maxW * 1.2;
+  for (const side of [1, -1]) {
+    const bx = cx[fi] + nx * cw[fi] * 0.85 * side;
+    const by = cy[fi] + ny * cw[fi] * 0.85 * side;
+    const tipx = bx + nx * side * fl * 0.55 - dirx * fl * 0.8 + nx * side * flap * fl * 0.35;
+    const tipy = by + ny * side * fl * 0.55 - diry * fl * 0.8 + ny * side * flap * fl * 0.35;
+    g.beginPath();
+    g.moveTo(bx - dirx * fl * 0.28, by - diry * fl * 0.28);
+    g.lineTo(tipx, tipy);
+    g.lineTo(bx + dirx * fl * 0.28, by + diry * fl * 0.28);
+    g.closePath();
+    g.fillStyle = shade(f.base, -18);
+    g.fill();
+    g.strokeStyle = theme.outline;
+    g.lineWidth = 0.75;
+    g.stroke();
+  }
+
+  const ex = cx[segs] - cx[segs - 2];
+  const ey = cy[segs] - cy[segs - 2];
+  const ea = Math.atan2(ey, ex);
+  const wag = Math.sin(f.phase - 4.6) * 0.38;
+  const ta = ea + wag;
+  const tl = len * 0.36;
+  const px0 = cx[segs];
+  const py0 = cy[segs];
+  const l1x = px0 + Math.cos(ta + 0.52) * tl;
+  const l1y = py0 + Math.sin(ta + 0.52) * tl;
+  const l2x = px0 + Math.cos(ta - 0.52) * tl;
+  const l2y = py0 + Math.sin(ta - 0.52) * tl;
+  const notx = px0 + Math.cos(ta) * tl * 0.55;
+  const noty = py0 + Math.sin(ta) * tl * 0.55;
+  const c1x = px0 + Math.cos(ta + 0.26) * tl * 0.7;
+  const c1y = py0 + Math.sin(ta + 0.26) * tl * 0.7;
+  const c2x = px0 + Math.cos(ta - 0.26) * tl * 0.7;
+  const c2y = py0 + Math.sin(ta - 0.26) * tl * 0.7;
+  const cmx = px0 + Math.cos(ta) * tl * 0.78;
+  const cmy = py0 + Math.sin(ta) * tl * 0.78;
+  g.beginPath();
+  g.moveTo(px0, py0);
+  g.quadraticCurveTo(c1x, c1y, l1x, l1y);
+  g.quadraticCurveTo(cmx, cmy, notx, noty);
+  g.quadraticCurveTo(cmx, cmy, l2x, l2y);
+  g.quadraticCurveTo(c2x, c2y, px0, py0);
+  g.closePath();
+  g.fillStyle = shade(f.base, -8);
+  g.globalAlpha = 0.94;
+  g.fill();
+  g.globalAlpha = 1;
+  g.strokeStyle = theme.outline;
+  g.lineWidth = 0.75;
   g.stroke();
+
+  const er = Math.max(1.1, maxW * 0.13);
+  for (const side of [1, -1]) {
+    g.beginPath();
+    g.arc(cx[1] + nx * cw[1] * 0.5 * side, cy[1] + ny * cw[1] * 0.5 * side, er, 0, Math.PI * 2);
+    g.fillStyle = "#151517";
+    g.fill();
+  }
 }
 
 function drawLeaf(
