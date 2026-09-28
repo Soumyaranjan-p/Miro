@@ -13,6 +13,7 @@
   --accent-foreground: #ffffff;
   --success: #16a34a;
   --ring: #c94019;
+  --rail: color-mix(in oklch, var(--foreground) 20%, transparent);
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -112,6 +113,15 @@
 .dot-grid {
   background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
   background-size: 28px 28px;
+}
+
+.rail-vertical {
+  background-image:
+    repeating-linear-gradient(to bottom, var(--rail) 0px, var(--rail) 6px, transparent 6px, transparent 14px),
+    repeating-linear-gradient(to bottom, var(--rail) 0px, var(--rail) 6px, transparent 6px, transparent 14px);
+  background-size: 1px 100%, 1px 100%;
+  background-position: left top, right top;
+  background-repeat: no-repeat, no-repeat;
 }
 
 @keyframes logo-orbit {

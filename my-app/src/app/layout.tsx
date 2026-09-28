@@ -46,7 +46,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <Nav />
-        <main className="flex-1">{children}</main>
+        <main className="relative flex-1">
+          <div
+            aria-hidden
+            className="rail-vertical pointer-events-none absolute inset-y-0 left-0 right-0 mx-auto w-full max-w-6xl"
+          />
+          {children}
+        </main>
         <Footer />
       </body>
     </html>
