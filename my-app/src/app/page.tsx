@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getEntriesByType } from "@/lib/registry";
 import { HeroSection } from "@/components/site/hero/hero-section";
+import { KoiPond } from "@/components/site/koi-pond";
 import { IconShowcase } from "@/components/site/icon-showcase";
 import { ShowcaseSection } from "@/components/site/showcase-section";
 
@@ -11,6 +12,7 @@ export default function Home() {
   return (
     <div>
       <HeroSection />
+      <KoiPond />
 
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-6">

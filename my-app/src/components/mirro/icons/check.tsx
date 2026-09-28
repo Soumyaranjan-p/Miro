@@ -32,7 +32,7 @@ export function CheckIcon({
   const [internal, setInternal] = useState(defaultActive);
   const isControlled = active !== undefined;
   const isActive = isControlled ? active : internal;
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotion() ? true : false;
   const hoverCapable = useHoverCapable();
 
   const replay = () => {
@@ -41,11 +41,8 @@ export function CheckIcon({
       if (!isControlled) setInternal(true);
     });
     onToggle?.(true);
-    setTimeout(() => playSound("affirm"), reduceMotion ? 120 : 300);
+    setTimeout(() => playSound("affirm"), reduceMotion ? 100 : 200);
   };
-
-  const duration = reduceMotion ? 0.15 : 0.32;
-  const ease: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
   return (
     <motion.div
@@ -70,24 +67,33 @@ export function CheckIcon({
         width={size}
         height={size}
         fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
       >
         <motion.circle
           cx="12"
           cy="12"
-          r="9"
+          r="10"
+          fill={color}
           initial={false}
-          animate={{ pathLength: isActive ? 1 : 0, opacity: isActive ? 1 : 0.4 }}
-          transition={{ duration, ease }}
+          animate={{ scale: isActive ? 1 : 0.5, opacity: isActive ? 1 : 0 }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 520, damping: 28 }
+          }
+          style={{ originX: "50%", originY: "50%" }}
         />
         <motion.path
           d={CHECK_PATH}
+          stroke="var(--background)"
+          strokeWidth={strokeWidth + 0.5}
           initial={false}
           animate={{ pathLength: isActive ? 1 : 0 }}
-          transition={{ duration: duration * 0.9, ease, delay: isActive ? duration * 0.35 : 0 }}
+          transition={{
+            duration: reduceMotion ? 0 : 0.22,
+            ease: [0.23, 1, 0.32, 1],
+          }}
         />
       </motion.svg>
     </motion.div>
