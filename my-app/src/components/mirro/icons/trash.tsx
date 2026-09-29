@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "../lib/cn";
 import { useHoverCapable } from "../lib/use-hover-capable";
+import { useMountEffect } from "../lib/use-mount-effect";
 
 export interface TrashIconProps {
   size?: number;
@@ -31,21 +32,28 @@ export function TrashIcon({
   const isDeleted = isControlled ? deleted : internal;
   const reduceMotion = useReducedMotion();
   const hoverCapable = useHoverCapable();
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useMountEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+  });
 
   const toggle = () => {
     const next = !isDeleted;
-    if (!isControlled) setInternal(next);
+    if (!isControlled) {
+      setInternal(next);
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+      resetTimer.current = null;
+      if (next) {
+        resetTimer.current = setTimeout(() => {
+          resetTimer.current = null;
+          setInternal(false);
+          onDelete?.(false);
+        }, 1200);
+      }
+    }
     onDelete?.(next);
   };
-
-  useEffect(() => {
-    if (!isDeleted || isControlled) return;
-    const id = setTimeout(() => {
-      setInternal(false);
-      onDelete?.(false);
-    }, 1200);
-    return () => clearTimeout(id);
-  }, [isDeleted, isControlled, onDelete]);
 
   return (
     <motion.div

@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import { useMotionValue, useSpring, useReducedMotion } from "motion/react";
 import { HeartIcon } from "@/components/mirro/icons/heart";
 import { StarIcon } from "@/components/mirro/icons/star";
 import { useHoverCapable } from "@/components/mirro/lib/use-hover-capable";
+import { useMountEffect } from "@/components/mirro/lib/use-mount-effect";
 import { FloatingElement } from "./floating-element";
 import { HeroOrb } from "./hero-orb";
 
@@ -20,8 +21,14 @@ export function ShowcasePanel() {
   const springX = useSpring(targetX, { stiffness: 60, damping: 18 });
   const springY = useSpring(targetY, { stiffness: 60, damping: 18 });
 
-  useEffect(() => {
-    if (!hoverCapable || reduceMotion) return;
+  // One-time external sync: attach a pointer-driven parallax loop on mount.
+  // The gate is read directly from matchMedia here (not from the reactive
+  // hooks) because this loop is set up exactly once.
+  useMountEffect(() => {
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (prefersReduced || !canHover) return;
+
     let raf = 0;
     const onMove = (e: PointerEvent) => {
       const rect = panelRef.current?.getBoundingClientRect();
@@ -40,7 +47,7 @@ export function ShowcasePanel() {
       cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onMove);
     };
-  }, [hoverCapable, reduceMotion, targetX, targetY]);
+  });
 
   return (
     <div

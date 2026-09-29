@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { SoundToggle } from "./sound-toggle";
 import { SearchButton } from "./search";
 import { primeSound } from "@/lib/sound";
+import { useMountEffect } from "@/components/mirro/lib/use-mount-effect";
 
 const links = [
   { href: "/icons", label: "Icons" },
@@ -88,11 +89,11 @@ function MobileMenu() {
 }
 
 export function Nav() {
-  useEffect(() => {
+  useMountEffect(() => {
     const prime = () => primeSound();
     window.addEventListener("pointerdown", prime, { once: true });
     return () => window.removeEventListener("pointerdown", prime);
-  }, []);
+  });
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">

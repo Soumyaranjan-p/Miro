@@ -31,7 +31,7 @@ export function FlipCard({ front, back, className }: FlipCardProps) {
     >
       <motion.div
         animate={{ rotateY: flipped ? 180 : 0 }}
-        transition={{ duration: reduceMotion ? 0.15 : 500, ease: [0.77, 0, 0.175, 1] }}
+        transition={{ duration: reduceMotion ? 0.15 : 0.5, ease: [0.77, 0, 0.175, 1] }}
         style={{ transformStyle: "preserve-3d" }}
         className="relative h-full w-full"
       >

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useMountEffect } from "@/components/mirro/lib/use-mount-effect";
 
 interface KoiPatch {
   at: number;
@@ -61,8 +62,9 @@ interface PondTheme {
   waterMid: string;
   waterBottom: string;
   waterDeep: string;
-  glow: string;
-  caustic: string;
+  sheen: string;
+  causticRgb: [number, number, number];
+  ray: string;
   ripple: string;
   outline: string;
   leaf: string;
@@ -106,8 +108,9 @@ function pondTheme(dark: boolean): PondTheme {
         waterMid: "#0b1a28",
         waterBottom: "#07111c",
         waterDeep: "#040a11",
-        glow: "rgba(140,190,225,0.10)",
-        caustic: "rgba(150,205,240,0.07)",
+        sheen: "rgba(150,200,240,0.10)",
+        causticRgb: [168, 202, 232],
+        ray: "rgba(150,195,235,0.13)",
         ripple: "210,235,250",
         outline: "rgba(0,0,0,0.5)",
         leaf: "#2f7a4d",
@@ -125,8 +128,9 @@ function pondTheme(dark: boolean): PondTheme {
         waterMid: "#c2dde4",
         waterBottom: "#9fc7d0",
         waterDeep: "#86b1bc",
-        glow: "rgba(255,255,255,0.30)",
-        caustic: "rgba(255,255,255,0.22)",
+        sheen: "rgba(255,255,255,0.24)",
+        causticRgb: [255, 255, 244],
+        ray: "rgba(255,255,255,0.16)",
         ripple: "20,55,70",
         outline: "rgba(20,45,60,0.35)",
         leaf: "#3f9a5f",
@@ -165,6 +169,60 @@ function mulberry32(seed: number) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function makeNoiseCanvas(size: number, cells: number): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  if (!g) return c;
+  const cell = size / cells;
+  for (let j = 0; j < cells; j++) {
+    for (let i = 0; i < cells; i++) {
+      const v = 96 + Math.floor(Math.random() * 96);
+      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
+    }
+  }
+  const small = document.createElement("canvas");
+  small.width = small.height = Math.max(8, size / 4);
+  const sg = small.getContext("2d");
+  if (sg) {
+    sg.drawImage(c, 0, 0, size, size, 0, 0, small.width, small.height);
+    g.clearRect(0, 0, size, size);
+    g.imageSmoothingEnabled = true;
+    g.drawImage(small, 0, 0, small.width, small.height, 0, 0, size, size);
+  }
+  return c;
+}
+
+function makeCausticTile(size: number, rgb: [number, number, number]): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  if (!g) return c;
+  const img = g.createImageData(size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = (x / size) * Math.PI * 2;
+      const v = (y / size) * Math.PI * 2;
+      const n =
+        Math.sin(u * 3 + v * 2) +
+        Math.sin(u * 5 - v * 3 + 1.7) +
+        Math.sin(u * 2 + v * 5 + 0.6) +
+        Math.sin((u - v) * 4 + 2.2);
+      const m = Math.abs(n) / 4;
+      const intensity = Math.pow(m, 2.6);
+      const i = (y * size + x) * 4;
+      d[i] = rgb[0];
+      d[i + 1] = rgb[1];
+      d[i + 2] = rgb[2];
+      d[i + 3] = Math.round(intensity * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
 }
 
 function drawKoi(
@@ -438,6 +496,11 @@ function drawLeaf(
   theme: PondTheme,
   withFlower: boolean
 ) {
+  g.beginPath();
+  g.ellipse(x + r * 0.1, y + r * 0.18, r * 1.08, r * 0.92, 0, 0, Math.PI * 2);
+  g.fillStyle = "rgba(0,0,0,0.13)";
+  g.fill();
+
   const lg = g.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.2, x, y, r * 1.02);
   lg.addColorStop(0, shade(theme.leaf, 22));
   lg.addColorStop(0.7, theme.leaf);
@@ -489,7 +552,7 @@ export function KoiPond() {
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
 
-  useEffect(() => {
+  useMountEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -500,6 +563,8 @@ export function KoiPond() {
     let H = 0;
     let dark = document.documentElement.classList.contains("dark");
     let theme = pondTheme(dark);
+    const noiseCanvas = makeNoiseCanvas(192, 14);
+    let causticCanvas = makeCausticTile(420, theme.causticRgb);
     let fishes: Koi[] = [];
     let ripples: Ripple[] = [];
     let food: Food | null = null;
@@ -561,50 +626,72 @@ export function KoiPond() {
       if (reduced) drawStatic();
     };
 
-    const drawCaustics = (t: number) => {
+    const drawRays = (t: number) => {
       g.save();
+      g.globalCompositeOperation = "screen";
+      g.globalAlpha = 0.6;
       for (let i = 0; i < 3; i++) {
-        const lx = W * (0.2 + 0.6 * ((Math.sin(t * 0.07 + i * 2.1) + 1) / 2));
-        const ly = H * (0.25 + 0.5 * ((Math.sin(t * 0.05 + i * 3.3) + 1) / 2));
-        const lr = Math.min(W, H) * (0.25 + 0.1 * Math.sin(t * 0.11 + i));
-        const pg = g.createRadialGradient(lx, ly, 0, lx, ly, lr);
-        pg.addColorStop(0, theme.caustic);
-        pg.addColorStop(1, "rgba(0,0,0,0)");
-        g.fillStyle = pg;
-        g.fillRect(0, 0, W, H);
-      }
-      g.lineCap = "round";
-      for (let i = 0; i < 6; i++) {
-        const baseY = H * (0.12 + 0.16 * i);
-        const drift = Math.sin(t * 0.3 + i * 2.2) * 16;
-        g.beginPath();
-        g.moveTo(-10, baseY + drift);
-        for (let x = 0; x <= W; x += 36) {
-          const y = baseY + Math.sin(x * 0.014 + t * 0.5 + i * 1.9) * 8 + drift;
-          g.lineTo(x, y);
-        }
-        g.strokeStyle = theme.caustic;
-        g.lineWidth = 7 - (i % 3);
-        g.stroke();
+        const px = W * (0.16 + 0.34 * i) + Math.sin(t * 0.05 + i * 2.1) * 46;
+        const beamW = W * 0.09 + Math.sin(t * 0.07 + i) * 24;
+        const len = H * (0.78 + 0.18 * Math.sin(t * 0.041 + i * 1.3));
+        const tilt = 0.05 + Math.sin(t * 0.033 + i * 2.4) * 0.06;
+        g.save();
+        g.translate(px, -12);
+        g.rotate(tilt);
+        const rg = g.createLinearGradient(0, 0, 0, len);
+        rg.addColorStop(0, theme.ray);
+        rg.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = rg;
+        g.fillRect(-beamW / 2, 0, beamW, len);
+        g.restore();
       }
       g.restore();
     };
 
+    const drawCaustics = (t: number) => {
+      g.save();
+      g.globalCompositeOperation = "screen";
+      g.globalAlpha = 0.42;
+      const s = Math.max(W, H) * 1.25;
+      const ox = Math.sin(t * 0.052) * 34 - (s - W) / 2;
+      const oy = Math.cos(t * 0.047) * 26 - (s - H) / 2;
+      g.drawImage(causticCanvas, ox, oy, s, s);
+
+      g.globalAlpha = 0.26;
+      const s2 = s * 0.72;
+      const ox2 = Math.cos(t * 0.041) * 48 - (s2 - W) / 2;
+      const oy2 = Math.sin(t * 0.058) * 38 - (s2 - H) / 2;
+      g.drawImage(causticCanvas, ox2, oy2, s2, s2);
+      g.restore();
+    };
+
     const drawBed = () => {
-      const top = H * 0.76;
+      const top = H * 0.74;
       const bg = g.createLinearGradient(0, top, 0, H);
       bg.addColorStop(0, "rgba(0,0,0,0)");
-      bg.addColorStop(1, theme.bed);
+      bg.addColorStop(0.6, theme.bed);
+      bg.addColorStop(1, theme.bedDark);
       g.fillStyle = bg;
       g.fillRect(0, top, W, H - top);
+
+      g.save();
+      g.globalCompositeOperation = "multiply";
+      g.globalAlpha = 0.35;
+      g.drawImage(noiseCanvas, 0, top, W, H - top);
+      g.restore();
+
       for (const p of pebbles) {
+        g.beginPath();
+        g.ellipse(p.x + p.r * 0.18, p.y + p.r * 0.3, p.r * 0.55, p.r * 0.3, 0, 0, Math.PI * 2);
+        g.fillStyle = "rgba(0,0,0,0.16)";
+        g.fill();
         g.beginPath();
         g.ellipse(p.x, p.y, p.r, p.r * 0.62, 0, 0, Math.PI * 2);
         g.fillStyle = p.dark ? theme.bedDark : theme.bed;
         g.fill();
         g.beginPath();
         g.ellipse(p.x - p.r * 0.25, p.y - p.r * 0.2, p.r * 0.5, p.r * 0.3, 0, 0, Math.PI * 2);
-        g.fillStyle = "rgba(255,255,255,0.06)";
+        g.fillStyle = "rgba(255,255,255,0.07)";
         g.fill();
       }
     };
@@ -627,20 +714,45 @@ export function KoiPond() {
     const drawWater = (t: number) => {
       const grad = g.createLinearGradient(0, 0, 0, H);
       grad.addColorStop(0, theme.waterTop);
-      grad.addColorStop(0.45, theme.waterMid);
-      grad.addColorStop(0.8, theme.waterBottom);
+      grad.addColorStop(0.35, theme.waterMid);
+      grad.addColorStop(0.75, theme.waterBottom);
       grad.addColorStop(1, theme.waterDeep);
       g.fillStyle = grad;
       g.fillRect(0, 0, W, H);
 
-      const glow = g.createRadialGradient(W * 0.5, -H * 0.1, 0, W * 0.5, -H * 0.1, H * 1.15);
-      glow.addColorStop(0, theme.glow);
-      glow.addColorStop(1, "rgba(0,0,0,0)");
-      g.fillStyle = glow;
-      g.fillRect(0, 0, W, H);
+      g.save();
+      g.globalCompositeOperation = "overlay";
+      g.globalAlpha = 0.26;
+      const nx = Math.sin(t * 0.02) * 40 - 24;
+      const ny = Math.cos(t * 0.023) * 30 - 20;
+      g.drawImage(noiseCanvas, nx, ny, W + 48, H + 40);
+      g.restore();
+
+      const sheen = g.createLinearGradient(0, 0, 0, H * 0.55);
+      sheen.addColorStop(0, theme.sheen);
+      sheen.addColorStop(1, "rgba(0,0,0,0)");
+      g.save();
+      g.globalCompositeOperation = "screen";
+      g.fillStyle = sheen;
+      g.fillRect(0, 0, W, H * 0.55);
+      g.restore();
+
+      if (!reduced) drawRays(t);
+
+      drawBed();
 
       if (!reduced) drawCaustics(t);
-      drawBed();
+
+      if (!reduced) {
+        g.save();
+        g.globalCompositeOperation = "soft-light";
+        g.globalAlpha = 0.16;
+        const sx = Math.sin(t * 0.11) * 60;
+        const sy = Math.cos(t * 0.09) * 40;
+        g.drawImage(noiseCanvas, sx, sy, W, H);
+        g.restore();
+      }
+
       drawVignette();
     };
 
@@ -814,12 +926,36 @@ export function KoiPond() {
 
       ripples = ripples.filter((r) => r.alpha > 0.01);
       for (const r of ripples) {
-        r.r += 46 * dt;
-        r.alpha *= 1 - 1.6 * dt;
+        r.r += (42 + (1 - r.r / r.max) * 60) * dt;
+        r.alpha *= 1 - 1.4 * dt;
+        const a = Math.max(0, r.alpha);
+        const life = Math.min(1, r.r / r.max);
+        const lw = 1.9 * (1 - life) + 0.35;
+
+        const fg = g.createRadialGradient(r.x, r.y, r.r * 0.55, r.x, r.y, r.r);
+        fg.addColorStop(0, "rgba(0,0,0,0)");
+        fg.addColorStop(1, `rgba(${theme.ripple},${(a * 0.1).toFixed(3)})`);
+        g.fillStyle = fg;
         g.beginPath();
         g.arc(r.x, r.y, r.r, 0, Math.PI * 2);
-        g.strokeStyle = `rgba(${theme.ripple},${Math.max(0, r.alpha).toFixed(3)})`;
-        g.lineWidth = 1.5;
+        g.fill();
+
+        g.beginPath();
+        g.arc(r.x, r.y, r.r - lw * 1.7, 0, Math.PI * 2);
+        g.strokeStyle = `rgba(0,0,0,${(a * 0.2).toFixed(3)})`;
+        g.lineWidth = lw;
+        g.stroke();
+
+        g.beginPath();
+        g.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        g.strokeStyle = `rgba(${theme.ripple},${a.toFixed(3)})`;
+        g.lineWidth = lw;
+        g.stroke();
+
+        g.beginPath();
+        g.arc(r.x, r.y, r.r + lw * 2.2, 0, Math.PI * 2);
+        g.strokeStyle = `rgba(${theme.ripple},${(a * 0.25).toFixed(3)})`;
+        g.lineWidth = 0.6;
         g.stroke();
       }
 
@@ -872,6 +1008,7 @@ export function KoiPond() {
       if (isDark !== dark) {
         dark = isDark;
         theme = pondTheme(dark);
+        causticCanvas = makeCausticTile(420, theme.causticRgb);
         if (reduced) drawStatic();
       }
     });
@@ -897,7 +1034,7 @@ export function KoiPond() {
       ro.disconnect();
       apiRef.current = null;
     };
-  }, [reduced]);
+  });
 
   const pointFromEvent = (e: React.PointerEvent) => {
     const el = wrapRef.current;

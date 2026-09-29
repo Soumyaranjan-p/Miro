@@ -1,0 +1,22 @@
+{
+  "$schema": "https://mirro-ui.com/schema/registry.json",
+  "name": "use-mount-effect",
+  "type": "registry:lib",
+  "title": "useMountEffect",
+  "description": "Runs an effect exactly once on mount — the sanctioned escape hatch for one-time external-system sync.",
+  "categories": [
+    "lib",
+    "hooks"
+  ],
+  "files": [
+    {
+      "path": "components/mirro/lib/use-mount-effect.ts",
+      "type": "registry:lib",
+      "content": "\"use client\";\n\nimport { useEffect, type EffectCallback } from \"react\";\n\n/**\n * Runs an effect exactly once on mount (and its cleanup on unmount).\n *\n * This is the sanctioned escape hatch for one-time external-system sync —\n * DOM integration, browser API subscriptions, third-party lifecycles — where\n * `useEffect` with an empty dependency array would otherwise be used.\n * See no-use-effect.md.\n */\nexport function useMountEffect(effect: EffectCallback): void {\n  /* eslint-disable react-hooks/exhaustive-deps */\n  useEffect(effect, []);\n  /* eslint-enable react-hooks/exhaustive-deps */\n}\n"
+    }
+  ],
+  "dependencies": [],
+  "registryDependencies": [],
+  "props": [],
+  "playground": []
+}

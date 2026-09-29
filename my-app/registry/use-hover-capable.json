@@ -12,13 +12,15 @@
     {
       "path": "components/mirro/lib/use-hover-capable.ts",
       "type": "registry:lib",
-      "content": "\"use client\";\n\nimport { useEffect, useState } from \"react\";\n\nexport function useHoverCapable(): boolean {\n  const [capable, setCapable] = useState(false);\n\n  useEffect(() => {\n    const mq = window.matchMedia(\"(hover: hover) and (pointer: fine)\");\n    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading initial hover capability from matchMedia after mount\n    setCapable(mq.matches);\n    const onChange = (e: MediaQueryListEvent) => setCapable(e.matches);\n    mq.addEventListener(\"change\", onChange);\n    return () => mq.removeEventListener(\"change\", onChange);\n  }, []);\n\n  return capable;\n}\n"
+      "content": "\"use client\";\n\nimport { useState } from \"react\";\nimport { useMountEffect } from \"./use-mount-effect\";\n\nexport function useHoverCapable(): boolean {\n  const [capable, setCapable] = useState(false);\n\n  useMountEffect(() => {\n    const mq = window.matchMedia(\"(hover: hover) and (pointer: fine)\");\n    // Reading the initial hover capability after mount avoids a hydration mismatch.\n    setCapable(mq.matches);\n    const onChange = (e: MediaQueryListEvent) => setCapable(e.matches);\n    mq.addEventListener(\"change\", onChange);\n    return () => mq.removeEventListener(\"change\", onChange);\n  });\n\n  return capable;\n}\n"
     }
   ],
   "dependencies": [
     "motion"
   ],
-  "registryDependencies": [],
+  "registryDependencies": [
+    "use-mount-effect"
+  ],
   "props": [],
   "playground": []
 }

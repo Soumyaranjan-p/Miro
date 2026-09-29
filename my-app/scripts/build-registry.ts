@@ -55,6 +55,16 @@ const MIRRO_LIBS: EntryMeta[] = [
     files: [{ source: "src/components/mirro/lib/cn.ts", target: "components/mirro/lib/cn.ts", type: "registry:lib" }],
   },
   {
+    name: "use-mount-effect",
+    type: "registry:lib",
+    title: "useMountEffect",
+    description: "Runs an effect exactly once on mount — the sanctioned escape hatch for one-time external-system sync.",
+    categories: ["lib", "hooks"],
+    files: [
+      { source: "src/components/mirro/lib/use-mount-effect.ts", target: "components/mirro/lib/use-mount-effect.ts", type: "registry:lib" },
+    ],
+  },
+  {
     name: "use-hover-capable",
     type: "registry:lib",
     title: "useHoverCapable",
@@ -64,6 +74,7 @@ const MIRRO_LIBS: EntryMeta[] = [
       { source: "src/components/mirro/lib/use-hover-capable.ts", target: "components/mirro/lib/use-hover-capable.ts", type: "registry:lib" },
     ],
     dependencies: ["motion"],
+    registryDependencies: ["use-mount-effect"],
   },
   {
     name: "use-magnetic",
@@ -155,7 +166,7 @@ const entries: EntryMeta[] = [
       { source: "src/components/mirro/icons/copy.tsx", target: "components/mirro/icons/copy.tsx", type: "registry:icon" },
     ],
     dependencies: ["motion"],
-    registryDependencies: ["cn", "use-hover-capable"],
+    registryDependencies: ["cn", "use-hover-capable", "use-mount-effect"],
     props: [
       { name: "size", type: "number", default: "24", description: "Width and height of the icon in pixels." },
       { name: "color", type: "string", default: '"currentColor"', description: "Stroke color of the clipboard." },
@@ -496,7 +507,7 @@ const entries: EntryMeta[] = [
     categories: ["icons", "interface"],
     files: [{ source: "src/components/mirro/icons/trash.tsx", target: "components/mirro/icons/trash.tsx", type: "registry:icon" }],
     dependencies: ["motion"],
-    registryDependencies: ["cn", "use-hover-capable"],
+    registryDependencies: ["cn", "use-hover-capable", "use-mount-effect"],
     props: [
       { name: "size", type: "number", default: "24", description: "Width and height in pixels." },
       { name: "color", type: "string", default: '"currentColor"', description: "Stroke color." },
@@ -865,7 +876,7 @@ const entries: EntryMeta[] = [
     categories: ["text", "scroll"],
     files: [{ source: "src/components/mirro/components/typewriter-text.tsx", target: "components/mirro/components/typewriter-text.tsx", type: "registry:component" }],
     dependencies: ["motion"],
-    registryDependencies: ["cn"],
+    registryDependencies: ["cn", "use-mount-effect"],
     props: [
       { name: "children", type: "ReactNode", description: "Text content." },
       { name: "className", type: "string", description: "Additional classes." },
@@ -886,7 +897,7 @@ const entries: EntryMeta[] = [
     categories: ["text", "scroll"],
     files: [{ source: "src/components/mirro/components/scramble-text.tsx", target: "components/mirro/components/scramble-text.tsx", type: "registry:component" }],
     dependencies: ["motion"],
-    registryDependencies: ["cn"],
+    registryDependencies: ["cn", "use-mount-effect"],
     props: [
       { name: "children", type: "ReactNode", description: "Text content." },
       { name: "className", type: "string", description: "Additional classes." },

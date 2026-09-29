@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMountEffect } from "@/components/mirro/lib/use-mount-effect";
 import { getSoundEnabled, setSoundEnabled, subscribeSound } from "@/lib/sound";
 
 export function useSoundEnabled() {
   const [enabled, setEnabled] = useState(false);
 
-  useEffect(() => {
+  useMountEffect(() => {
     // Sync with the persisted preference after mount to avoid a hydration mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading persisted preference post-mount
     setEnabled(getSoundEnabled());
     const unsub = subscribeSound(() => setEnabled(getSoundEnabled()));
     return unsub;
-  }, []);
+  });
 
   const toggle = () => setSoundEnabled(!getSoundEnabled());
 

@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMountEffect } from "./use-mount-effect";
 
 export function useHoverCapable(): boolean {
   const [capable, setCapable] = useState(false);
 
-  useEffect(() => {
+  useMountEffect(() => {
     const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading initial hover capability from matchMedia after mount
+    // Reading the initial hover capability after mount avoids a hydration mismatch.
     setCapable(mq.matches);
     const onChange = (e: MediaQueryListEvent) => setCapable(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, []);
+  });
 
   return capable;
 }

@@ -12,14 +12,15 @@
     {
       "path": "components/mirro/components/typewriter-text.tsx",
       "type": "registry:component",
-      "content": "\"use client\";\n\nimport { useEffect, useState, useRef, type ReactNode } from \"react\";\nimport { useInView, useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\n\nexport interface TypewriterTextProps {\n  children: ReactNode;\n  className?: string;\n  speed?: number;\n}\n\nexport function TypewriterText({ children, className, speed = 32 }: TypewriterTextProps) {\n  const reduceMotion = useReducedMotion();\n  const ref = useRef<HTMLSpanElement>(null);\n  const inView = useInView(ref, { once: true, margin: \"-40px\" });\n  const text = typeof children === \"string\" ? children : \"\";\n  const [count, setCount] = useState(() => (reduceMotion ? text.length : 0));\n\n  useEffect(() => {\n    if (reduceMotion || !inView) return;\n    if (count >= text.length) return;\n    const id = setTimeout(() => setCount((c) => c + 1), speed);\n    return () => clearTimeout(id);\n  }, [inView, count, text, speed, reduceMotion]);\n\n  return (\n    <span ref={ref} className={cn(\"inline-block\", className)}>\n      {text.slice(0, count)}\n      {count < text.length && <span className=\"animate-pulse\">|</span>}\n    </span>\n  );\n}\n"
+      "content": "\"use client\";\n\nimport { useRef, useState, type ReactNode } from \"react\";\nimport { useReducedMotion } from \"motion/react\";\nimport { cn } from \"../lib/cn\";\nimport { useMountEffect } from \"../lib/use-mount-effect\";\n\nexport interface TypewriterTextProps {\n  children: ReactNode;\n  className?: string;\n  speed?: number;\n}\n\nexport function TypewriterText({ children, className, speed = 32 }: TypewriterTextProps) {\n  const reduceMotion = useReducedMotion();\n  const ref = useRef<HTMLSpanElement>(null);\n  const text = typeof children === \"string\" ? children : \"\";\n  const [count, setCount] = useState(() => (reduceMotion ? text.length : 0));\n\n  useMountEffect(() => {\n    const el = ref.current;\n    if (!el) return;\n    let interval: ReturnType<typeof setInterval> | null = null;\n\n    const io = new IntersectionObserver(\n      (entries) => {\n        if (!entries[0]?.isIntersecting) return;\n        io.disconnect();\n        if (reduceMotion) return;\n\n        interval = setInterval(() => {\n          setCount((c) => {\n            if (c >= text.length) {\n              if (interval) clearInterval(interval);\n              interval = null;\n              return c;\n            }\n            return c + 1;\n          });\n        }, speed);\n      },\n      { rootMargin: \"-40px\" }\n    );\n\n    io.observe(el);\n    return () => {\n      io.disconnect();\n      if (interval) clearInterval(interval);\n    };\n  });\n\n  return (\n    <span ref={ref} className={cn(\"inline-block\", className)}>\n      {text.slice(0, count)}\n      {count < text.length && <span className=\"animate-pulse\">|</span>}\n    </span>\n  );\n}\n"
     }
   ],
   "dependencies": [
     "motion"
   ],
   "registryDependencies": [
-    "cn"
+    "cn",
+    "use-mount-effect"
   ],
   "props": [
     {

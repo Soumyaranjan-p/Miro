@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useMountEffect } from "@/components/mirro/lib/use-mount-effect";
 
 interface SearchEntry {
   name: string;
@@ -21,15 +22,23 @@ export function SearchButton() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
 
-  useEffect(() => {
+  useMountEffect(() => {
+    let cancelled = false;
     fetch("/api/search")
       .then((r) => r.json())
-      .then((d) => setEntries(d.entries ?? []))
+      .then((d) => {
+        if (!cancelled) setEntries(d.entries ?? []);
+      })
       .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
-  useEffect(() => {
+  useMountEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -39,14 +48,7 @@ export function SearchButton() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      const id = requestAnimationFrame(() => inputRef.current?.focus());
-      return () => cancelAnimationFrame(id);
-    }
-  }, [open]);
+  });
 
   const results = entries.filter(
     (e) =>
@@ -128,6 +130,7 @@ export function SearchButton() {
                 </svg>
                 <input
                   ref={inputRef}
+                  autoFocus
                   value={query}
                   onChange={(e) => {
                     setQuery(e.target.value);

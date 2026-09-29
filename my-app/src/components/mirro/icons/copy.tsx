@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "../lib/cn";
 import { useHoverCapable } from "../lib/use-hover-capable";
+import { useMountEffect } from "../lib/use-mount-effect";
 import { playSound } from "../../../lib/sound";
 
 const CHECK_PATH = "M8.5 12.5l2.5 2.5 4.5-5";
@@ -38,19 +39,31 @@ export function CopyIcon({
   const isCopied = isControlled ? copied : internal;
   const reduceMotion = useReducedMotion();
   const hoverCapable = useHoverCapable();
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (!isCopied || isControlled) return;
-    const id = setTimeout(() => {
+  useMountEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+  });
+
+  const scheduleReset = () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => {
+      resetTimer.current = null;
       setInternal(false);
       onCopy?.(false);
     }, resetDelay);
-    return () => clearTimeout(id);
-  }, [isCopied, isControlled, resetDelay, onCopy]);
+  };
 
   const copy = () => {
     const next = !isCopied;
-    if (!isControlled) setInternal(next);
+    if (!isControlled) {
+      setInternal(next);
+      if (next) scheduleReset();
+      else if (resetTimer.current) {
+        clearTimeout(resetTimer.current);
+        resetTimer.current = null;
+      }
+    }
     onCopy?.(next);
     if (next) playSound("tick");
   };
