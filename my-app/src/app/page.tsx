@@ -1,9 +1,19 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getEntriesByType } from "@/lib/registry";
 import { HeroSection } from "@/components/site/hero/hero-section";
-import { KoiPond } from "@/components/site/koi-pond";
+import { KoiPondThree } from "@/components/site/koi-pond-three";
 import { IconShowcase } from "@/components/site/icon-showcase";
 import { ShowcaseSection } from "@/components/site/showcase-section";
+import { Faq } from "@/components/site/faq";
+import { CORE_KEYWORDS, SITE_DESCRIPTION, SITE_URL } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: { absolute: "Mirro — Animated React Components, Icons & UI Blocks" },
+  description: SITE_DESCRIPTION,
+  keywords: CORE_KEYWORDS,
+  alternates: { canonical: SITE_URL },
+};
 
 export default function Home() {
   const components = getEntriesByType("registry:component");
@@ -12,7 +22,7 @@ export default function Home() {
   return (
     <div>
       <HeroSection />
-      <KoiPond />
+      <KoiPondThree />
 
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-6">
@@ -23,6 +33,10 @@ export default function Home() {
             </h2>
             <p className="mt-3 text-base leading-relaxed text-muted-foreground">
               Every icon has its own intentional animation. Hover and click them — they just work.
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              Free animated SVG icons for React you can copy straight into your project — media
+              controls, navigation, badges and feedback states, with no extra dependencies.
             </p>
           </div>
           <Link
@@ -57,6 +71,8 @@ export default function Home() {
         basePath="/blocks"
         soonNames={["pricing", "testimonials"]}
       />
+
+      <Faq />
 
       <section className="border-t border-border">
         <div className="mx-auto max-w-6xl px-4 py-24 text-center sm:px-6">

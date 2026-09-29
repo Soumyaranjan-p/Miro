@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getRegistryEntries } from "@/lib/registry";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Docs",
-  description: "Install, use and customize Mirro — the animation-first UI library for React.",
-};
+export const metadata: Metadata = pageMetadata({
+  title: "Documentation & Installation",
+  description:
+    "Install Mirro in a React or Next.js project, browse every component's props, accessibility notes and reduced-motion behaviour, and learn how the shadcn-style CLI works.",
+  path: "/docs",
+  keywords: [
+    "react animation library docs",
+    "mirro ui installation",
+    "shadcn cli components",
+    "tailwind css v4 setup",
+    "framer motion install react",
+  ],
+});
 
 function LibraryIndex() {
   const entries = getRegistryEntries();

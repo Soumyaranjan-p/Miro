@@ -59,7 +59,7 @@ export function Footer() {
               rel="noopener noreferrer"
               className="group flex items-center gap-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
             >
-              Created by Saroz
+              Created by Jinn!
               <svg viewBox="0 0 24 24" className="size-3.5 transition-transform duration-150 ease-out group-hover:-translate-y-0.5" fill="currentColor" aria-hidden="true">
                 <path d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.47l8.6-9.83L0 1.15h7.59l5.24 6.93 6.07-6.93Zm-1.29 19.5h2.04L6.49 3.24H4.3l13.31 17.41Z" />
               </svg>

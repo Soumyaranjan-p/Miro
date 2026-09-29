@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRegistryEntry, type RegistryType } from "@/lib/registry";
+import { SITE_NAME, SITE_URL } from "@/lib/seo";
 import { ComponentDetail } from "./component-detail";
+
+const SEGMENT: Record<string, string> = {
+  "registry:icon": "icons",
+  "registry:component": "components",
+  "registry:block": "blocks",
+};
 
 export function DetailPage({ name, type }: { name: string; type: RegistryType }) {
   const entry = getRegistryEntry(name);
@@ -10,7 +17,50 @@ export function DetailPage({ name, type }: { name: string; type: RegistryType })
     notFound();
   }
 
-  return <ComponentDetail entry={entry} />;
+  // Structured data so each entry can surface as a rich result for its own
+  // effect-name query (e.g. "typewriter text react").
+  const segment = SEGMENT[type] ?? "components";
+  const url = `${SITE_URL}/${segment}/${entry.name}`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareSourceCode",
+        name: `${entry.title} — ${SITE_NAME}`,
+        description: entry.description,
+        url,
+        codeRepository: "https://github.com/mirro-ui/mirro",
+        programmingLanguage: "TypeScript",
+        runtimePlatform: "React",
+        license: "https://opensource.org/licenses/MIT",
+        keywords: entry.categories.join(", "),
+        author: { "@type": "Person", name: "Saroz" },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: SITE_NAME, item: SITE_URL },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: segment === "icons" ? "Icons" : segment === "blocks" ? "Blocks" : "Components",
+            item: `${SITE_URL}/${segment}`,
+          },
+          { "@type": "ListItem", position: 3, name: entry.title, item: url },
+        ],
+      },
+    ],
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <ComponentDetail entry={entry} />
+    </>
+  );
 }
 
 export function NotFoundMessage({ name }: { name: string }) {

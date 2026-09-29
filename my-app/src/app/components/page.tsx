@@ -1,11 +1,22 @@
 import type { Metadata } from "next";
 import { getEntriesByType } from "@/lib/registry";
 import { EntryGrid, IndexHeader } from "@/components/site/entry-grid";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Components",
-  description: "Animated UI components for React. Copy, paste, ship.",
-};
+export const metadata: Metadata = pageMetadata({
+  title: "Animated React Components",
+  description:
+    "17 free animated React components built on Motion and Tailwind CSS v4 — typewriter text, magnetic buttons, tilt cards, spotlight cards, animated tabs and more. Copy, paste, ship.",
+  path: "/components",
+  keywords: [
+    "animated react components",
+    "react animation components",
+    "copy paste react components",
+    "framer motion components",
+    "tailwind animation components",
+    "react ui components",
+  ],
+});
 
 export default function ComponentsPage() {
   const entries = getEntriesByType("registry:component");
