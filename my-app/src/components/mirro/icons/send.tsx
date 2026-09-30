@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { motion, useAnimationControls, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { cn } from "../lib/cn";
 import { useHoverCapable } from "../lib/use-hover-capable";
 
-const PLANE_BODY = "M22 2 15 22l-4-9-9-4Z";
-const PLANE_NOSE = "M22 2 11 13";
+const PLANE = "M22 2 15 22l-4-9-9-4ZM22 2 11 13";
 
 export interface SendIconProps {
   size?: number;
@@ -19,6 +18,18 @@ export interface SendIconProps {
   className?: string;
 }
 
+/**
+ * Send icon that flies off and returns when pressed.
+ *
+ * The previous version animated `x`/`y` on the glyph group via
+ * `useAnimationControls` while `whileHover` set the *same* `x`/`y` on the parent.
+ * Two animations owning one property meant the hover offset and the launch
+ * fought each other: the plane drifted, stalled, or never landed back on origin.
+ *
+ * Now the properties are split: hover moves the frame a little (x/y), the launch
+ * moves the glyph (x/y) *and* fades it — and both settle back to 0, so the icon
+ * cannot end up stuck off-centre.
+ */
 export function SendIcon({
   size = 24,
   color = "currentColor",
@@ -29,32 +40,20 @@ export function SendIcon({
   label = "Send",
   className,
 }: SendIconProps) {
-  const [internal, setInternal] = useState(defaultSent);
+  const [internalSent, setInternalSent] = useState(defaultSent);
+  const [launchKey, setLaunchKey] = useState(0);
   const isControlled = sent !== undefined;
-  const isSent = isControlled ? sent : internal;
+  const isSent = isControlled ? sent : internalSent;
   const reduceMotion = useReducedMotion();
   const hoverCapable = useHoverCapable();
-  const launchControls = useAnimationControls();
 
-  const toggle = () => {
+  const press = () => {
     const next = !isSent;
-    if (!isControlled) setInternal(next);
+    if (!isControlled) setInternalSent(next);
     onSend?.(next);
-  };
-
-  const launch = () => {
-    if (reduceMotion) {
-      launchControls.start({
-        opacity: [1, 0.6, 1],
-        transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] },
-      });
-      return;
-    }
-    launchControls.start({
-      x: [0, 9, 0],
-      y: [0, -9, 0],
-      transition: { duration: 0.32, ease: [0.23, 1, 0.32, 1] },
-    });
+    // Remount the glyph so the launch replays on every press, including rapid
+    // repeats that would otherwise be swallowed mid-flight.
+    setLaunchKey((k) => k + 1);
   };
 
   return (
@@ -63,24 +62,20 @@ export function SendIcon({
       tabIndex={0}
       aria-pressed={isSent}
       aria-label={label}
-      onClick={() => {
-        toggle();
-        launch();
-      }}
+      onClick={press}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          toggle();
-          launch();
+          press();
         }
       }}
       whileHover={hoverCapable && !reduceMotion ? { x: 2, y: -2 } : undefined}
-      whileTap={{ scale: 0.94 }}
-      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+      transition={{ type: "spring", stiffness: 520, damping: 30 }}
       className={cn("inline-flex cursor-pointer items-center justify-center", className)}
       style={{ width: size, height: size }}
     >
-      <motion.svg
+      <svg
         viewBox="0 0 24 24"
         width={size}
         height={size}
@@ -90,11 +85,19 @@ export function SendIcon({
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <motion.g animate={launchControls}>
-          <path d={PLANE_NOSE} />
-          <path d={PLANE_BODY} />
+        <motion.g
+          key={launchKey}
+          initial={reduceMotion ? false : { x: 0, y: 0, opacity: 1 }}
+          animate={
+            reduceMotion
+              ? { opacity: [1, 0.55, 1] }
+              : { x: [0, 10, 0], y: [0, -10, 0], opacity: [1, 0.35, 1] }
+          }
+          transition={{ duration: reduceMotion ? 0.24 : 0.46, ease: [0.23, 1, 0.32, 1] }}
+        >
+          <path d={PLANE} />
         </motion.g>
-      </motion.svg>
+      </svg>
     </motion.div>
   );
 }

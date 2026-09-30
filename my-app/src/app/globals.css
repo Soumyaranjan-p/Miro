@@ -14,6 +14,8 @@
   --success: #16a34a;
   --ring: #c94019;
   --rail: color-mix(in oklch, var(--foreground) 20%, transparent);
+  /* Tint of a solid button's label colour, used for the shimmer highlight. */
+  --shimmer: color-mix(in oklab, var(--background) 55%, transparent);
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -31,6 +33,7 @@
   --accent-foreground: #ffffff;
   --success: #22c55e;
   --ring: #ff4d29;
+  --shimmer: color-mix(in oklab, var(--background) 55%, transparent);
 }
 
 @theme inline {
@@ -110,17 +113,71 @@
   text-wrap: balance;
 }
 
+/*
+ * Theme switch.
+ *
+ * The whole-page cross-fade is a View Transition (see theme-toggle.tsx), so the
+ * browser snapshots the page, we flip `.dark`, and it dissolves one snapshot into
+ * the other as a single composited layer. Nothing here transitions per element:
+ * with ~120 themed surfaces each interpolating on its own, the repaint order
+ * leaks through as a visible stagger (cheap navbar first, heavy hero last).
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  /* Purely a cross-fade: no slide, no scale, no reveal. */
+  animation-timing-function: var(--ease-out);
+  animation-duration: 220ms;
+}
+
+/*
+ * Freezes per-element transitions for the single frame the theme is swapped.
+ *
+ * Without this, Tailwind's `transition-colors` / `transition-all` would start
+ * their own timed colour interpolation at commit time: the new snapshot would
+ * capture a half-interpolated page, and the leftover transitions would keep
+ * running after the cross-fade ended — the stagger, twice over.
+ *
+ * Scoped to `.theme-switching`, which only exists for the duration of one swap,
+ * so hover and entrance transitions are untouched the rest of the time.
+ */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition-property: none !important;
+}
+
+/*
+ * Theme glyphs: both stay mounted and `.dark` decides which is visible, so the
+ * icon always matches the theme in effect. The button is inside the view-
+ * transition snapshot, so it needs no animation of its own.
+ */
+.theme-glyph-sun {
+  opacity: 1;
+}
+
+.theme-glyph-moon {
+  opacity: 0;
+}
+
+.dark .theme-glyph-sun {
+  opacity: 0;
+}
+
+.dark .theme-glyph-moon {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 }
-
 .dot-grid {
   background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
   background-size: 28px 28px;
@@ -181,8 +238,87 @@
   }
 }
 
+/*
+ * ShimmerButton highlight.
+ *
+ * Travels via `left`, not `transform: translateX(%)`. A percentage translate is
+ * relative to the band's own width, so it fell short on wider buttons (a 38px
+ * band moved 152px across a 194px button and never reached the far edge).
+ * `left` percentages resolve against the button itself, so the sweep starts
+ * fully off the left edge and ends fully off the right at any button width.
+ * The skew keeps the highlight angled.
+ */
+@keyframes shimmer-sweep {
+  from {
+    left: -50%;
+  }
+  to {
+    left: 150%;
+  }
+}
+
 .mirro-drift {
   animation: mirro-drift 5s ease-in-out infinite;
+}
+
+.hero-reveal {
+  animation: hero-reveal 0.7s var(--ease-out) both;
+  animation-delay: var(--hero-delay, 0s);
+}
+
+@keyframes hero-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hero-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-pop {
+  animation: hero-pop 0.8s var(--ease-out) both;
+  animation-delay: var(--hero-delay, 0s);
+}
+
+/*
+ * Trace drawing for <TraceField>. Paths carry `pathLength="1"`, so offsets are
+ * normalised: dashoffset 1 hides the stroke, 0 shows all of it.
+ */
+@keyframes trace-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.trace-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: trace-draw 1.5s var(--ease-out) forwards;
+  animation-delay: var(--hero-delay, 0s);
+}
+
+@keyframes trace-pulse {
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+.trace-pulse {
+  stroke-dasharray: 0.07 0.93;
+  animation: trace-pulse 4.8s linear infinite;
 }
 
 .code-theme {
