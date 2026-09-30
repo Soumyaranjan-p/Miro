@@ -5,7 +5,7 @@ import type { Metadata } from "next";
  * overridden per deployment via NEXT_PUBLIC_SITE_URL.
  */
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://mirro-ui.com"
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://miro-fawn-six.vercel.app/"
 ).replace(/\/$/, "");
 
 export const SITE_NAME = "Mirro";
