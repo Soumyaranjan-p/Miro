@@ -19,14 +19,14 @@
 
 pub mod resample;
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Data, SampleFormat, StreamConfig, SupportedStreamConfig};
+use cpal::{Data, SampleFormat, StreamConfig};
 
 use crate::errors::{Failure, Result};
 use resample::{downmix_to_mono, peak, rms, Resampler, TARGET_SAMPLE_RATE};
@@ -312,18 +312,33 @@ fn open_stream(
     }
 
     let mut scratch: Vec<f32> = Vec::new();
-    let error_shared = Arc::clone(&shared);
+let mut callback_count: u32 = 0;
+let error_shared = Arc::clone(&shared);
 
     device
         .build_input_stream_raw(
             config.clone(),
             format,
             move |data: &Data, _info: &cpal::InputCallbackInfo| {
-                scratch.clear();
-                append_as_f32(&mut scratch, format, data);
-                if scratch.is_empty() {
-                    return;
-                }
+               callback_count = callback_count.saturating_add(1);
+
+scratch.clear();
+append_as_f32(&mut scratch, format, data);
+
+if callback_count <= 3 {
+    eprintln!(
+        "[miro-audio] callback={} format={:?} samples={} rate={} channels={}",
+        callback_count,
+        format,
+        scratch.len(),
+        sample_rate,
+        channels
+    );
+}
+
+if scratch.is_empty() {
+    return;
+}
 
                 let mono = if channels > 1 {
                     downmix_to_mono(&scratch, channels)
@@ -352,6 +367,7 @@ fn open_stream(
                 }
             },
             move |err| {
+                eprintln!("[miro-audio] stream error: {err:?}");
                 if let Ok(mut slot) = error_shared.stream_error.lock() {
                     if slot.is_none() {
                         *slot = Some(match err.kind() {

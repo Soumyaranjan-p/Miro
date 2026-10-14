@@ -19,7 +19,7 @@ use crate::events::{self, ModelProgress, RuntimeStatus};
 use crate::hotkeys::Hotkey;
 use crate::models;
 use crate::session::{HookBinding, Session};
-use crate::state::{self, AppState};
+use crate::state::AppState;
 
 /// Errors cross the boundary as a code the interface can translate, plus a
 /// detail that is guaranteed by construction to be content-free.
@@ -106,7 +106,7 @@ pub fn set_settings(
     app: AppHandle,
     app_state: State<'_, AppState>,
     session: State<'_, Session>,
-    hooks: State<'_, Mutex<HookBinding>>,
+    _hooks: State<'_, Mutex<HookBinding>>,
     patch: SettingsPatch,
 ) -> CmdResult<Settings> {
     let before = app_state.settings();

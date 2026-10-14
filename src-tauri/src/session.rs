@@ -14,7 +14,7 @@
 
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -396,7 +396,7 @@ impl Session {
     fn transcribe_and_insert(
         &self,
         app: &AppHandle,
-        mut samples: Vec<f32>,
+        samples: Vec<f32>,
         audio_ms: u128,
         limit_reached: bool,
         target: Target,
