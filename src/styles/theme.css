@@ -1,0 +1,317 @@
+@import "tailwindcss";
+
+/* Miro's design tokens.
+   One dark ink, one ember signal, everything else neutral. Dark follows the
+   system by default; `data-theme` on <html> is the single switch. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --miro-bg: #f4f4f5;
+  --miro-surface: #ffffff;
+  --miro-surface-2: #fafafb;
+  --miro-line: #e5e5e8;
+  --miro-line-strong: #d3d3d8;
+  --miro-ink: #16181d;
+  --miro-muted: #63666e;
+  --miro-faint: #8f939c;
+  --miro-accent: #ff4d2e;
+  --miro-accent-ink: #2a0f08;
+  --miro-accent-soft: rgb(255 77 46 / 0.1);
+  --miro-success: #0f8c63;
+  --miro-success-soft: rgb(15 140 99 / 0.12);
+  --miro-danger: #cc2b20;
+  --miro-danger-soft: rgb(204 43 32 / 0.1);
+  --miro-warn: #a25a06;
+  --miro-warn-soft: rgb(162 90 6 / 0.12);
+  --miro-shadow: 0 12px 32px rgb(16 18 23 / 0.14), 0 1px 2px rgb(16 18 23 / 0.08);
+  --miro-shadow-soft: 0 2px 8px rgb(16 18 23 / 0.06);
+  --miro-ring: rgb(255 77 46 / 0.5);
+  --miro-track: rgb(0 0 0 / 0.06);
+}
+
+[data-theme="dark"] {
+  --miro-bg: #0e0f12;
+  --miro-surface: #17181c;
+  --miro-surface-2: #1c1e23;
+  --miro-line: #26282e;
+  --miro-line-strong: #363942;
+  --miro-ink: #f1f2f4;
+  --miro-muted: #9aa0aa;
+  --miro-faint: #6e737d;
+  --miro-accent: #ff5c3d;
+  --miro-accent-ink: #200c06;
+  --miro-accent-soft: rgb(255 92 61 / 0.16);
+  --miro-success: #34c08d;
+  --miro-success-soft: rgb(52 192 141 / 0.16);
+  --miro-danger: #f4736a;
+  --miro-danger-soft: rgb(244 115 106 / 0.14);
+  --miro-warn: #e0a33c;
+  --miro-warn-soft: rgb(224 163 60 / 0.14);
+  --miro-shadow: 0 16px 40px rgb(0 0 0 / 0.6), 0 1px 2px rgb(0 0 0 / 0.5);
+  --miro-shadow-soft: 0 2px 10px rgb(0 0 0 / 0.4);
+  --miro-ring: rgb(255 92 61 / 0.55);
+  --miro-track: rgb(255 255 255 / 0.08);
+}
+
+@theme inline {
+  --color-bg: var(--miro-bg);
+  --color-surface: var(--miro-surface);
+  --color-surface-2: var(--miro-surface-2);
+  --color-line: var(--miro-line);
+  --color-line-strong: var(--miro-line-strong);
+  --color-ink: var(--miro-ink);
+  --color-muted: var(--miro-muted);
+  --color-faint: var(--miro-faint);
+  --color-accent: var(--miro-accent);
+  --color-accent-ink: var(--miro-accent-ink);
+  --color-accent-soft: var(--miro-accent-soft);
+  --color-success: var(--miro-success);
+  --color-success-soft: var(--miro-success-soft);
+  --color-danger: var(--miro-danger);
+  --color-danger-soft: var(--miro-danger-soft);
+  --color-warn: var(--miro-warn);
+  --color-warn-soft: var(--miro-warn-soft);
+  --color-track: var(--miro-track);
+
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", ui-monospace, "SF Mono", monospace;
+
+  --radius-card: 14px;
+  --radius-control: 10px;
+  --radius-chip: 8px;
+
+  --shadow-card: var(--miro-shadow);
+  --shadow-soft: var(--miro-shadow-soft);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--miro-bg);
+    color: var(--miro-ink);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* The overlay floats over other apps: no page background, no text selection. */
+  body.overlay-body {
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+    cursor: default;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--miro-ring);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--miro-line-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin: 0;
+  }
+}
+
+@layer components {
+  .miro-card {
+    background: var(--miro-surface);
+    border: 1px solid var(--miro-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .miro-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--miro-line);
+    background: var(--miro-surface);
+    color: var(--miro-ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 550;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .miro-btn:hover:not(:disabled) {
+    background: var(--miro-surface-2);
+    border-color: var(--miro-line-strong);
+  }
+  .miro-btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .miro-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .miro-btn-primary {
+    background: var(--miro-accent);
+    border-color: transparent;
+    color: var(--miro-accent-ink);
+  }
+  .miro-btn-primary:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--miro-accent) 88%, white);
+    border-color: transparent;
+  }
+
+  .miro-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--miro-muted);
+  }
+  .miro-btn-ghost:hover:not(:disabled) {
+    background: var(--miro-track);
+    border-color: transparent;
+    color: var(--miro-ink);
+  }
+
+  .miro-btn-sm {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12.5px;
+  }
+
+  .miro-field {
+    height: 32px;
+    width: 100%;
+    padding: 0 10px;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--miro-line);
+    background: var(--miro-surface);
+    color: var(--miro-ink);
+    font: inherit;
+    font-size: 13px;
+  }
+  .miro-field:hover:not(:disabled) {
+    border-color: var(--miro-line-strong);
+  }
+  .miro-field:disabled {
+    background: var(--miro-surface-2);
+    color: var(--miro-muted);
+  }
+
+  .miro-select {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--miro-muted) 50%),
+      linear-gradient(135deg, var(--miro-muted) 50%, transparent 50%);
+    background-position:
+      calc(100% - 15px) 14px,
+      calc(100% - 10px) 14px;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 28px;
+  }
+
+  /* Keyboard shortcut capture field - monospace so keys line up. */
+  .miro-keys {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+  }
+
+  .miro-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-chip);
+    background: var(--miro-track);
+    color: var(--miro-muted);
+    font-size: 11.5px;
+    font-weight: 550;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+}
+
+/* Reduced motion: keep the interface calm and instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@keyframes miro-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes miro-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes miro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes miro-drain {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.miro-animate-rise {
+  animation: miro-rise 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
