@@ -4,18 +4,18 @@
 //!   * A capture lives on its own thread. The cpal stream is created, started
 //!     and dropped there, because WASAPI wants the stream torn down on the
 //!     thread that owns it, and because the UI thread must never touch audio.
-//!   * The audio callback does the minimum: normalize samples to f32, downmix,
-//!     resample to 16 kHz and append to the recording buffer. It publishes the
-//!     current level into atomics so the level pump never touches the audio.
+//!   * The audio callback does the minimum: normalize samples to f32, publish
+//!     the current level into atomics, and append the raw interleaved samples
+//!     (at the device's native rate) to the recording buffer. Downmixing and
+//!     resampling to 16 kHz happen once, after recording stops.
 //!   * A pump loop turns those atomics into ~50 level frames per second for the
 //!     overlay. Frames are numbers, never audio.
 //!   * Nothing here knows about files. The only output is `Vec<f32>` in memory.
 //!
-//! Two short mutexes are taken inside the audio callback (the recording buffer
-//! and the resampler). Both are essentially uncontended - the pump reads
-//! atomics, not the buffer - which is why this is acceptable rather than
-//! heroic. It is a deliberate trade of textbook real-time purity for a simpler,
-//! auditable data path.
+//! One short mutex (the recording buffer) is taken inside the audio callback.
+//! It is essentially uncontended - the pump reads atomics, not the buffer -
+//! which is why this is acceptable rather than heroic. It is a deliberate
+//! trade of textbook real-time purity for a simpler, auditable data path.
 
 pub mod resample;
 
@@ -172,17 +172,20 @@ impl Capture {
         self.stop.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    /// Waits for the capture thread's verdict. Safe to call more than once.
+    /// Waits for the capture thread's verdict.
     pub fn wait(mut self) -> CaptureOutcome {
         if self.joined {
             return CaptureOutcome::Cancelled;
         }
         self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
-        let outcome = self.finished.recv_timeout(Duration::from_secs(20)).unwrap_or_else(|_| {
-            CaptureOutcome::Failed(Failure::Internal(
-                "the audio thread did not report back in time".into(),
-            ))
-        });
+        let outcome = self
+            .finished
+            .recv_timeout(Duration::from_secs(20))
+            .unwrap_or_else(|_| {
+                CaptureOutcome::Failed(Failure::Internal(
+                    "the audio thread did not report back in time".into(),
+                ))
+            });
         if let Some(handle) = self.thread.take() {
             let _ = handle.join();
         }
@@ -202,9 +205,9 @@ impl Drop for Capture {
 }
 
 struct Shared {
-    /// Mono, 16 kHz, f32 - the engine's input contract.
+    /// Raw interleaved f32 at the device's native rate and channel count.
+    /// Converted to mono 16 kHz (the engine's input contract) after stopping.
     samples: Mutex<Vec<f32>>,
-    resampler: Mutex<Option<Resampler>>,
     started: Instant,
     limit_ms: u128,
     limit_reached: AtomicBool,
@@ -301,69 +304,43 @@ fn is_supported_format(format: SampleFormat) -> bool {
 fn open_stream(
     device: &cpal::Device,
     config: &StreamConfig,
-    channels: u16,
-    sample_rate: u32,
     format: SampleFormat,
+    keep_audio: bool,
     shared: Arc<Shared>,
     levels: LevelSink,
 ) -> Result<cpal::Stream> {
     if !is_supported_format(format) {
-        return Err(Failure::MicUnsupportedFormat(format!("sample format {format:?}")));
+        return Err(Failure::MicUnsupportedFormat(format!(
+            "sample format {format:?}"
+        )));
     }
 
     let mut scratch: Vec<f32> = Vec::new();
-let mut callback_count: u32 = 0;
-let error_shared = Arc::clone(&shared);
+    let error_shared = Arc::clone(&shared);
 
     device
         .build_input_stream_raw(
             config.clone(),
             format,
             move |data: &Data, _info: &cpal::InputCallbackInfo| {
-               callback_count = callback_count.saturating_add(1);
+                scratch.clear();
+                append_as_f32(&mut scratch, format, data);
 
-scratch.clear();
-append_as_f32(&mut scratch, format, data);
-
-if callback_count <= 3 {
-    eprintln!(
-        "[miro-audio] callback={} format={:?} samples={} rate={} channels={}",
-        callback_count,
-        format,
-        scratch.len(),
-        sample_rate,
-        channels
-    );
-}
-
-if scratch.is_empty() {
-    return;
-}
-
-                let mono = if channels > 1 {
-                    downmix_to_mono(&scratch, channels)
-                } else {
-                    scratch.clone()
-                };
-
-                // Levels come from the raw signal, before resampling.
-                levels.publish(rms(&mono), peak(&mono));
-
-                let resampled = {
-                    let mut guard = match shared.resampler.lock() {
-                        Ok(guard) => guard,
-                        Err(poisoned) => poisoned.into_inner(),
-                    };
-                    let resampler = guard.get_or_insert_with(|| Resampler::new(sample_rate));
-                    resampler.process(&mono, false)
-                };
-                if resampled.is_empty() {
+                if scratch.is_empty() {
                     return;
                 }
 
+                levels.publish(rms(&scratch), peak(&scratch));
+
+                // A probe only needs levels; never accumulate audio for it.
+                if !keep_audio {
+                    return;
+                }
+
+                // Store raw samples; downmix and resample after recording stops.
                 match shared.samples.lock() {
-                    Ok(mut buffer) => buffer.extend_from_slice(&resampled),
-                    Err(poisoned) => poisoned.into_inner().extend_from_slice(&resampled),
+                    Ok(mut buffer) => buffer.extend_from_slice(&scratch),
+                    Err(poisoned) => poisoned.into_inner().extend_from_slice(&scratch),
                 }
             },
             move |err| {
@@ -431,7 +408,9 @@ pub fn start(
             let _ = thread.join();
             Err(failure)
         }
-        Err(_) => Err(Failure::Internal("the audio device did not start in time".into())),
+        Err(_) => Err(Failure::Internal(
+            "the audio device did not start in time".into(),
+        )),
     }
 }
 
@@ -471,14 +450,14 @@ fn run_capture(
     };
 
     if sample_rate == 0 || channels == 0 {
-        let failure = Failure::MicUnsupportedFormat(format!("{sample_rate} Hz, {channels} channels"));
+        let failure =
+            Failure::MicUnsupportedFormat(format!("{sample_rate} Hz, {channels} channels"));
         let _ = ready.send(Err(clone_failure(&failure)));
         return CaptureOutcome::Failed(failure);
     }
 
     let shared = Arc::new(Shared {
-        samples: Mutex::new(Vec::with_capacity(TARGET_SAMPLE_RATE as usize * 4)),
-        resampler: Mutex::new(None),
+        samples: Mutex::new(Vec::with_capacity(sample_rate as usize * channels as usize * 4)),
         started: Instant::now(),
         limit_ms: max_seconds as u128 * 1000,
         limit_reached: AtomicBool::new(false),
@@ -488,9 +467,8 @@ fn run_capture(
     let stream = match open_stream(
         &device,
         &config,
-        channels,
-        sample_rate,
         format,
+        mode == CaptureMode::Record,
         Arc::clone(&shared),
         levels.clone(),
     ) {
@@ -525,7 +503,8 @@ fn run_capture(
             break;
         }
 
-        if mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms {
+        if mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms
+        {
             shared
                 .limit_reached
                 .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -539,11 +518,13 @@ fn run_capture(
 
     // No callbacks run after this point, so the buffer is ours to read.
     drop(stream);
+    let duration_ms = shared.started.elapsed().as_millis();
+    let raw = take_samples(&shared); // interleaved, at the device's native rate
 
     let cancelled = cancel.load(std::sync::atomic::Ordering::SeqCst);
 
     if cancelled || mode == CaptureMode::Probe {
-        discard(take_samples(&shared));
+        discard(raw);
         // A probe is a normal ending, not a cancellation.
         return if mode == CaptureMode::Probe {
             CaptureOutcome::Probed
@@ -553,23 +534,17 @@ fn run_capture(
     }
 
     if let Some(failure) = failure {
-        discard(take_samples(&shared));
+        discard(raw);
         return CaptureOutcome::Failed(failure);
     }
 
-    let duration_ms = shared.started.elapsed().as_millis();
-    let mut samples = take_samples(&shared);
-
-    // Flush the resampler through the same instance that processed the audio,
-    // so the last fraction of a millisecond is not lost.
-    let tail = {
-        let mut guard = match shared.resampler.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        guard.as_mut().map(|resampler| resampler.process(&[], true)).unwrap_or_default()
-    };
-    samples.extend_from_slice(&tail);
+    // Downmix and resample once, now that recording is over.
+    let mono = downmix_to_mono(&raw, channels);
+    discard(raw);
+    let mut resampler = Resampler::new(sample_rate);
+    let mut samples = resampler.process(&mono, false);
+    samples.extend(resampler.process(&[], true)); // flush the tail
+    discard(mono);
 
     if has_no_speech(&samples, duration_ms) {
         discard(samples);
