@@ -224,6 +224,18 @@ fn map_cpal_error(err: &cpal::Error) -> Failure {
     }
 }
 
+/// Stream-error kinds that do not end a capture.
+///
+/// cpal 0.18 raises WASAPI capture discontinuities (the
+/// `DATA_DISCONTINUITY` flag on one packet) as `Xrun` while the stream stays
+/// live and keeps delivering audio - a cpal-0.18 change; earlier releases
+/// never surfaced it. cpal's own examples treat `Xrun` as log-and-continue,
+/// and so does Miro: a single glitched packet is not a reason to discard a
+/// recording that is otherwise healthy.
+fn is_transient_stream_error(kind: cpal::ErrorKind) -> bool {
+    matches!(kind, cpal::ErrorKind::Xrun)
+}
+
 fn open_device(host: &cpal::Host, wanted: Option<&str>) -> Result<(cpal::Device, String)> {
     let Some(wanted) = wanted.map(str::trim).filter(|s| !s.is_empty()) else {
         return match host.default_input_device() {
@@ -316,6 +328,7 @@ fn open_stream(
     }
 
     let mut scratch: Vec<f32> = Vec::new();
+    let mut xrun_logged = false;
     let error_shared = Arc::clone(&shared);
 
     device
@@ -344,7 +357,17 @@ fn open_stream(
                 }
             },
             move |err| {
-                eprintln!("[miro-audio] stream error: {err:?}");
+                // Log the first transient glitch once; repeat warnings on the
+                // audio thread would cost more than the glitch itself.
+                if is_transient_stream_error(err.kind()) {
+                    if !xrun_logged {
+                        xrun_logged = true;
+                        eprintln!(
+                            "[miro-audio] transient stream glitch (recording continues): {err:?}"
+                        );
+                    }
+                    return;
+                }
                 if let Ok(mut slot) = error_shared.stream_error.lock() {
                     if slot.is_none() {
                         *slot = Some(match err.kind() {
@@ -672,6 +695,15 @@ fn clone_failure(failure: &Failure) -> Failure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_xrun_does_not_kill_the_stream_but_a_dead_device_does() {
+        assert!(is_transient_stream_error(cpal::ErrorKind::Xrun));
+        assert!(!is_transient_stream_error(
+            cpal::ErrorKind::DeviceNotAvailable
+        ));
+        assert!(!is_transient_stream_error(cpal::ErrorKind::BackendError));
+    }
 
     #[test]
     fn silence_is_detected() {
