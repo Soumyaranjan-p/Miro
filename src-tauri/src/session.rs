@@ -23,8 +23,8 @@ use crate::config::{Mode, Settings};
 use crate::engine::{self, Engine, EngineOptions};
 use crate::errors::{Failure, Result};
 use crate::events::{self, OverlayState, RuntimeStatus};
-use crate::insertion::{self, Target};
 use crate::hotkeys::registry as shortcut_registry;
+use crate::insertion::{self, Target};
 use crate::logging::{self, Event};
 use crate::privacy::{self, PendingText};
 use crate::state::{self, ShortcutRuntime};
@@ -48,9 +48,6 @@ pub enum Phase {
 
 struct ActiveRecording {
     control: CaptureControl,
-    device_label: String,
-    started_at_ms: u64,
-    max_seconds: u32,
 }
 
 #[derive(Default)]
@@ -148,12 +145,7 @@ impl Session {
         {
             let mut inner = lock(&self.inner);
             inner.target = Some(target);
-            inner.recording = Some(ActiveRecording {
-                control,
-                device_label: device_label.clone(),
-                started_at_ms,
-                max_seconds: settings.max_recording_seconds,
-            });
+            inner.recording = Some(ActiveRecording { control });
         }
 
         if let Err(failure) = shortcut_registry(app).register_cancel(app) {
@@ -273,7 +265,9 @@ impl Session {
             None => return Err(Failure::FocusChanged),
         };
         let Some(mut text) = lock(&self.inner).pending.peek(retry_id).map(str::to_string) else {
-            return Err(Failure::Internal("that transcript is no longer available".into()));
+            return Err(Failure::Internal(
+                "that transcript is no longer available".into(),
+            ));
         };
 
         let outcome = insertion::insert(&text, target);
@@ -307,7 +301,9 @@ impl Session {
     /// Puts the pending transcript on the clipboard instead of typing it.
     pub fn copy_pending(&self, app: &AppHandle, retry_id: u64) -> Result<()> {
         let Some(mut text) = lock(&self.inner).pending.peek(retry_id).map(str::to_string) else {
-            return Err(Failure::Internal("that transcript is no longer available".into()));
+            return Err(Failure::Internal(
+                "that transcript is no longer available".into(),
+            ));
         };
         let characters = text.chars().count();
         let result = insertion::copy_to_clipboard(&text);
@@ -534,8 +530,7 @@ impl Session {
             }
         }
 
-        let spec = crate::models::spec(&settings.model_id)
-            .ok_or_else(|| Failure::ModelMissing)?;
+        let spec = crate::models::spec(&settings.model_id).ok_or(Failure::ModelMissing)?;
         let data_dir = app
             .path()
             .app_data_dir()
@@ -693,7 +688,13 @@ impl Session {
     }
 
     /// Records the shortcut registration outcome for the status strip.
-    pub fn publish_shortcut(&self, app: &AppHandle, shortcut: String, mechanism: crate::hotkeys::Mechanism, detail: Option<String>) {
+    pub fn publish_shortcut(
+        &self,
+        app: &AppHandle,
+        shortcut: String,
+        mechanism: crate::hotkeys::Mechanism,
+        detail: Option<String>,
+    ) {
         let registered = mechanism != crate::hotkeys::Mechanism::None;
         state::state(app).set_shortcut_runtime(ShortcutRuntime {
             registered,
@@ -730,7 +731,11 @@ impl HookBinding {
         Self { hook: None }
     }
 
-    pub fn apply(&mut self, app: &AppHandle, settings: &Settings) -> Result<crate::hotkeys::Mechanism> {
+    pub fn apply(
+        &mut self,
+        app: &AppHandle,
+        settings: &Settings,
+    ) -> Result<crate::hotkeys::Mechanism> {
         // Any previous hook goes away first: it must never outlive the mode
         // that justified it.
         self.hook = None;
@@ -750,7 +755,10 @@ impl HookBinding {
             .spawn(move || {
                 while let Ok(event) = rx.recv() {
                     let session = app_handle.state::<Session>();
-                    session.on_push_to_talk(&app_handle, event == crate::keyboard_hook::PressEvent::Down);
+                    session.on_push_to_talk(
+                        &app_handle,
+                        event == crate::keyboard_hook::PressEvent::Down,
+                    );
                 }
             })
             .map_err(|e| Failure::Internal(format!("spawn push-to-talk thread: {e}")))?;

@@ -123,7 +123,11 @@ impl AppState {
         if desired == enabled {
             return Ok(());
         }
-        let outcome = if desired { manager.enable() } else { manager.disable() };
+        let outcome = if desired {
+            manager.enable()
+        } else {
+            manager.disable()
+        };
         outcome.map_err(|e| Failure::ConfigWrite(format!("start on login: {e}")))
     }
 }

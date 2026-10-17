@@ -111,18 +111,18 @@ impl Engine {
                         model: model_id.to_string(),
                         ms: started.elapsed().as_millis(),
                     });
-                    return Ok(Self {
+                    Ok(Self {
                         backend: Backend::Whisper(engine),
                         model_id: Some(model_id.to_string()),
                         busy: Arc::new(AtomicBool::new(false)),
                         last_compute_ms: AtomicU64::new(0),
-                    });
+                    })
                 }
                 Err(failure) => {
                     logging::event(Event::EngineLoadFailed {
                         code: failure.code().as_str(),
                     });
-                    return Err(failure);
+                    Err(failure)
                 }
             }
         }
@@ -169,7 +169,12 @@ impl Engine {
     ///
     /// Runs synchronously on the calling thread - the session layer owns which
     /// thread that is - so that a caller can never accidentally block the UI.
-    pub fn transcribe(&self, samples: &[f32], options: &EngineOptions, audio_ms: u128) -> Result<Transcript> {
+    pub fn transcribe(
+        &self,
+        samples: &[f32],
+        options: &EngineOptions,
+        audio_ms: u128,
+    ) -> Result<Transcript> {
         if samples.is_empty() {
             return Err(Failure::AudioEmpty);
         }
@@ -253,13 +258,18 @@ mod tests {
         let error = engine
             .transcribe(&[0.1; 1600], &EngineOptions::default(), 100)
             .unwrap_err();
-        assert!(matches!(error, Failure::EngineNotBuilt | Failure::AudioEmpty));
+        assert!(matches!(
+            error,
+            Failure::EngineNotBuilt | Failure::AudioEmpty
+        ));
     }
 
     #[test]
     fn empty_audio_is_rejected_before_reaching_the_engine() {
         let engine = Engine::unavailable();
-        let error = engine.transcribe(&[], &EngineOptions::default(), 0).unwrap_err();
+        let error = engine
+            .transcribe(&[], &EngineOptions::default(), 0)
+            .unwrap_err();
         assert!(matches!(error, Failure::AudioEmpty));
     }
 
@@ -279,7 +289,7 @@ mod tests {
 
     #[test]
     fn a_transcript_zeroizes_itself_when_dropped() {
-        let mut transcript = Transcript {
+        let transcript = Transcript {
             text: "secret dictation".to_string(),
             segments: 1,
             audio_ms: 1000,
@@ -323,12 +333,24 @@ mod tests {
         let Some(samples) = read_pcm16_mono_16k(&wav) else {
             panic!("speech wav must be 16 kHz 16-bit mono pcm");
         };
-        println!("model: {} ({} bytes)", model.display(), std::fs::metadata(&model).unwrap().len());
-        println!("speech: {} samples ({} ms)", samples.len(), samples.len() / 16);
+        println!(
+            "model: {} ({} bytes)",
+            model.display(),
+            std::fs::metadata(&model).unwrap().len()
+        );
+        println!(
+            "speech: {} samples ({} ms)",
+            samples.len(),
+            samples.len() / 16
+        );
 
         let engine = Engine::load(&model, "base.en").expect("the installed model must load");
         let transcript = engine
-            .transcribe(&samples, &EngineOptions::default(), samples.len() as u128 / 16)
+            .transcribe(
+                &samples,
+                &EngineOptions::default(),
+                samples.len() as u128 / 16,
+            )
             .expect("synthetic speech must transcribe");
         println!(
             "transcript: {} chars, {} segments, {} ms compute",
@@ -338,8 +360,15 @@ mod tests {
         );
 
         let lowered = transcript.text.to_lowercase();
-        assert!(!transcript.text.trim().is_empty(), "the transcript must not be empty");
-        assert!(lowered.contains("fox"), "expected the spoken words, got: {:?}", transcript.text);
+        assert!(
+            !transcript.text.trim().is_empty(),
+            "the transcript must not be empty"
+        );
+        assert!(
+            lowered.contains("fox"),
+            "expected the spoken words, got: {:?}",
+            transcript.text
+        );
     }
 
     /// Minimal riff/header walk for a 16-bit single-channel 16 kHz PCM wave.
@@ -376,7 +405,8 @@ mod tests {
                 }
                 continue;
             }
-            file.seek(SeekFrom::Current((size + (size & 1)) as i64)).ok()?;
+            file.seek(SeekFrom::Current((size + (size & 1)) as i64))
+                .ok()?;
         }
     }
 }

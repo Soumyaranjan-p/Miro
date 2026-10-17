@@ -222,7 +222,11 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// cancel key that only exists while a recording is in flight.
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     logging::event(Event::ShortcutTriggered {
-        state: if event.state == ShortcutState::Pressed { "pressed" } else { "released" },
+        state: if event.state == ShortcutState::Pressed {
+            "pressed"
+        } else {
+            "released"
+        },
     });
     let app_state = app.state::<AppState>();
     let settings = app_state.settings();
@@ -279,7 +283,10 @@ mod tests {
     fn the_user_agent_identifies_miro_and_nothing_else() {
         let agent = concat!("Miro/", env!("CARGO_PKG_VERSION"));
         assert!(agent.starts_with("Miro/"));
-        assert!(!agent.contains("Windows NT"), "no machine fingerprint leaks out");
+        assert!(
+            !agent.contains("Windows NT"),
+            "no machine fingerprint leaks out"
+        );
     }
 
     #[test]

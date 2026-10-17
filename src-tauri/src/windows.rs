@@ -7,7 +7,9 @@
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 use crate::config::OverlayPosition;
 use crate::errors::{Failure, Result};
@@ -22,19 +24,20 @@ const OVERLAY_MARGIN: i32 = 28;
 
 /// Creates the overlay window, hidden, and makes it non-activating.
 pub fn create_overlay(app: &AppHandle) -> Result<WebviewWindow> {
-    let window = WebviewWindowBuilder::new(app, OVERLAY_LABEL, WebviewUrl::App("overlay.html".into()))
-        .title("Miro")
-        .inner_size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .resizable(false)
-        .shadow(false)
-        .focused(false)
-        .visible(false)
-        .build()
-        .map_err(|e| Failure::Internal(format!("create overlay window: {e}")))?;
+    let window =
+        WebviewWindowBuilder::new(app, OVERLAY_LABEL, WebviewUrl::App("overlay.html".into()))
+            .title("Miro")
+            .inner_size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .resizable(false)
+            .shadow(false)
+            .focused(false)
+            .visible(false)
+            .build()
+            .map_err(|e| Failure::Internal(format!("create overlay window: {e}")))?;
 
     let hwnd = raw_hwnd(&window)?;
     win::make_non_activating(hwnd)?;
@@ -45,14 +48,15 @@ pub fn create_overlay(app: &AppHandle) -> Result<WebviewWindow> {
 /// Creates the settings window, hidden. It is an ordinary application window:
 /// it takes focus, it appears in the taskbar, it behaves like Windows expects.
 pub fn create_settings(app: &AppHandle) -> Result<WebviewWindow> {
-    let window = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
-        .title("Miro Settings")
-        .inner_size(820.0, 760.0)
-        .min_inner_size(620.0, 520.0)
-        .visible(false)
-        .center()
-        .build()
-        .map_err(|e| Failure::Internal(format!("create settings window: {e}")))?;
+    let window =
+        WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
+            .title("Miro Settings")
+            .inner_size(820.0, 760.0)
+            .min_inner_size(620.0, 520.0)
+            .visible(false)
+            .center()
+            .build()
+            .map_err(|e| Failure::Internal(format!("create settings window: {e}")))?;
     Ok(window)
 }
 

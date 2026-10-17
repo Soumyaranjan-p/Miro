@@ -17,7 +17,7 @@
 //!     loop.
 
 use std::fs;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -309,7 +309,11 @@ impl Verification {
 ///
 /// `expected` is `None` for catalogue entries where no published integrity value
 /// was obtained; the caller must then surface the weaker guarantee.
-pub fn verify_file(path: &Path, expected_len: Option<u64>, expected: Option<&str>) -> Result<Verification> {
+pub fn verify_file(
+    path: &Path,
+    expected_len: Option<u64>,
+    expected: Option<&str>,
+) -> Result<Verification> {
     let metadata =
         fs::metadata(path).map_err(|e| Failure::ModelFileMissing(format!("{path:?}: {e}")))?;
     let bytes = metadata.len();
@@ -391,7 +395,9 @@ where
     let target = model_path(dir, spec);
     let existing = fs::metadata(&partial).map(|meta| meta.len()).unwrap_or(0);
 
-    let mut request = client.get(source_url(spec)).header("User-Agent", USER_AGENT);
+    let mut request = client
+        .get(source_url(spec))
+        .header("User-Agent", USER_AGENT);
     if existing > 0 {
         request = request.header("Range", &format!("bytes={existing}-"));
     }
@@ -407,8 +413,8 @@ where
     } else {
         0
     };
-    let total = header_u64(response.headers(), "content-length")
-        .map(|length| length + resumed_from);
+    let total =
+        header_u64(response.headers(), "content-length").map(|length| length + resumed_from);
 
     logging::event(Event::ModelDownloadStarted {
         model: spec.id.to_string(),
@@ -513,12 +519,6 @@ pub fn resume_offset(dir: &Path, spec: &ModelSpec) -> u64 {
         .unwrap_or(0)
 }
 
-#[allow(dead_code)]
-fn keep_seek_visible(file: &mut fs::File) -> std::io::Result<u64> {
-    // Documents that the sync seek path is still available for small reads.
-    file.seek(SeekFrom::Current(0))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -540,7 +540,11 @@ mod tests {
     #[test]
     fn catalogue_has_a_default_that_exists() {
         let recommended: Vec<_> = CATALOG.iter().filter(|spec| spec.recommended).collect();
-        assert_eq!(recommended.len(), 1, "exactly one model is the recommended default");
+        assert_eq!(
+            recommended.len(),
+            1,
+            "exactly one model is the recommended default"
+        );
         assert_eq!(recommended[0].id, "base.en");
         assert!(spec("base.en").is_some());
         assert!(spec("nope").is_none());
@@ -557,7 +561,11 @@ mod tests {
         ids.dedup();
         files.dedup();
         assert_eq!(ids.len(), id_count, "duplicate model id in the catalogue");
-        assert_eq!(files.len(), file_count, "duplicate file name in the catalogue");
+        assert_eq!(
+            files.len(),
+            file_count,
+            "duplicate file name in the catalogue"
+        );
     }
 
     #[test]
@@ -565,7 +573,10 @@ mod tests {
         for spec in CATALOG {
             let url = source_url(spec);
             assert!(url.starts_with("https://"), "{url} must be https");
-            assert!(url.ends_with(spec.file_name), "{url} must end with the file name");
+            assert!(
+                url.ends_with(spec.file_name),
+                "{url} must end with the file name"
+            );
         }
     }
 
@@ -643,7 +654,7 @@ mod tests {
     fn verification_rejects_a_length_mismatch() {
         let dir = temp_dir("length");
         let file = dir.join("model.bin");
-        write_model(&file, &vec![0u8; 100]);
+        write_model(&file, &[0u8; 100]);
 
         assert!(verify_file(&file, Some(999), None).is_err());
         assert_eq!(

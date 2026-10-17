@@ -17,8 +17,8 @@ use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
 };
 
-use crate::errors::{Failure, Result};
 use super::EngineOptions;
+use crate::errors::{Failure, Result};
 
 pub struct WhisperEngine {
     context: WhisperContext,

@@ -212,7 +212,10 @@ mod tests {
             characters: 0,
         }
         .to_string();
-        assert_eq!(rendered, "insertion.finished ok=false code=focus_changed characters=0");
+        assert_eq!(
+            rendered,
+            "insertion.finished ok=false code=focus_changed characters=0"
+        );
         assert!(!rendered.contains('\n'));
     }
 

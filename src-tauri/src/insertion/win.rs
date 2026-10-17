@@ -16,7 +16,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_RETURN, VK_SHIFT, VK_LWIN, VK_RWIN,
+    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RETURN, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -47,10 +47,6 @@ impl Target {
             hwnd: hwnd.0 as isize,
             pid,
         })
-    }
-
-    fn hwnd(&self) -> HWND {
-        HWND(self.hwnd as *mut c_void)
     }
 
     /// True while the target is still the foreground window.
@@ -158,7 +154,11 @@ fn unicode_input(unit: u16, key_up: bool) -> INPUT {
 }
 
 fn virtual_key_input(key: VIRTUAL_KEY, scan: u16, key_up: bool) -> INPUT {
-    let flags: KEYBD_EVENT_FLAGS = if key_up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) };
+    let flags: KEYBD_EVENT_FLAGS = if key_up {
+        KEYEVENTF_KEYUP
+    } else {
+        KEYBD_EVENT_FLAGS(0)
+    };
     INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
@@ -178,18 +178,25 @@ const SCAN_RETURN: u16 = 0x1C;
 /// Types text with `SendInput` using Unicode events.
 ///
 /// Newlines become real Enter presses (chat apps and editors treat a bare CR
-/// inconsistently), everything else travels as UTF-16 code units.
+/// inconsistently), everything else travels as UTF-16 code units. The returned
+/// count is code points, not units, so a surrogate pair is one character.
 pub fn send_unicode_text(text: &str) -> Result<usize> {
     let units: Vec<u16> = text.encode_utf16().collect();
     let mut typed = 0usize;
 
     for (start, end) in plan_batches(&units, 32) {
         let mut events: Vec<INPUT> = Vec::with_capacity((end - start) * 2 + 2);
-        for unit in &units[start..end] {
+        for (offset, unit) in units[start..end].iter().enumerate() {
+            let previous = if offset > 0 {
+                units.get(start + offset - 1)
+            } else {
+                units.get(start.wrapping_sub(1))
+            };
             match *unit {
                 0x000A | 0x000D => {
-                    // Collapse CRLF into a single Enter.
-                    if *unit == 0x000A && start < end && units.get(start.wrapping_sub(1)) == Some(&0x000D) {
+                    // Collapse CRLF into a single Enter, even when the pair
+                    // straddles a batch boundary.
+                    if *unit == 0x000A && previous == Some(&0x000D) {
                         continue;
                     }
                     events.push(virtual_key_input(VK_RETURN, SCAN_RETURN, false));
@@ -199,7 +206,11 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
                 unit => {
                     events.push(unicode_input(unit, false));
                     events.push(unicode_input(unit, true));
-                    typed += 1;
+                    // A surrogate pair is one code point; the low half was
+                    // already counted when the high half arrived.
+                    if !(0xDC00..0xE000).contains(&unit) {
+                        typed += 1;
+                    }
                 }
             }
         }
@@ -252,7 +263,8 @@ pub fn send_paste() -> Result<()> {
 pub fn modifier_is_down(key: VIRTUAL_KEY) -> bool {
     // GetAsyncKeyState's high bit means "down now"; the low bit is unreliable
     // because it is shared between threads.
-    let state = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(key.0 as i32) };
+    let state =
+        unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(key.0 as i32) };
     (state as u16 & 0x8000) != 0
 }
 
@@ -314,9 +326,8 @@ pub fn work_area_for_cursor() -> Option<WorkArea> {
     if unsafe { windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point) }.is_err() {
         return None;
     }
-    let monitor = unsafe {
-        windows::Win32::Graphics::Gdi::MonitorFromPoint(point, DEFAULT_NEAREST)
-    };
+    let monitor =
+        unsafe { windows::Win32::Graphics::Gdi::MonitorFromPoint(point, DEFAULT_NEAREST) };
     if monitor.0.is_null() {
         return None;
     }
@@ -345,20 +356,13 @@ pub fn make_non_activating(hwnd: isize) -> Result<()> {
     let handle = HWND(hwnd as *mut c_void);
     unsafe {
         let current = GetWindowLongPtrW(handle, GWL_EXSTYLE);
-        let wanted = (current
-            | WS_EX_NOACTIVATE.0 as isize
-            | WS_EX_TOOLWINDOW.0 as isize)
+        let wanted = (current | WS_EX_NOACTIVATE.0 as isize | WS_EX_TOOLWINDOW.0 as isize)
             & !(WS_EX_APPWINDOW.0 as isize);
         if wanted != current {
             SetWindowLongPtrW(handle, GWL_EXSTYLE, wanted);
         }
 
-        let installed = SetWindowSubclass(
-            handle,
-            Some(overlay_subclass_proc),
-            SUBCLASS_ID,
-            0,
-        );
+        let installed = SetWindowSubclass(handle, Some(overlay_subclass_proc), SUBCLASS_ID, 0);
         if !installed.as_bool() {
             return Err(Failure::Internal(
                 "the overlay window could not be made non-activating".into(),

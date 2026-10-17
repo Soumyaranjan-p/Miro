@@ -34,7 +34,8 @@ use miro_lib::insertion::{self, Target};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut launch: Option<String> = None;
-    let mut text = "miro insertion probe: the quick brown fox jumps over the lazy dog 1234567890".to_string();
+    let mut text =
+        "miro insertion probe: the quick brown fox jumps over the lazy dog 1234567890".to_string();
     let mut settle_ms = 400u64;
     let mut force = false;
 
@@ -107,7 +108,14 @@ $ticker.Start()
 [void]$f.ShowDialog()
 "#;
             match Command::new("powershell")
-                .args(["-NoProfile", "-WindowStyle", "Hidden", "-STA", "-Command", script])
+                .args([
+                    "-NoProfile",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-STA",
+                    "-Command",
+                    script,
+                ])
                 .spawn()
             {
                 Ok(child) => Some(child),
@@ -169,7 +177,10 @@ $ticker.Start()
     }
 
     println!("target window class: {}", class_name(target_window));
-    println!("expected text: {text:?} ({} characters)", text.chars().count());
+    println!(
+        "expected text: {text:?} ({} characters)",
+        text.chars().count()
+    );
 
     let target = match Target::capture_foreground() {
         Ok(target) => target,
@@ -210,7 +221,10 @@ $ticker.Start()
             let normalised_expected = normalise(&text);
             let normalised_observed = normalise(&observed);
             if normalised_observed.contains(&normalised_expected) {
-                println!("read back: MATCH ({} characters observed)", observed.chars().count());
+                println!(
+                    "read back: MATCH ({} characters observed)",
+                    observed.chars().count()
+                );
                 let _ = child.map(|mut c| c.kill());
                 std::process::exit(0);
             }
@@ -256,18 +270,23 @@ fn run_self_test() {
         );
     }
 
-    println!("self-test: ok ({} units in {} batches)", units.len(), ranges.len());
+    println!(
+        "self-test: ok ({} units in {} batches)",
+        units.len(),
+        ranges.len()
+    );
 }
 
 fn find_window_of_process(pid: Option<u32>) -> Option<HWND> {
-    let Some(pid) = pid else {
-        return None;
-    };
+    let pid = pid?;
     let mut found: HWND = HWND::default();
     let mut search = SearchState { pid, result: None };
 
     unsafe {
-        let _ = EnumWindows(Some(enum_windows_proc), LPARAM(&mut search as *mut _ as isize));
+        let _ = EnumWindows(
+            Some(enum_windows_proc),
+            LPARAM(&mut search as *mut _ as isize),
+        );
     }
     if let Some(hwnd) = search.result {
         found = hwnd;
@@ -295,7 +314,12 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         return BOOL(1);
     }
     let mut window_pid = 0u32;
-    unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, Some(&mut window_pid)) };
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+            hwnd,
+            Some(&mut window_pid),
+        )
+    };
     if window_pid == state.pid {
         state.result = Some(hwnd);
         return BOOL(0);
@@ -316,19 +340,20 @@ fn bring_to_foreground(hwnd: HWND) -> bool {
             foreground,
             Some(&mut foreground_pid),
         );
-        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, Some(&mut target_pid));
+        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+            hwnd,
+            Some(&mut target_pid),
+        );
 
         let current = windows::Win32::System::Threading::GetCurrentThreadId();
         let mut attached = Vec::new();
         for thread in [foreground_pid, target_pid] {
-            if thread != 0 && thread != current {
-                if unsafe {
-                    windows::Win32::System::Threading::AttachThreadInput(current, thread, true)
-                }
-                .as_bool()
-                {
-                    attached.push(thread);
-                }
+            if thread != 0
+                && thread != current
+                && windows::Win32::System::Threading::AttachThreadInput(current, thread, true)
+                    .as_bool()
+            {
+                attached.push(thread);
             }
         }
 
@@ -346,9 +371,8 @@ fn bring_to_foreground(hwnd: HWND) -> bool {
         let focused = SetForegroundWindow(hwnd).as_bool();
 
         for thread in attached {
-            let _ = unsafe {
-                windows::Win32::System::Threading::AttachThreadInput(current, thread, false)
-            };
+            let _ =
+                windows::Win32::System::Threading::AttachThreadInput(current, thread, false);
         }
         focused
     }

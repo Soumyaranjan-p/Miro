@@ -16,8 +16,8 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
-    GetClipboardFormatNameW, GetClipboardSequenceNumber, IsClipboardFormatAvailable,
-    OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    GetClipboardFormatNameW, GetClipboardSequenceNumber, IsClipboardFormatAvailable, OpenClipboard,
+    RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::Memory::{
     GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
@@ -105,7 +105,10 @@ pub struct ClipboardSnapshot {
 
 impl ClipboardSnapshot {
     pub fn stored_formats(&self) -> usize {
-        self.entries.iter().filter(|entry| entry.bytes.is_some()).count()
+        self.entries
+            .iter()
+            .filter(|entry| entry.bytes.is_some())
+            .count()
     }
 }
 
@@ -123,7 +126,9 @@ fn open_clipboard() -> Result<()> {
             std::thread::sleep(std::time::Duration::from_millis(OPEN_RETRY_MS));
         }
     }
-    Err(Failure::Clipboard("another application is holding the clipboard".into()))
+    Err(Failure::Clipboard(
+        "another application is holding the clipboard".into(),
+    ))
 }
 
 fn format_name(format: u32) -> Option<String> {
@@ -327,7 +332,8 @@ pub fn current_text() -> Result<String> {
     let result = (|| {
         let handle = unsafe { GetClipboardData(CF_UNICODETEXT) }
             .map_err(|e| Failure::Clipboard(format!("no text: {e}")))?;
-        let bytes = copy_handle(handle).ok_or_else(|| Failure::Clipboard("unreadable text".into()))?;
+        let bytes =
+            copy_handle(handle).ok_or_else(|| Failure::Clipboard("unreadable text".into()))?;
         Ok(decode_utf16le(&bytes))
     })();
     let _ = unsafe { CloseClipboard() };
@@ -352,13 +358,23 @@ mod tests {
     #[test]
     fn text_formats_are_treated_as_global_memory() {
         for format in [CF_TEXT, CF_OEMTEXT, CF_UNICODETEXT, CF_HDROP, CF_DIBV5] {
-            assert_eq!(classify(format), FormatPolicy::GlobalMemory, "format {format}");
+            assert_eq!(
+                classify(format),
+                FormatPolicy::GlobalMemory,
+                "format {format}"
+            );
         }
     }
 
     #[test]
     fn gdi_and_private_formats_are_refused() {
-        for format in [CF_BITMAP, CF_PALETTE, CF_METAFILEPICT, CF_ENHMETAFILE, CF_OWNERDISPLAY] {
+        for format in [
+            CF_BITMAP,
+            CF_PALETTE,
+            CF_METAFILEPICT,
+            CF_ENHMETAFILE,
+            CF_OWNERDISPLAY,
+        ] {
             assert_eq!(classify(format), FormatPolicy::Skip, "format {format}");
         }
         assert_eq!(classify(CF_PRIVATEFIRST), FormatPolicy::Skip);
@@ -368,7 +384,10 @@ mod tests {
     #[test]
     fn registered_formats_are_attempted() {
         assert_eq!(classify(CF_REGISTERED_FIRST), FormatPolicy::GlobalMemory);
-        assert_eq!(classify(CF_REGISTERED_FIRST + 42), FormatPolicy::GlobalMemory);
+        assert_eq!(
+            classify(CF_REGISTERED_FIRST + 42),
+            FormatPolicy::GlobalMemory
+        );
         assert_eq!(classify(0x0008), FormatPolicy::GlobalMemory);
     }
 

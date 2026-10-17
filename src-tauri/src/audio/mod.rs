@@ -200,8 +200,7 @@ impl Capture {
 impl Drop for Capture {
     fn drop(&mut self) {
         // Never leave a microphone open because a caller forgot to stop it.
-        self.cancel
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
         self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 }
@@ -341,13 +340,16 @@ fn open_stream(
 
     device
         .build_input_stream_raw(
-            config.clone(),
+            *config,
             format,
             move |data: &Data, _info: &cpal::InputCallbackInfo| {
                 scratch.clear();
                 append_as_f32(&mut scratch, format, data);
 
-                let packets = shared.packets.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                let packets = shared
+                    .packets
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                    + 1;
                 shared
                     .callback_samples
                     .fetch_add(scratch.len() as u32, std::sync::atomic::Ordering::Relaxed);
@@ -504,7 +506,9 @@ fn run_capture(
     }
 
     let shared = Arc::new(Shared {
-        samples: Mutex::new(Vec::with_capacity(sample_rate as usize * channels as usize * 4)),
+        samples: Mutex::new(Vec::with_capacity(
+            sample_rate as usize * channels as usize * 4,
+        )),
         started: Instant::now(),
         limit_ms: max_seconds as u128 * 1000,
         limit_reached: AtomicBool::new(false),
@@ -534,8 +538,8 @@ fn run_capture(
         return CaptureOutcome::Failed(failure);
     }
 
-    let _ = ready.send(Ok(()));    // The pump doubles as the supervisor: it watches the clock, the stop flag
-    // and the error callback, and publishes levels while it does.
+    let _ = ready.send(Ok(())); // The pump doubles as the supervisor: it watches the clock, the stop flag
+                                // and the error callback, and publishes levels while it does.
     let frame_interval = Duration::from_millis(1000 / LEVEL_HZ);
     let mut failure: Option<Failure> = None;
     loop {
@@ -550,8 +554,7 @@ fn run_capture(
             break;
         }
 
-        if mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms
-        {
+        if mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms {
             shared
                 .limit_reached
                 .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -567,7 +570,9 @@ fn run_capture(
     drop(stream);
     let duration_ms = shared.started.elapsed().as_millis();
     let packets = shared.packets.load(std::sync::atomic::Ordering::Relaxed);
-    let callback_samples = shared.callback_samples.load(std::sync::atomic::Ordering::Relaxed);
+    let callback_samples = shared
+        .callback_samples
+        .load(std::sync::atomic::Ordering::Relaxed);
     let raw = take_samples(&shared); // interleaved, at the device's native rate
 
     // Diagnostics: compare what the callbacks delivered with what ended up in
@@ -821,7 +826,11 @@ mod tests {
              sleep-and-receive in `wait()` and the supervisor are in conflict"
         );
         match outcome {
-            CaptureOutcome::Recorded { samples, duration_ms, .. } => {
+            CaptureOutcome::Recorded {
+                samples,
+                duration_ms,
+                ..
+            } => {
                 eprintln!(
                     "[miro-audio-diag] RECORDED: {} samples, {duration_ms} ms",
                     samples.len()
@@ -909,7 +918,10 @@ mod tests {
             SampleFormat::I8,
             SampleFormat::U8,
         ] {
-            assert!(is_supported_format(format), "{format:?} should be convertible");
+            assert!(
+                is_supported_format(format),
+                "{format:?} should be convertible"
+            );
         }
         assert!(!is_supported_format(SampleFormat::I24));
         assert!(!is_supported_format(SampleFormat::U24));

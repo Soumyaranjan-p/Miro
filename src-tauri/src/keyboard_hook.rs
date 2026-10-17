@@ -68,7 +68,11 @@ pub fn resolve(hotkey: &Hotkey) -> Result<ResolvedHotkey> {
     let mut groups = Vec::new();
     for modifier in hotkey.modifiers().split('+') {
         let group = match modifier {
-            "Ctrl" => vec![VK_LCONTROL.0 as u32, VK_RCONTROL.0 as u32, VK_CONTROL.0 as u32],
+            "Ctrl" => vec![
+                VK_LCONTROL.0 as u32,
+                VK_RCONTROL.0 as u32,
+                VK_CONTROL.0 as u32,
+            ],
             "Alt" => vec![VK_LMENU.0 as u32, VK_RMENU.0 as u32, VK_MENU.0 as u32],
             "Shift" => vec![VK_LSHIFT.0 as u32, VK_RSHIFT.0 as u32, VK_SHIFT.0 as u32],
             "Win" => vec![VK_LWIN.0 as u32, VK_RWIN.0 as u32],
@@ -85,7 +89,9 @@ pub fn resolve(hotkey: &Hotkey) -> Result<ResolvedHotkey> {
     if groups.is_empty() {
         return Err(Failure::ShortcutInvalid(hotkey.to_canonical()));
     }
-    Ok(ResolvedHotkey { modifier_groups: groups })
+    Ok(ResolvedHotkey {
+        modifier_groups: groups,
+    })
 }
 
 /// Virtual key code for a canonical key name. Only the names the settings
@@ -192,7 +198,10 @@ impl KeyboardHook {
                 let ok = unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), None, 0) };
                 match ok {
                     Ok(hook) => {
-                        thread_id_slot.store(unsafe { windows::Win32::System::Threading::GetCurrentThreadId() }, Ordering::SeqCst);
+                        thread_id_slot.store(
+                            unsafe { windows::Win32::System::Threading::GetCurrentThreadId() },
+                            Ordering::SeqCst,
+                        );
                         let _ = ready_tx.send(Ok(()));
 
                         let mut message = Default::default();
@@ -206,7 +215,8 @@ impl KeyboardHook {
                         let _ = unsafe { UnhookWindowsHookEx(hook) };
                     }
                     Err(error) => {
-                        let _ = ready_tx.send(Err(Failure::Internal(format!("keyboard hook: {error}"))));
+                        let _ = ready_tx
+                            .send(Err(Failure::Internal(format!("keyboard hook: {error}"))));
                     }
                 }
                 let _ = thread_stop.swap(false, Ordering::SeqCst);

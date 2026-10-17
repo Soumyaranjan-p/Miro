@@ -15,19 +15,53 @@ use crate::config::Cleanup;
 /// Words that are conventionally lowercase and must not be capitalised by the
 /// sentence-case pass (`npm` should never become `Npm`).
 const LOWERCASE_TERMS: &[&str] = &[
-    "npm", "npx", "pnpm", "yarn", "ios", "ipados", "macos", "k8s", "ssh", "grep", "awk", "sed",
-    "sudo", "curl", "wget", "jq", "ffmpeg", "nginx", "tmux", "vim", "bash", "zsh", "git", "sqlite",
-    "postgres", "mysql", "redis", "kubectl", "webpack", "eslint", "prettier", "rustc", "cargo",
-    "python", "pandas", "numpy", "matplotlib", "localhost",
+    "npm",
+    "npx",
+    "pnpm",
+    "yarn",
+    "ios",
+    "ipados",
+    "macos",
+    "k8s",
+    "ssh",
+    "grep",
+    "awk",
+    "sed",
+    "sudo",
+    "curl",
+    "wget",
+    "jq",
+    "ffmpeg",
+    "nginx",
+    "tmux",
+    "vim",
+    "bash",
+    "zsh",
+    "git",
+    "sqlite",
+    "postgres",
+    "mysql",
+    "redis",
+    "kubectl",
+    "webpack",
+    "eslint",
+    "prettier",
+    "rustc",
+    "cargo",
+    "python",
+    "pandas",
+    "numpy",
+    "matplotlib",
+    "localhost",
 ];
 
 /// Acronyms the engine often emits in lowercase. Normalising them is one of the
 /// few transformations a dictation tool can make that users reliably want.
 const ACRONYMS: &[&str] = &[
-    "api", "cli", "ui", "ux", "ai", "ml", "llm", "gpu", "cpu", "ram", "url", "uri", "http", "https",
-    "sql", "html", "css", "json", "xml", "yaml", "toml", "csv", "sdk", "jwt", "vpn", "tls", "ssl",
-    "dns", "tcp", "udp", "usb", "ssd", "pdf", "png", "jpg", "gif", "mp3", "mp4", "wav", "ascii",
-    "utf8",
+    "api", "cli", "ui", "ux", "ai", "ml", "llm", "gpu", "cpu", "ram", "url", "uri", "http",
+    "https", "sql", "html", "css", "json", "xml", "yaml", "toml", "csv", "sdk", "jwt", "vpn",
+    "tls", "ssl", "dns", "tcp", "udp", "usb", "ssd", "pdf", "png", "jpg", "gif", "mp3", "mp4",
+    "wav", "ascii", "utf8",
 ];
 
 const CONTRACTIONS_OF_I: &[&str] = &["m", "s", "ll", "ve", "d"];
@@ -108,7 +142,10 @@ pub fn normalize_whitespace(text: &str) -> String {
 
 /// Punctuation that hugs the character before it.
 fn is_tight_punctuation(ch: char) -> bool {
-    matches!(ch, ',' | '.' | '!' | '?' | ';' | ':' | '%' | ')' | ']' | '}' | '\'' | '"')
+    matches!(
+        ch,
+        ',' | '.' | '!' | '?' | ';' | ':' | '%' | ')' | ']' | '}' | '\'' | '"'
+    )
 }
 
 /// `hello , world` becomes `hello, world`; `,,` collapses to `,`.
@@ -121,8 +158,8 @@ fn collapse_empty_punctuation(text: &str) -> String {
             // A comma with nothing before it, or right after another comma, is noise.
             match previous_significant {
                 None => continue,
-                Some(prev) if matches!(prev, ',' | ';') => continue,
-                Some(prev) if prev == '\n' => continue,
+                Some(',' | ';') => continue,
+                Some('\n') => continue,
                 _ => {}
             }
         }
@@ -216,7 +253,8 @@ fn normalize_acronym(word: &str) -> String {
 
 /// True when the sentence-case pass must keep its hands off a word.
 pub fn is_protected(word: &str) -> bool {
-    let core = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-' && c != '.');
+    let core =
+        word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-' && c != '.');
     if core.is_empty() {
         return true;
     }
@@ -242,7 +280,8 @@ pub fn is_protected(word: &str) -> bool {
 }
 
 fn ends_sentence(word: &str) -> bool {
-    let core = word.trim_end_matches(|c: char| matches!(c, '"' | '\'' | ')' | ']' | '}' | '\u{201d}' | '\u{2019}'));
+    let closers = ['"', '\'', ')', ']', '}', '\u{201d}', '\u{2019}'];
+    let core = word.trim_end_matches(closers);
     match core.chars().last() {
         Some('.') => !is_abbreviation(core),
         Some('!') | Some('?') => true,
@@ -263,7 +302,12 @@ fn is_abbreviation(word: &str) -> bool {
 pub fn remove_fillers(text: &str, fillers: &[String]) -> String {
     let mut phrases: Vec<Vec<String>> = fillers
         .iter()
-        .map(|filler| filler.split_whitespace().map(|w| w.to_ascii_lowercase()).collect())
+        .map(|filler| {
+            filler
+                .split_whitespace()
+                .map(|w| w.to_ascii_lowercase())
+                .collect()
+        })
         .filter(|phrase: &Vec<String>| !phrase.is_empty())
         .collect();
     // Longest first, so "you know" wins over "know".
@@ -331,7 +375,10 @@ mod tests {
     #[test]
     fn with_cleanup_off_the_engine_text_is_only_trimmed() {
         let input = "  hello   world ,  this   is   raw  ";
-        assert_eq!(process(input, &raw(false)), "hello   world ,  this   is   raw");
+        assert_eq!(
+            process(input, &raw(false)),
+            "hello   world ,  this   is   raw"
+        );
     }
 
     #[test]
@@ -361,7 +408,10 @@ mod tests {
             "install npm and then use typescript. ios apps need xcode.",
             &cleanup(true),
         );
-        assert_eq!(out, "Install npm and then use typescript. ios apps need xcode.");
+        assert_eq!(
+            out,
+            "Install npm and then use typescript. ios apps need xcode."
+        );
     }
 
     #[test]
@@ -372,7 +422,10 @@ mod tests {
 
     #[test]
     fn acronyms_are_normalised_but_camel_case_survives() {
-        let out = process("the api returned json and typescript compiled", &cleanup(true));
+        let out = process(
+            "the api returned json and typescript compiled",
+            &cleanup(true),
+        );
         assert_eq!(out, "The API returned JSON and TypeScript compiled");
     }
 
@@ -383,7 +436,10 @@ mod tests {
         options.filler_words = vec!["um".into(), "uh".into(), "you know".into()];
 
         assert_eq!(process("um hello uh world", &options), "Hello world");
-        assert_eq!(process("this is, you know, fine", &options), "This is, fine");
+        assert_eq!(
+            process("this is, you know, fine", &options),
+            "This is, fine"
+        );
 
         options.remove_filler_words = false;
         assert_eq!(
@@ -410,7 +466,10 @@ mod tests {
         let mut options = cleanup(true);
         options.remove_filler_words = true;
         options.filler_words = vec!["know".into()];
-        assert_eq!(process("i know you have know_how", &options), "I you have know_how");
+        assert_eq!(
+            process("i know you have know_how", &options),
+            "I you have know_how"
+        );
     }
 
     #[test]
@@ -431,8 +490,16 @@ mod tests {
     #[test]
     fn protected_words_are_recognised() {
         for word in [
-            "TypeScript", "iPhone", "whisper.cpp", "k8s", "sha256", "snake_case", "path/to/file",
-            "@handle", "npm", "e.g.",
+            "TypeScript",
+            "iPhone",
+            "whisper.cpp",
+            "k8s",
+            "sha256",
+            "snake_case",
+            "path/to/file",
+            "@handle",
+            "npm",
+            "e.g.",
         ] {
             assert!(is_protected(word), "{word} should be protected");
         }

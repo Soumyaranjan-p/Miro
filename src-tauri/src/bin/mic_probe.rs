@@ -9,14 +9,15 @@ use windows::Win32::Media::Audio::{
     MMDeviceEnumerator,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
-use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
+};
 use windows::Win32::System::Variant::VT_LPWSTR;
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
-use windows::core::{Interface, PCWSTR};
 
 fn main() {
     unsafe {
-        CoInitializeEx(None, COINIT_MULTITHREADED);
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).expect("enumerator");
 
@@ -99,6 +100,6 @@ fn prop_wide_string(prop: &PROPVARIANT) -> String {
         if pointer.0.is_null() {
             return String::new();
         }
-        unsafe { pointer.to_string() }.unwrap_or_default()
+        pointer.to_string().unwrap_or_default()
     }
 }

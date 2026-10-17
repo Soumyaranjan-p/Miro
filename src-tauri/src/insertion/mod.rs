@@ -131,12 +131,16 @@ mod tests {
         // focus check rather than typing into whatever is in front.
         let target = Target { hwnd: 0, pid: 0 };
         let error = insert("hello", target).unwrap_err();
-        assert!(matches!(error, Failure::FocusChanged | Failure::Insertion(_)));
+        assert!(matches!(
+            error,
+            Failure::FocusChanged | Failure::Insertion(_)
+        ));
     }
 
     #[test]
     fn character_counting_is_by_code_point_not_bytes() {
-        let text = "caf\u{e9} \u{1F600}";
+        // "café😀" is 5 code points over 9 bytes: any byte-based count lies.
+        let text = "caf\u{e9}\u{1F600}";
         assert_eq!(text.chars().count(), 5);
         assert!(text.len() > 5, "byte length differs from character count");
     }
