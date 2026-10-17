@@ -425,6 +425,9 @@ impl Session {
         let mut text = match result {
             Ok(transcript) => {
                 let processed = textproc::process(&transcript.text, &settings.cleanup);
+                logging::event(Event::TranscriptProcessed {
+                    characters: processed.chars().count(),
+                });
                 // Dropping the transcript zeroizes the raw engine output.
                 drop(transcript);
                 processed

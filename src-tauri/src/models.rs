@@ -92,8 +92,10 @@ pub struct ModelSpec {
     pub multilingual: bool,
 }
 
-const REPO_LABEL: &str = "huggingface.co/ggml-org/whisper.cpp";
-const REPO_BASE: &str = "https://huggingface.co/ggml-org/whisper.cpp/resolve/main";
+// The original ggml-org upload is gated (HTTP 401) since 2026; the same files
+// remain publicly mirrored in the repo's previous location.
+const REPO_LABEL: &str = "huggingface.co/ggerganov/whisper.cpp";
+const REPO_BASE: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
 pub const CATALOG: &[ModelSpec] = &[
     ModelSpec {

@@ -199,6 +199,7 @@ impl Engine {
                         logging::event(Event::TranscriptionFinished {
                             segments,
                             ms: compute_ms,
+                            chars: text.chars().count(),
                         });
                         drop(guard);
                         Ok(Transcript {
@@ -294,5 +295,88 @@ mod tests {
             seen.iter().all(|byte| *byte == 0),
             "the transcript buffer must be cleared, not just freed"
         );
+    }
+
+    /// Full engine verification on real files: the actual installed model plus
+    /// synthetic speech, asserting whisper.cpp accepts the model and returns
+    /// words rather than silence. Never part of the default run.
+    #[ignore = "needs the installed model (env MIRO_TEST_MODEL) and a 16 kHz mono speech wav (env MIRO_TEST_SPEECH_WAV)"]
+    #[test]
+    fn a_real_model_transcribes_synthetic_speech() {
+        use std::path::PathBuf;
+        let model = std::env::var_os("MIRO_TEST_MODEL")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                Path::new(&std::env::var("APPDATA").unwrap())
+                    .join("app.miro.dictation")
+                    .join("models")
+                    .join("ggml-base.en-q5_1.bin")
+            });
+        let wav = std::env::var_os("MIRO_TEST_SPEECH_WAV")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                Path::new(&std::env::var("LOCALAPPDATA").unwrap())
+                    .join("Temp")
+                    .join("opencode")
+                    .join("speech.wav")
+            });
+        let Some(samples) = read_pcm16_mono_16k(&wav) else {
+            panic!("speech wav must be 16 kHz 16-bit mono pcm");
+        };
+        println!("model: {} ({} bytes)", model.display(), std::fs::metadata(&model).unwrap().len());
+        println!("speech: {} samples ({} ms)", samples.len(), samples.len() / 16);
+
+        let engine = Engine::load(&model, "base.en").expect("the installed model must load");
+        let transcript = engine
+            .transcribe(&samples, &EngineOptions::default(), samples.len() as u128 / 16)
+            .expect("synthetic speech must transcribe");
+        println!(
+            "transcript: {} chars, {} segments, {} ms compute",
+            transcript.text.chars().count(),
+            transcript.segments,
+            transcript.compute_ms
+        );
+
+        let lowered = transcript.text.to_lowercase();
+        assert!(!transcript.text.trim().is_empty(), "the transcript must not be empty");
+        assert!(lowered.contains("fox"), "expected the spoken words, got: {:?}", transcript.text);
+    }
+
+    /// Minimal riff/header walk for a 16-bit single-channel 16 kHz PCM wave.
+    fn read_pcm16_mono_16k(path: &Path) -> Option<Vec<f32>> {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut file = std::fs::File::open(path).ok()?;
+        let mut riff = [0u8; 12];
+        file.read_exact(&mut riff).ok()?;
+        if &riff[0..4] != b"RIFF" || &riff[8..12] != b"WAVE" {
+            return None;
+        }
+        loop {
+            let mut chunk = [0u8; 8];
+            file.read_exact(&mut chunk).ok()?;
+            let name = [chunk[0], chunk[1], chunk[2], chunk[3]];
+            let size = u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]) as usize;
+            if name == *b"data" {
+                let mut pcm = vec![0u8; size];
+                file.read_exact(&mut pcm).ok()?;
+                let mut samples = Vec::with_capacity(size / 2);
+                for pair in pcm.chunks_exact(2) {
+                    samples.push(i16::from_le_bytes([pair[0], pair[1]]) as f32 / 32768.0);
+                }
+                return Some(samples);
+            }
+            if name == *b"fmt " {
+                let mut fmt = vec![0u8; size];
+                file.read_exact(&mut fmt).ok()?;
+                let channels = u16::from_le_bytes([fmt[2], fmt[3]]);
+                let rate = u32::from_le_bytes([fmt[4], fmt[5], fmt[6], fmt[7]]);
+                let bits = u16::from_le_bytes([fmt[14], fmt[15]]);
+                if channels != 1 || rate != 16000 || bits != 16 {
+                    return None;
+                }
+                continue;
+            }
+            file.seek(SeekFrom::Current((size + (size & 1)) as i64)).ok()?;
+        }
     }
 }

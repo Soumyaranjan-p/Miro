@@ -172,12 +172,14 @@ impl Capture {
         self.stop.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    /// Waits for the capture thread's verdict.
+    /// Waits for the capture thread's verdict. Blocks until the recording
+    /// stops on its own (the caller's `stop()`, a cancellation, or the
+    /// max-seconds limit) - it does not stop anything itself, so a supervisor
+    /// can park a thread here for the life of a recording.
     pub fn wait(mut self) -> CaptureOutcome {
         if self.joined {
             return CaptureOutcome::Cancelled;
         }
-        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
         let outcome = self
             .finished
             .recv_timeout(Duration::from_secs(20))
@@ -212,6 +214,10 @@ struct Shared {
     limit_ms: u128,
     limit_reached: AtomicBool,
     stream_error: Mutex<Option<Failure>>,
+    /// Diagnostics: how many times the device callback ran and how many raw
+    /// samples it handed over, counted without taking the buffer mutex.
+    packets: AtomicU32,
+    callback_samples: AtomicU32,
 }
 
 fn map_cpal_error(err: &cpal::Error) -> Failure {
@@ -329,6 +335,8 @@ fn open_stream(
 
     let mut scratch: Vec<f32> = Vec::new();
     let mut xrun_logged = false;
+    let device_rate = config.sample_rate;
+    let device_channels = config.channels;
     let error_shared = Arc::clone(&shared);
 
     device
@@ -338,6 +346,22 @@ fn open_stream(
             move |data: &Data, _info: &cpal::InputCallbackInfo| {
                 scratch.clear();
                 append_as_f32(&mut scratch, format, data);
+
+                let packets = shared.packets.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                shared
+                    .callback_samples
+                    .fetch_add(scratch.len() as u32, std::sync::atomic::Ordering::Relaxed);
+
+                if packets == 1 {
+                    // One line only: what the device actually delivers first,
+                    // so a broken config shows instead of silently emptying.
+                    eprintln!(
+                        "[miro-audio] first callback: {} frames, {} Hz, {} ch, format {format:?}",
+                        scratch.len() / device_channels.max(1) as usize,
+                        device_rate,
+                        device_channels
+                    );
+                }
 
                 if scratch.is_empty() {
                     return;
@@ -485,6 +509,8 @@ fn run_capture(
         limit_ms: max_seconds as u128 * 1000,
         limit_reached: AtomicBool::new(false),
         stream_error: Mutex::new(None),
+        packets: AtomicU32::new(0),
+        callback_samples: AtomicU32::new(0),
     });
 
     let stream = match open_stream(
@@ -508,9 +534,7 @@ fn run_capture(
         return CaptureOutcome::Failed(failure);
     }
 
-    let _ = ready.send(Ok(()));
-
-    // The pump doubles as the supervisor: it watches the clock, the stop flag
+    let _ = ready.send(Ok(()));    // The pump doubles as the supervisor: it watches the clock, the stop flag
     // and the error callback, and publishes levels while it does.
     let frame_interval = Duration::from_millis(1000 / LEVEL_HZ);
     let mut failure: Option<Failure> = None;
@@ -542,7 +566,18 @@ fn run_capture(
     // No callbacks run after this point, so the buffer is ours to read.
     drop(stream);
     let duration_ms = shared.started.elapsed().as_millis();
+    let packets = shared.packets.load(std::sync::atomic::Ordering::Relaxed);
+    let callback_samples = shared.callback_samples.load(std::sync::atomic::Ordering::Relaxed);
     let raw = take_samples(&shared); // interleaved, at the device's native rate
+
+    // Diagnostics: compare what the callbacks delivered with what ended up in
+    // the recording buffer, then what survives downmix and resampling.
+    let expected = sample_rate as u128 * channels as u128 * duration_ms / 1000;
+    eprintln!(
+        "[miro-audio] stop after {duration_ms} ms: {packets} callbacks, \
+         {callback_samples} raw samples delivered, buffer holds {} (expected ~{expected})",
+        raw.len()
+    );
 
     let cancelled = cancel.load(std::sync::atomic::Ordering::SeqCst);
 
@@ -563,13 +598,47 @@ fn run_capture(
 
     // Downmix and resample once, now that recording is over.
     let mono = downmix_to_mono(&raw, channels);
+    // Diagnostics: per-channel level and the first-channel cross-correlation,
+    // to catch an array whose channels average each other away in the mix.
+    let channel_rms: Vec<f32> = (0..channels as usize)
+        .map(|c| {
+            let column: Vec<f32> = raw
+                .iter()
+                .skip(c)
+                .step_by(channels as usize)
+                .copied()
+                .collect();
+            rms(&column)
+        })
+        .collect();
+    let channel_corr = channel_cross_correlation(&raw, channels);
+    eprintln!(
+        "[miro-audio] downmix: {} -> {} samples ({} ch); per-channel rms {:?}; corr {:.3}",
+        raw.len(),
+        mono.len(),
+        channels,
+        channel_rms,
+        channel_corr
+    );
     discard(raw);
     let mut resampler = Resampler::new(sample_rate);
     let mut samples = resampler.process(&mono, false);
     samples.extend(resampler.process(&[], true)); // flush the tail
     discard(mono);
+    let expected_16k = TARGET_SAMPLE_RATE as u128 * duration_ms / 1000;
+    eprintln!(
+        "[miro-audio] resampled: {} samples at {} Hz (expected ~{expected_16k})",
+        samples.len(),
+        TARGET_SAMPLE_RATE
+    );
 
     if has_no_speech(&samples, duration_ms) {
+        eprintln!(
+            "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud ratio {:.4} (speech cutoff 0.02, silence rms {}) ",
+            samples.len(),
+            loud_fraction(&samples),
+            SILENCE_RMS
+        );
         discard(samples);
         return CaptureOutcome::Failed(Failure::AudioEmpty);
     }
@@ -596,6 +665,14 @@ pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
     if samples.is_empty() || duration_ms < MIN_SPEECH_MS {
         return true;
     }
+    loud_fraction(samples) < 0.02
+}
+
+/// Share of 20 ms windows over the speech RMS threshold.
+///
+/// Same windowing as [`has_no_speech`]; exposed so the `audio_empty`
+/// diagnostic line can say why a clip was judged speechless.
+fn loud_fraction(samples: &[f32]) -> f32 {
     let window = (TARGET_SAMPLE_RATE as usize / 50).max(1); // 20 ms
     let mut loud_windows = 0usize;
     let mut windows = 0usize;
@@ -606,10 +683,10 @@ pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
         }
     }
     if windows == 0 {
-        return true;
+        0.0
+    } else {
+        loud_windows as f32 / windows as f32
     }
-    // Speech needs a sustained signal, not one click.
-    (loud_windows as f32 / windows as f32) < 0.02
 }
 
 /// Enumerates input devices for the settings window.
@@ -668,6 +745,33 @@ pub enum MicrophoneState {
     PermissionDenied,
 }
 
+/// Pearson-style correlation between channels 0 and 1 of an interleaved
+/// buffer, in -1..1. Diagnostics only; 0 when channels are fewer than two.
+fn channel_cross_correlation(raw: &[f32], channels: u16) -> f32 {
+    if channels < 2 {
+        return 0.0;
+    }
+    let (mut a, mut b) = (0.0f64, 0.0f64);
+    for frame in raw.chunks_exact(channels as usize) {
+        a += frame[0] as f64;
+        b += frame[1] as f64;
+    }
+    a /= raw.len() as f64 / channels as f64;
+    b /= raw.len() as f64 / channels as f64;
+    let (mut ab, mut a2, mut b2) = (0.0f64, 0.0f64, 0.0f64);
+    for frame in raw.chunks_exact(channels as usize) {
+        let (x, y) = (frame[0] as f64 - a, frame[1] as f64 - b);
+        ab += x * y;
+        a2 += x * x;
+        b2 += y * y;
+    }
+    if a2 > 0.0 && b2 > 0.0 {
+        (ab / (a2 * b2).sqrt()).clamp(-1.0, 1.0) as f32
+    } else {
+        0.0
+    }
+}
+
 /// Overwrites audio with zeroes before it is dropped.
 pub fn zeroize(buffer: &mut [f32]) {
     for sample in buffer.iter_mut() {
@@ -695,6 +799,43 @@ fn clone_failure(failure: &Failure) -> Failure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Live diagnostic against the real default input device. Not a CI test:
+    /// run explicitly when tracing a capture complaint, e.g.
+    /// `cargo test --lib audio::tests::live_capture -- --ignored --nocapture`.
+    ///
+    /// Calls `wait()` immediately, exactly as the session supervisor does, and
+    /// asserts the recording ran to its max-seconds limit: a recording that
+    /// ends early means `wait()` started stopping the stream instead of
+    /// receiving it (the root cause of pile of `audio_empty` failures).
+    #[test]
+    #[ignore = "takes over the real microphone for ~2 s"]
+    fn live_capture_diagnostic() {
+        let capture = start(None, 2, CaptureMode::Record, None).expect("capture start");
+        let began = Instant::now();
+        let outcome = capture.wait();
+        let waited_ms = began.elapsed().as_millis();
+        assert!(
+            waited_ms >= 1200,
+            "capture self-stopped after {waited_ms} ms; \
+             sleep-and-receive in `wait()` and the supervisor are in conflict"
+        );
+        match outcome {
+            CaptureOutcome::Recorded { samples, duration_ms, .. } => {
+                eprintln!(
+                    "[miro-audio-diag] RECORDED: {} samples, {duration_ms} ms",
+                    samples.len()
+                );
+                discard(samples);
+            }
+            CaptureOutcome::Failed(failure) => {
+                // A silent room legitimately fails the speech gate; the stop
+                // and sample counters on stderr are the part that matters.
+                eprintln!("[miro-audio-diag] FAILED: {failure:?}");
+            }
+            other => eprintln!("[miro-audio-diag] other outcome: {other:?}"),
+        }
+    }
 
     #[test]
     fn an_xrun_does_not_kill_the_stream_but_a_dead_device_does() {
