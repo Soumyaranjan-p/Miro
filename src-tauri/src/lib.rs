@@ -221,6 +221,9 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// One handler for every registered shortcut: the dictation key and the Escape
 /// cancel key that only exists while a recording is in flight.
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
+    logging::event(Event::ShortcutTriggered {
+        state: if event.state == ShortcutState::Pressed { "pressed" } else { "released" },
+    });
     let app_state = app.state::<AppState>();
     let settings = app_state.settings();
     let session = app.state::<Session>();

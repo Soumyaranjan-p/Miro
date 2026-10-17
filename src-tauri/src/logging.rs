@@ -63,6 +63,9 @@ pub enum Event {
     },
     ShortcutSuspended,
     ShortcutResumed,
+    ShortcutTriggered {
+        state: &'static str,
+    },
     RecordingStarted {
         device: String,
         sample_rate: u32,
@@ -77,6 +80,9 @@ pub enum Event {
     },
     TranscriptionStarted {
         samples: usize,
+    },
+    DictationStarted {
+        mode: &'static str,
     },
     TranscriptionFinished {
         segments: usize,
@@ -146,6 +152,7 @@ impl fmt::Display for Event {
             }
             Event::ShortcutSuspended => write!(f, "shortcut.suspended"),
             Event::ShortcutResumed => write!(f, "shortcut.resumed"),
+            Event::ShortcutTriggered { state } => write!(f, "shortcut.triggered state={state}"),
             Event::RecordingStarted {
                 device,
                 sample_rate,
@@ -158,6 +165,7 @@ impl fmt::Display for Event {
                 write!(f, "audio.recording.stopped samples={samples} ms={ms}")
             }
             Event::RecordingFailed { code } => write!(f, "audio.recording.failed code={code}"),
+            Event::DictationStarted { mode } => write!(f, "session.started mode={mode}"),
             Event::TranscriptionStarted { samples } => {
                 write!(f, "engine.transcribe.started samples={samples}")
             }

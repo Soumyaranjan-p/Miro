@@ -20,6 +20,10 @@ use std::time::{Duration, Instant};
 
 use windows::core::{BOOL, PWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+    VK_MENU,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumChildWindows, EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowTextLengthW,
     GetWindowTextW, IsWindowVisible, SetForegroundWindow,
@@ -74,6 +78,45 @@ fn main() {
                 std::process::exit(1);
             }
         },
+        // A self-hosted Win32 EDIT control: dependable on Windows 11 where the
+        // store Notepad is single-instance and its XAML editor cannot be read
+        // back with window text.
+        Some("textbox") => {
+            let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.Form
+$f.Text = 'MiroProbeTarget'
+$f.Width = 400
+$f.Height = 200
+$t = New-Object System.Windows.Forms.TextBox
+$t.Multiline = $true
+$t.TabIndex = 0
+$t.Dock = 'Fill'
+$f.Controls.Add($t)
+$f.ActiveControl = $t
+$f.Add_Shown({ $f.Activate(); $t.Focus(); $t.SelectAll() })
+$state = Join-Path $env:LOCALAPPDATA 'Temp\opencode\textbox_state.txt'
+Remove-Item $state -ErrorAction SilentlyContinue
+$ticker = New-Object System.Windows.Forms.Timer
+$ticker.Interval = 7000
+$ticker.add_Tick({
+  [System.IO.File]::WriteAllText($state, "focused=$($t.Focused) formsare=$FALSE text=[$($t.Text)]")
+  $f.Close()
+})
+$ticker.Start()
+[void]$f.ShowDialog()
+"#;
+            match Command::new("powershell")
+                .args(["-NoProfile", "-WindowStyle", "Hidden", "-STA", "-Command", script])
+                .spawn()
+            {
+                Ok(child) => Some(child),
+                Err(error) => {
+                    eprintln!("FAIL: the textbox target could not be started: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
         Some(other) => {
             eprintln!("FAIL: unknown launcher {other}");
             std::process::exit(1);
@@ -105,8 +148,22 @@ fn main() {
     };
 
     if force || child.is_some() {
-        if !bring_to_foreground(target_window) {
-            eprintln!("WARN: the target window could not be brought to the foreground");
+        let mut brought = unsafe { GetForegroundWindow() }.0 as isize == target_window.0 as isize;
+        // Foreground acquisition is refused to background processes; the first
+        // AttachThreadInput/SetWindowPos attempt usually earns permission and a
+        // retry then succeeds. Try for ~5 s before giving up with a diagnostic.
+        for _ in 0..33 {
+            if brought {
+                break;
+            }
+            brought = bring_to_foreground(target_window);
+            std::thread::sleep(Duration::from_millis(150));
+        }
+        if !brought {
+            eprintln!(
+                "WARN: the target window could not be brought to the foreground; foreground is class {}",
+                class_name(unsafe { GetForegroundWindow() })
+            );
         }
         std::thread::sleep(Duration::from_millis(300));
     }
@@ -123,7 +180,10 @@ fn main() {
         }
     };
     if target.hwnd != target_window.0 as isize {
-        eprintln!("WARN: the foreground window is not the one the probe prepared");
+        eprintln!(
+            "WARN: the foreground window is not the one the probe prepared (class {})",
+            class_name(HWND(target.hwnd as _))
+        );
     }
 
     let insertion = insertion::insert(&text, target);
@@ -229,6 +289,11 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
     if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
         return BOOL(1);
     }
+    let name = class_name(hwnd);
+    // Hidden console windows of child processes are of no interest here.
+    if name == "ConsoleWindowClass" {
+        return BOOL(1);
+    }
     let mut window_pid = 0u32;
     unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd, Some(&mut window_pid)) };
     if window_pid == state.pid {
@@ -239,8 +304,10 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
 }
 
 fn bring_to_foreground(hwnd: HWND) -> bool {
-    // A background process cannot normally take the foreground; attaching to
-    // the current foreground thread's input queue is the documented way in.
+    // A background process cannot normally take the foreground; tapping ALT
+    // while typing is undetectable to the modifier state of the target and the
+    // documented allowance for taking focus then applies.
+    tap_alt();
     unsafe {
         let foreground = GetForegroundWindow();
         let mut foreground_pid = 0u32;
@@ -307,6 +374,28 @@ fn window_text(hwnd: HWND) -> Option<String> {
         return None;
     }
     Some(String::from_utf16_lossy(&buffer[..written as usize]))
+}
+
+/// A synthetic ALT tap earns a background process the right to take the
+/// foreground for one window (the focus-stealing allowance).
+fn tap_alt() {
+    let press = INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VK_MENU,
+                wScan: 0,
+                dwFlags: KEYBD_EVENT_FLAGS(0),
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    let mut release = press;
+    release.Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+    unsafe {
+        SendInput(&[press, release], std::mem::size_of::<INPUT>() as i32);
+    }
 }
 
 /// Reads the window's own text, and the text of its children: editors that keep

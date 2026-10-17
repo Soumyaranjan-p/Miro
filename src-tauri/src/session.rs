@@ -29,6 +29,7 @@ use crate::logging::{self, Event};
 use crate::privacy::{self, PendingText};
 use crate::state::{self, ShortcutRuntime};
 use crate::textproc;
+use crate::windows;
 
 /// How long a failed insertion stays available for Retry or Copy.
 const RETRY_WINDOW: Duration = Duration::from_secs(20);
@@ -83,6 +84,12 @@ fn now_ms() -> u64 {
 }
 
 fn emit_overlay(app: &AppHandle, overlay: OverlayState) {
+    // The window's visibility follows the state machine, not the webview:
+    // an event alone can never make a hidden window appear.
+    match &overlay {
+        OverlayState::Hidden => windows::hide_overlay(app),
+        _ => windows::show_overlay(app, state::state(app).settings().overlay_position),
+    }
     let _ = app.emit(events::OVERLAY_EVENT, overlay);
 }
 
@@ -94,6 +101,7 @@ impl Session {
     /// Starts recording. Refuses if a dictation is already in flight.
     pub fn start(&self, app: &AppHandle) -> Result<()> {
         let settings = state::state(app).settings();
+        logging::event(Event::DictationStarted { mode: "toggle" });
 
         {
             let mut inner = lock(&self.inner);
