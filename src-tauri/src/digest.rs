@@ -187,7 +187,8 @@ mod tests {
 
     #[test]
     fn hashing_a_file_matches_hashing_its_bytes() {
-        let path = std::env::temp_dir().join(format!("miro-digest-test-{}.bin", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("miro-digest-test-{}.bin", std::process::id()));
         let mut file = fs::File::create(&path).unwrap();
         file.write_all(b"the quick brown fox").unwrap();
         drop(file);

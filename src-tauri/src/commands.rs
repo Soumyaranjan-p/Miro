@@ -144,23 +144,19 @@ pub fn apply_shortcut(app: &AppHandle, settings: &Settings) -> CmdResult<()> {
 
     let hotkey = Hotkey::parse(&settings.shortcut).map_err(CommandError::from)?;
 
-    let mechanism = if settings.mode == crate::config::Mode::PushToTalk && !hotkey.plugin_expressible() {
-        let mut binding = hooks
-            .lock()
-            .map_err(|_| CommandError::from(Failure::Internal("hook state was poisoned".into())))?;
-        binding.apply(app, settings).map_err(CommandError::from)?
-    } else {
-        registry
-            .register(app, hotkey.clone(), settings.mode)
-            .map_err(CommandError::from)?
-    };
+    let mechanism =
+        if settings.mode == crate::config::Mode::PushToTalk && !hotkey.plugin_expressible() {
+            let mut binding = hooks.lock().map_err(|_| {
+                CommandError::from(Failure::Internal("hook state was poisoned".into()))
+            })?;
+            binding.apply(app, settings).map_err(CommandError::from)?
+        } else {
+            registry
+                .register(app, hotkey.clone(), settings.mode)
+                .map_err(CommandError::from)?
+        };
 
-    session.publish_shortcut(
-        app,
-        hotkey.to_canonical(),
-        mechanism,
-        None,
-    );
+    session.publish_shortcut(app, hotkey.to_canonical(), mechanism, None);
     Ok(())
 }
 
@@ -209,7 +205,9 @@ pub fn check_shortcut(
     let _ = registry.unregister(&app);
 
     let probe = if let Ok(plugin_shortcut) = parsed.to_plugin_shortcut() {
-        app.global_shortcut().register(plugin_shortcut).map_err(|error| error.to_string())
+        app.global_shortcut()
+            .register(plugin_shortcut)
+            .map_err(|error| error.to_string())
     } else {
         Ok(())
     };
@@ -297,7 +295,14 @@ pub async fn start_model_download(
 
     let result = tauri::async_runtime::spawn_blocking(move || {
         models::download(&agent, &dir, spec, cancel, move |received, total| {
-            emit_progress(&app_for_events, &id_for_events, "downloading", received, total, None);
+            emit_progress(
+                &app_for_events,
+                &id_for_events,
+                "downloading",
+                received,
+                total,
+                None,
+            );
         })
     })
     .await

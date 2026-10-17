@@ -192,7 +192,10 @@ impl Failure {
     pub fn retryable(&self) -> bool {
         matches!(
             self,
-            Failure::FocusChanged | Failure::Insertion(_) | Failure::InsertionBlocked | Failure::Clipboard(_)
+            Failure::FocusChanged
+                | Failure::Insertion(_)
+                | Failure::InsertionBlocked
+                | Failure::Clipboard(_)
         )
     }
 }

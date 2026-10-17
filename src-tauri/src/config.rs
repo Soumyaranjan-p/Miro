@@ -24,31 +24,21 @@ pub const MAX_RECORDING_SECONDS: u32 = 600;
 pub const MAX_FILLER_WORDS: usize = 64;
 pub const MAX_FILLER_WORD_LEN: usize = 32;
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
+    #[default]
     Toggle,
     PushToTalk,
 }
 
-impl Default for Mode {
-    fn default() -> Self {
-        Mode::Toggle
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
+    #[default]
     System,
     Light,
     Dark,
-}
-
-impl Default for Theme {
-    fn default() -> Self {
-        Theme::System
-    }
 }
 
 impl Theme {
@@ -61,18 +51,13 @@ impl Theme {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum OverlayPosition {
+    #[default]
     BottomCenter,
     BottomRight,
     Center,
-}
-
-impl Default for OverlayPosition {
-    fn default() -> Self {
-        OverlayPosition::BottomCenter
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -220,7 +205,9 @@ impl Settings {
             self.mode = mode;
         }
         if let Some(microphone) = patch.microphone {
-            self.microphone = microphone.map(|value| value.trim().to_string()).filter(|v| !v.is_empty());
+            self.microphone = microphone
+                .map(|value| value.trim().to_string())
+                .filter(|v| !v.is_empty());
         }
         if let Some(model_id) = patch.model_id {
             self.model_id = model_id;
@@ -335,7 +322,8 @@ mod tests {
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("miro-config-test-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("miro-config-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -350,7 +338,10 @@ mod tests {
 
         let loaded = store.load();
         assert_eq!(loaded, settings);
-        assert!(!dir.join("config.json.tmp").exists(), "temp file must not survive a save");
+        assert!(
+            !dir.join("config.json.tmp").exists(),
+            "temp file must not survive a save"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -371,10 +362,13 @@ mod tests {
 
     #[test]
     fn patch_applies_only_what_it_carries() {
-        let mut settings = Settings::default();
-        settings.model_id = "tiny.en".into();
+        let mut settings = Settings {
+            model_id: "tiny.en".into(),
+            ..Settings::default()
+        };
 
-        let patch: SettingsPatch = serde_json::from_str(r#"{"theme":"dark","cleanup":{"enabled":false}}"#).unwrap();
+        let patch: SettingsPatch =
+            serde_json::from_str(r#"{"theme":"dark","cleanup":{"enabled":false}}"#).unwrap();
         settings.apply(patch);
 
         assert_eq!(settings.theme, Theme::Dark);
@@ -384,8 +378,10 @@ mod tests {
 
     #[test]
     fn an_explicit_null_microphone_means_system_default() {
-        let mut settings = Settings::default();
-        settings.microphone = Some("Some Device".into());
+        let mut settings = Settings {
+            microphone: Some("Some Device".into()),
+            ..Settings::default()
+        };
 
         let patch: SettingsPatch = serde_json::from_str(r#"{"microphone":null}"#).unwrap();
         settings.apply(patch);
@@ -397,13 +393,19 @@ mod tests {
 
         let patch: SettingsPatch = serde_json::from_str(r#"{}"#).unwrap();
         settings.apply(patch);
-        assert_eq!(settings.microphone.as_deref(), Some("Other"), "a missing key is not a reset");
+        assert_eq!(
+            settings.microphone.as_deref(),
+            Some("Other"),
+            "a missing key is not a reset"
+        );
     }
 
     #[test]
     fn recording_length_is_clamped_to_a_sane_window() {
-        let mut settings = Settings::default();
-        settings.max_recording_seconds = 5;
+        let mut settings = Settings {
+            max_recording_seconds: 5,
+            ..Settings::default()
+        };
         settings.normalize();
         assert_eq!(settings.max_recording_seconds, MIN_RECORDING_SECONDS);
 
