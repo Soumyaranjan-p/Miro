@@ -131,7 +131,11 @@ pub struct ModelProgress {
 }
 
 /// Converts the internal download state into the wire shape.
-pub fn progress_from_state(model_id: &str, status: &'static str, state: &DownloadState) -> ModelProgress {
+pub fn progress_from_state(
+    model_id: &str,
+    status: &'static str,
+    state: &DownloadState,
+) -> ModelProgress {
     ModelProgress {
         model_id: model_id.to_string(),
         status,

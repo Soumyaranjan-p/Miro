@@ -62,7 +62,10 @@ impl Hotkey {
                     if key.is_some() {
                         return Err(Failure::ShortcutInvalid(text.to_string()));
                     }
-                    key = Some(canonical_key(token).ok_or_else(|| Failure::ShortcutInvalid(token.to_string()))?);
+                    key = Some(
+                        canonical_key(token)
+                            .ok_or_else(|| Failure::ShortcutInvalid(token.to_string()))?,
+                    );
                 }
             }
         }
@@ -233,10 +236,11 @@ fn canonical_key(word: &str) -> Option<String> {
 }
 
 /// Result of asking the operating system for a shortcut.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mechanism {
     Plugin,
     KeyboardHook,
+    #[default]
     None,
 }
 
@@ -256,12 +260,6 @@ pub struct Registration {
     pub shortcut: String,
     pub mechanism: Mechanism,
     pub detail: Option<String>,
-}
-
-impl Default for Mechanism {
-    fn default() -> Self {
-        Mechanism::None
-    }
 }
 
 /// Tracks what is currently registered so suspend/resume (used while the
@@ -299,12 +297,12 @@ impl ShortcutRegistry {
         match &hotkey {
             Hotkey::Combo { .. } => {
                 let shortcut = hotkey.to_plugin_shortcut()?;
-                app.global_shortcut()
-                    .register(shortcut)
-                    .map_err(|error| Failure::ShortcutConflict {
+                app.global_shortcut().register(shortcut).map_err(|error| {
+                    Failure::ShortcutConflict {
                         shortcut: canonical.clone(),
                         reason: error.to_string(),
-                    })?;
+                    }
+                })?;
                 if let Ok(mut guard) = self.active.lock() {
                     *guard = Some(hotkey);
                 }
@@ -370,12 +368,12 @@ impl ShortcutRegistry {
         match hotkey {
             Hotkey::Combo { .. } => {
                 let shortcut = hotkey.to_plugin_shortcut()?;
-                app.global_shortcut()
-                    .register(shortcut)
-                    .map_err(|error| Failure::ShortcutConflict {
+                app.global_shortcut().register(shortcut).map_err(|error| {
+                    Failure::ShortcutConflict {
                         shortcut: canonical,
                         reason: error.to_string(),
-                    })?;
+                    }
+                })?;
                 logging::event(Event::ShortcutResumed);
                 Ok(Mechanism::Plugin)
             }
@@ -458,11 +456,23 @@ mod tests {
 
     #[test]
     fn short_key_names_become_w3c_names() {
-        assert_eq!(Hotkey::parse("Ctrl+Shift+a").unwrap().to_canonical(), "Ctrl+Shift+KeyA");
-        assert_eq!(Hotkey::parse("Ctrl+1").unwrap().to_canonical(), "Ctrl+Digit1");
-        assert_eq!(Hotkey::parse("Ctrl+Up").unwrap().to_canonical(), "Ctrl+ArrowUp");
+        assert_eq!(
+            Hotkey::parse("Ctrl+Shift+a").unwrap().to_canonical(),
+            "Ctrl+Shift+KeyA"
+        );
+        assert_eq!(
+            Hotkey::parse("Ctrl+1").unwrap().to_canonical(),
+            "Ctrl+Digit1"
+        );
+        assert_eq!(
+            Hotkey::parse("Ctrl+Up").unwrap().to_canonical(),
+            "Ctrl+ArrowUp"
+        );
         assert_eq!(Hotkey::parse("Ctrl+F5").unwrap().to_canonical(), "Ctrl+F5");
-        assert_eq!(Hotkey::parse("Ctrl+Return").unwrap().to_canonical(), "Ctrl+Enter");
+        assert_eq!(
+            Hotkey::parse("Ctrl+Return").unwrap().to_canonical(),
+            "Ctrl+Enter"
+        );
     }
 
     #[test]
@@ -502,19 +512,32 @@ mod tests {
 
     #[test]
     fn numpad_keys_are_supported() {
-        assert_eq!(Hotkey::parse("Ctrl+Numpad1").unwrap().to_canonical(), "Ctrl+Numpad1");
-        assert_eq!(Hotkey::parse("Ctrl+NumpadAdd").unwrap().to_canonical(), "Ctrl+NumpadAdd");
+        assert_eq!(
+            Hotkey::parse("Ctrl+Numpad1").unwrap().to_canonical(),
+            "Ctrl+Numpad1"
+        );
+        assert_eq!(
+            Hotkey::parse("Ctrl+NumpadAdd").unwrap().to_canonical(),
+            "Ctrl+NumpadAdd"
+        );
     }
 
     #[test]
     fn function_keys_beyond_f12_are_allowed() {
-        assert_eq!(Hotkey::parse("Ctrl+F24").unwrap().to_canonical(), "Ctrl+F24");
+        assert_eq!(
+            Hotkey::parse("Ctrl+F24").unwrap().to_canonical(),
+            "Ctrl+F24"
+        );
         assert!(Hotkey::parse("Ctrl+F25").is_err());
     }
 
     #[test]
     fn plugin_expressibility_matches_the_registration_path() {
-        assert!(Hotkey::parse("Ctrl+Alt+Space").unwrap().plugin_expressible());
-        assert!(!Hotkey::parse("Ctrl+Alt+Shift").unwrap().plugin_expressible());
+        assert!(Hotkey::parse("Ctrl+Alt+Space")
+            .unwrap()
+            .plugin_expressible());
+        assert!(!Hotkey::parse("Ctrl+Alt+Shift")
+            .unwrap()
+            .plugin_expressible());
     }
 }
