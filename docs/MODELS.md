@@ -19,8 +19,11 @@ before you commit to anything.
 | `small` | Multilingual | 244 M | q5_1 | ~190 MB | the practical multilingual choice |
 | `large-v3-turbo` | Multilingual | 809 M | q5_0 | ~570 MB | best quality per second, still heavy |
 
-All of them come from `huggingface.co/ggml-org/whisper.cpp` and are MIT
-licensed. English-only (`*.en`) models are faster and slightly more accurate for
+All of them come from `huggingface.co/ggerganov/whisper.cpp` and are MIT
+licensed. (The same files previously lived under `ggml-org`, which is no longer
+publicly reachable; the mirror in the repo's original location is what Miro and
+the download buttons point at.) English-only (`*.en`) models are faster and
+slightly more accurate for
 English; they cannot be told to transcribe another language, and the language
 selector in Settings is fixed to English while one is selected.
 
@@ -67,7 +70,7 @@ in the overlay says which check failed.
 Miro never needs the network if the file is already there.
 
 1. On a machine with internet access, download the model file from
-   `https://huggingface.co/ggml-org/whisper.cpp` - use the file names from the
+   `https://huggingface.co/ggerganov/whisper.cpp` - use the file names from the
    table above (for example `ggml-base.en-q5_1.bin`).
 2. Copy it into Miro's models folder. In Settings → Speech model, press
    **Open folder**; the path is

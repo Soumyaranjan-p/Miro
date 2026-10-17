@@ -98,7 +98,8 @@ system at all, use toggle mode or a push-to-talk combination with a real key.
 The only request Miro can make is the model download you confirm yourself:
 
 - host: `huggingface.co` (redirecting to its CDN), path
-  `/ggml-org/whisper.cpp/resolve/main/<file>`;
+  `/ggerganov/whisper.cpp/resolve/main/<file>` (the files were previously
+  published under `ggml-org`, which is no longer publicly reachable);
 - user agent: `Miro/<version>`, which is all the server learns about you beyond
   your IP address;
 - a `HEAD` request first, to show you the real file size before you agree;

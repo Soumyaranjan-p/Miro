@@ -252,7 +252,7 @@ mod tests {
         assert!(open_external("http://huggingface.co/x").is_err());
         assert!(open_external("file:///C:/Windows/System32/cmd.exe").is_err());
         assert!(open_external("https://example.com/x").is_err());
-        assert!(open_external("https://huggingface.co/ggml-org/whisper.cpp").is_ok());
+        assert!(open_external("https://huggingface.co/ggerganov/whisper.cpp").is_ok());
     }
 
     #[test]
