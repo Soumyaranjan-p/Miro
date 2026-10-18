@@ -327,7 +327,26 @@ fn finish_terminal_punctuation(text: &str) -> String {
     if last_word.ends_with('.') {
         return text.to_string();
     }
-    if text.contains(['.', '!', '?']) {
+    // A final word that is more than a plain word (URL, email, handle, path,
+    // dotted identifier) must not gain a full stop directly after it: the dot
+    // reads as part of the token, so "See github.com/foo." looks like a URL
+    // fragment. Plain alphabetic words (including brand-cased "TypeScript")
+    // still get one.
+    let plain_word = last_word.chars().all(|c| c.is_alphanumeric() || c == '\'');
+    if !plain_word {
+        return text.to_string();
+    }
+    // Only engine-emitted sentence punctuation justifies a closing full
+    // stop: a '.', '!' or '?' followed by whitespace. Dots inside tokens
+    // ("a.b@c.com", "github.com") must not count, or the pipeline would
+    // invent a full stop after filler text that never had one.
+    let has_sentence_punct = {
+        let chars: Vec<char> = text.chars().collect();
+        chars
+            .windows(2)
+            .any(|w| matches!(w[0], '.' | '!' | '?') && w[1].is_whitespace())
+    };
+    if has_sentence_punct {
         format!("{text}.")
     } else {
         text.to_string()
@@ -442,8 +461,7 @@ pub fn remove_fillers(text: &str, fillers: &[String]) -> String {
                 let contextual = is_contextual(phrase);
                 let mut removable = !contextual;
                 if contextual {
-                    let comma_before =
-                        start > 0 && words[start - 1].trim_end().ends_with(',');
+                    let comma_before = start > 0 && words[start - 1].trim_end().ends_with(',');
                     let comma_after = words[start + span - 1].trim_end().ends_with(',');
                     let at_end = start + span >= n
                         || words[start + span]
@@ -482,7 +500,8 @@ pub fn remove_fillers(text: &str, fillers: &[String]) -> String {
     // Stutter collapse: drop later occurrences of an immediately repeated word.
     let allow_repeat = |w: &str| ALLOWED_REPEATS.contains(&w);
     let clean_token = |w: &str| {
-        !w.chars().any(|c| matches!(c, '.' | '!' | '?' | ',' | ';' | ':' | '/' | '\\' | '@'))
+        !w.chars()
+            .any(|c| matches!(c, '.' | '!' | '?' | ',' | ';' | ':' | '/' | '\\' | '@'))
             && !is_protected(w)
             && !w.chars().any(|c| c.is_ascii_digit())
     };
@@ -515,7 +534,10 @@ pub fn remove_fillers(text: &str, fillers: &[String]) -> String {
         }
     }
 
-    let kept_words: Vec<&str> = (0..n).filter(|&idx| !drop[idx]).map(|idx| words[idx]).collect();
+    let kept_words: Vec<&str> = (0..n)
+        .filter(|&idx| !drop[idx])
+        .map(|idx| words[idx])
+        .collect();
     kept_words.join(" ")
 }
 
@@ -636,7 +658,10 @@ mod tests {
         );
         // Comma-delimited "like" is removed while "likely"/"likelihood" stay.
         assert_eq!(
-            process("it is, like, likely you will like this likelihood", &options),
+            process(
+                "it is, like, likely you will like this likelihood",
+                &options
+            ),
             "It is, likely you will like this likelihood"
         );
     }
@@ -753,14 +778,25 @@ mod tests {
     fn unambiguous_fillers_removed_anywhere() {
         let mut options = cleanup(true);
         options.remove_filler_words = true;
-        options.filler_words = vec!["um".into(), "uh".into(), "er".into(), "erm".into(),
-            "hmm".into(), "ah".into(), "umm".into(), "uhh".into()];
+        options.filler_words = vec![
+            "um".into(),
+            "uh".into(),
+            "er".into(),
+            "erm".into(),
+            "hmm".into(),
+            "ah".into(),
+            "umm".into(),
+            "uhh".into(),
+        ];
         // start, middle, end
         assert_eq!(process("um hello world", &options), "Hello world");
         assert_eq!(process("hello um world", &options), "Hello world");
         assert_eq!(process("hello world um", &options), "Hello world");
         // substrings untouched
-        assert_eq!(process("umbrella error human uhura", &options), "Umbrella error human uhura");
+        assert_eq!(
+            process("umbrella error human uhura", &options),
+            "Umbrella error human uhura"
+        );
     }
 
     // --- GAP 2: stutter collapse ---
@@ -785,7 +821,10 @@ mod tests {
         assert_eq!(process("no no way", &options), "No no way");
         assert_eq!(process("so so true", &options), "So so true");
         assert_eq!(process("bye bye", &options), "Bye bye");
-        assert_eq!(process("really really good", &options), "Really really good");
+        assert_eq!(
+            process("really really good", &options),
+            "Really really good"
+        );
         assert_eq!(process("Go. Go now", &options), "Go. Go now.");
         assert_eq!(process("10 10", &options), "10 10");
     }
@@ -796,8 +835,13 @@ mod tests {
         let mut options = cleanup(true);
         options.remove_filler_words = true;
         options.filler_words = vec!["um".into(), "like".into()];
-        for tok in ["github.com/foo/bar", "a.b@c.com", "@someone",
-                    "C:\\Users\\me\\file.txt", "snake_case_name"] {
+        for tok in [
+            "github.com/foo/bar",
+            "a.b@c.com",
+            "@someone",
+            "C:\\Users\\me\\file.txt",
+            "snake_case_name",
+        ] {
             assert_eq!(process(tok, &options), tok, "protected: {tok}");
         }
     }
@@ -851,6 +895,65 @@ mod tests {
         filler_off.filler_words = vec!["like".into(), "um".into()];
         // with filler off, "um"/"like" stay; spacing/case still apply
         let out = process(raw_in, &filler_off);
-        assert!(out.contains("um") || out.contains("Um"), "filler stayed: {out}");
+        assert!(
+            out.contains("um") || out.contains("Um"),
+            "filler stayed: {out}"
+        );
+    }
+
+    // --- reviewer-requested pins ---
+    #[test]
+    fn um_before_so_starts_a_sentence() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into()];
+        assert_eq!(process("um so we should go", &options), "So we should go");
+    }
+
+    #[test]
+    fn like_removed_after_a_removed_filler() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["like".into(), "um".into()];
+        assert_eq!(process("um, like, we should go", &options), "We should go");
+    }
+
+    #[test]
+    fn fillers_removed_around_protected_tokens() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into()];
+        assert_eq!(
+            process("um check github.com/um", &options),
+            "Check github.com/um"
+        );
+        assert_eq!(process("um @um", &options), "@um");
+    }
+
+    #[test]
+    fn capitalized_stutter_collapses_to_first_occurrence() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into()];
+        assert_eq!(process("The the cat", &options), "The cat");
+    }
+
+    #[test]
+    fn no_period_joins_a_final_url_or_email() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into()];
+        assert_eq!(
+            process("I pushed it. See github.com/foo", &options),
+            "I pushed it. See github.com/foo"
+        );
+        assert_eq!(
+            process("email me at a.b@c.com please", &options),
+            "Email me at a.b@c.com please"
+        );
+        assert_eq!(
+            process("the address is a.b@c.com", &options),
+            "The address is a.b@c.com"
+        );
     }
 }
