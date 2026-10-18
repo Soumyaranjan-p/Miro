@@ -37,6 +37,9 @@ const LEVEL_HZ: u64 = 50;
 const SILENCE_RMS: f32 = 0.0035;
 /// Clips shorter than this can never be speech, however loud.
 const MIN_SPEECH_MS: u128 = 250;
+/// A loud-window share at or below this is a stray click, not a voice: one
+/// loud 20 ms window per 50 windows is exactly this fraction.
+const LOUD_FRACTION_THRESHOLD: f32 = 0.02;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -666,11 +669,14 @@ fn take_samples(shared: &Shared) -> Vec<f32> {
 }
 
 /// True when a clip is too short or too quiet to be speech.
+///
+/// `<=` on purpose: a single loud window (one keyboard clack, one door) is a
+/// fraction of exactly one window in twenty, not a voice.
 pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
     if samples.is_empty() || duration_ms < MIN_SPEECH_MS {
         return true;
     }
-    loud_fraction(samples) < 0.02
+    loud_fraction(samples) <= LOUD_FRACTION_THRESHOLD
 }
 
 /// Share of 20 ms windows over the speech RMS threshold.

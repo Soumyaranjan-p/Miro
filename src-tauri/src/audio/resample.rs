@@ -65,8 +65,10 @@ pub struct Resampler {
     /// resolution than speech needs and removes per-sample trig from the path.
     phases: Vec<[f64; TAPS]>,
     history: Vec<f32>,
-    /// Position inside `history` where the next output window starts.
-    cursor: f64,
+    /// How many output samples have been emitted and how many input samples
+    /// were dropped from the front of `history`.
+    emitted: u64,
+    drained: u64,
 }
 
 const PHASES: usize = 256;
@@ -86,8 +88,16 @@ impl Resampler {
             step: input_rate.max(1) as f64 / TARGET_SAMPLE_RATE as f64,
             phases,
             history: Vec::new(),
-            cursor: HALF_TAPS as f64,
+            emitted: 0,
+            drained: 0,
         }
+    }
+
+    /// The next output's position, expressed relative to `history`, as a pure
+    /// function of exact counters. Accumulating a float cursor would make the
+    /// fractional position depend on how input was chunked.
+    fn cursor(&self) -> f64 {
+        HALF_TAPS as f64 + self.emitted as f64 * self.step - self.drained as f64
     }
 
     pub fn input_rate(&self) -> u32 {
@@ -110,7 +120,7 @@ impl Resampler {
         // Keep HALF_TAPS samples of run-up before the cursor so every window is
         // fully inside the history.
         loop {
-            let start = self.cursor.floor() as isize;
+            let start = self.cursor().floor() as isize;
             let first = start - HALF_TAPS;
             let last = start + HALF_TAPS - 1;
             if last >= self.history.len() as isize {
@@ -121,7 +131,7 @@ impl Resampler {
                 break;
             }
 
-            let offset = self.cursor - start as f64;
+            let offset = self.cursor() - start as f64;
             let phase = ((offset * PHASES as f64) as usize).min(PHASES - 1);
             let taps = &self.phases[phase];
 
@@ -131,14 +141,14 @@ impl Resampler {
                 acc += *tap * self.history[index as usize] as f64;
             }
             out.push(acc as f32);
-            self.cursor += self.step;
+            self.emitted += 1;
         }
 
         // Drop everything before the next window needs, then rebase the cursor.
-        let keep_from = (self.cursor.floor() as isize - HALF_TAPS).max(0) as usize;
+        let keep_from = (self.cursor().floor() as isize - HALF_TAPS).max(0) as usize;
         if keep_from > 0 {
             self.history.drain(0..keep_from);
-            self.cursor -= keep_from as f64;
+            self.drained += keep_from as u64;
         }
 
         if final_chunk {
@@ -146,7 +156,7 @@ impl Resampler {
             // input, zero-padding only to keep the taps inside the buffer.
             let real_input_end = self.history.len() as isize;
             loop {
-                let start = self.cursor.floor() as isize;
+                let start = self.cursor().floor() as isize;
                 let first = start - HALF_TAPS;
                 let last = start + HALF_TAPS - 1;
                 if first < 0 || first >= real_input_end {
@@ -156,7 +166,7 @@ impl Resampler {
                     self.history.push(0.0);
                     continue;
                 }
-                let offset = self.cursor - start as f64;
+                let offset = self.cursor() - start as f64;
                 let phase = ((offset * PHASES as f64) as usize).min(PHASES - 1);
                 let taps = &self.phases[phase];
                 let mut acc = 0.0f64;
@@ -165,10 +175,11 @@ impl Resampler {
                     acc += *tap * self.history[index as usize] as f64;
                 }
                 out.push(acc as f32);
-                self.cursor += self.step;
+                self.emitted += 1;
             }
             self.history.clear();
-            self.cursor = HALF_TAPS as f64;
+            self.emitted = 0;
+            self.drained = 0;
         }
 
         out
@@ -300,17 +311,8 @@ mod tests {
 
         let mut split = Resampler::new(44_100);
         let mut b = Vec::new();
-        let mut expected_cursor = 16.0f64; // HALF_TAPS
-        for (ci, chunk) in input.chunks(97).enumerate() {
+        for chunk in input.chunks(97) {
             b.extend(split.process(chunk, false));
-            let expect = (b.len() as f64) * 2.75625 + 16.0;
-            println!(
-                "chunk {ci}: b.len={} cursor={:.9} expected_if_ideal={:.9} len={}",
-                b.len(),
-                split.cursor,
-                expect,
-                split.history.len()
-            );
         }
         b.extend(split.process(&[], true));
 
@@ -339,43 +341,5 @@ mod tests {
         assert!((rms(&loud) - 0.5).abs() < 1e-3);
         assert!((peak(&loud) - 0.5).abs() < 1e-6);
         assert_eq!(peak(&[]), 0.0);
-    }
-}
-
-
-#[cfg(test)]
-mod scratch {
-    use super::*;
-
-    #[test]
-    fn scratch_chunk_debug() {
-        let n = (44_100usize as f64 * 0.25) as usize;
-        let input: Vec<f32> = (0..n)
-            .map(|i| {
-                let t = i as f64 / 44_100.0;
-                (2.0 * std::f64::consts::PI * 300.0 * t).sin() as f32
-            })
-            .collect();
-
-        let mut whole = Resampler::new(44_100);
-        let a = whole.process(&input, true);
-
-        let mut split = Resampler::new(44_100);
-        let mut b = Vec::new();
-        let mut history_pts: Vec<f64> = Vec::new();
-        for chunk in input.chunks(97) {
-            history_pts.push(0.0);
-            b.extend(split.process(chunk, false));
-        }
-        b.extend(split.process(&[], true));
-
-        let compare = a.len().min(b.len());
-        println!("lens: a={} b={}", a.len(), b.len());
-        for i in 0..compare {
-            if (a[i] - b[i]).abs() >= 1e-6 {
-                println!("first divergence at sample {i}: a={} b={}", a[i], b[i]);
-                break;
-            }
-        }
     }
 }

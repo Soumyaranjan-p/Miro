@@ -371,8 +371,7 @@ fn bring_to_foreground(hwnd: HWND) -> bool {
         let focused = SetForegroundWindow(hwnd).as_bool();
 
         for thread in attached {
-            let _ =
-                windows::Win32::System::Threading::AttachThreadInput(current, thread, false);
+            let _ = windows::Win32::System::Threading::AttachThreadInput(current, thread, false);
         }
         focused
     }

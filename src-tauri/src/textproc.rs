@@ -66,6 +66,28 @@ const ACRONYMS: &[&str] = &[
 
 const CONTRACTIONS_OF_I: &[&str] = &["m", "s", "ll", "ve", "d"];
 
+/// Repeats that are grammatical or emphatic rather than stutters. "had had" is
+/// the past perfect, "that that" is a demonstrative followed by a relative,
+/// and the rest are conventional doubled words. Collapsing these would change
+/// meaning, so they are left alone.
+const ALLOWED_REPEATS: &[&str] = &["very", "had", "that", "no", "so", "bye", "really"];
+
+/// Fillers that are only removable in a filler context (comma-delimited or at
+/// a clause boundary). "like" doubles as a verb/preposition, and "you know"/
+/// "I mean" carry meaning when not set off by commas, so they are gated.
+const CONTEXTUAL_FILLERS: &[&str] = &["like", "you know", "i mean"];
+
+/// Brand names the engine emits in plain lowercase but that have a canonical
+/// casing nearly everyone wants preserved (`typescript` becomes `TypeScript`).
+const BRAND_TERMS: &[(&str, &str)] = &[
+    ("typescript", "TypeScript"),
+    ("javascript", "JavaScript"),
+    ("github", "GitHub"),
+    ("gitlab", "GitLab"),
+    ("nodejs", "Node.js"),
+    ("vscode", "VS Code"),
+];
+
 /// The one entry point. `raw` is whatever the engine produced.
 pub fn process(raw: &str, options: &Cleanup) -> String {
     let trimmed = raw.trim();
@@ -96,12 +118,9 @@ pub fn process(raw: &str, options: &Cleanup) -> String {
         text = normalize_whitespace(&text);
     }
 
-    text.trim().to_string()
-}
+    text = finish_terminal_punctuation(&text);
 
-/// Splits on whitespace while keeping the newlines intact.
-fn words_of(text: &str) -> Vec<&str> {
-    text.split_whitespace().collect()
+    text.trim().to_string()
 }
 
 /// Lowercases and strips surrounding punctuation, so `Hello,` matches `hello`.
@@ -111,6 +130,13 @@ fn bare(word: &str) -> String {
 }
 
 pub fn normalize_whitespace(text: &str) -> String {
+    // A single protected token has no internal whitespace to repair; leaving it
+    // untouched keeps URLs, emails, handles and paths byte-for-byte.
+    let trimmed = text.trim();
+    if !trimmed.contains(char::is_whitespace) && is_protected(trimmed) {
+        return trimmed.to_string();
+    }
+
     let mut lines: Vec<String> = Vec::new();
 
     for line in text.replace('\r', "\n").split('\n') {
@@ -129,8 +155,9 @@ pub fn normalize_whitespace(text: &str) -> String {
         }
 
         let cleaned = out.trim().to_string();
-        // A blank line only survives if it was deliberate; runs collapse to one.
-        if cleaned.is_empty() && lines.last().map(|l| l.is_empty()).unwrap_or(true) {
+        // Dictation produces prose, not layout: every line break collapses and
+        // empty lines vanish, so `a\n\n\nb` becomes `a\nb`.
+        if cleaned.is_empty() {
             continue;
         }
         lines.push(cleaned);
@@ -150,6 +177,11 @@ fn is_tight_punctuation(ch: char) -> bool {
 
 /// `hello , world` becomes `hello, world`; `,,` collapses to `,`.
 fn collapse_empty_punctuation(text: &str) -> String {
+    let trimmed = text.trim();
+    if !trimmed.contains(char::is_whitespace) && is_protected(trimmed) {
+        return text.to_string();
+    }
+
     let mut out = String::with_capacity(text.len());
     let mut previous_significant: Option<char> = None;
 
@@ -204,6 +236,7 @@ pub fn capitalize_sentences(text: &str) -> String {
         };
         rendered = normalize_pronoun_i(&rendered);
         rendered = normalize_acronym(&rendered);
+        rendered = normalize_brand(&rendered);
 
         at_sentence_start = ends_sentence(&rendered);
         out.push_str(&rendered);
@@ -251,10 +284,63 @@ fn normalize_acronym(word: &str) -> String {
     word.replace(&bare_form, &bare_form.to_uppercase())
 }
 
+/// Puts a brand name into its canonical casing when it appears as a pure
+/// lowercase whole word: `typescript` -> `TypeScript`.
+fn normalize_brand(word: &str) -> String {
+    let bare_form = bare(word);
+    let Some((lower, display)) = BRAND_TERMS.iter().find(|(lower, _)| bare_form == *lower) else {
+        return word.to_string();
+    };
+    // Only rewrite the bare form; leave anything the user already spaced or
+    // capped differently.
+    let core = word.trim_matches(|c: char| !c.is_alphanumeric());
+    if core != *lower {
+        return word.to_string();
+    }
+    word.replace(lower, display)
+}
+
+/// Closes an unterminated final sentence, but only when the engine actually
+/// produced sentence punctuation somewhere in the clip: completing a sentence
+/// it started is repair, inventing punctuation in spoken text is not.
+fn finish_terminal_punctuation(text: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return text.to_string();
+    }
+    // Never append punctuation to a lone protected token (URL, email, handle, path).
+    if !trimmed.contains(char::is_whitespace) && is_protected(trimmed) {
+        return text.to_string();
+    }
+
+    let mut chars = trimmed.chars();
+    let Some(last_char) = chars.next_back() else {
+        return text.to_string();
+    };
+    // Already closed, or the user is mid-list: a clause separator is theirs,
+    // not a dropped full stop.
+    if matches!(last_char, '.' | '!' | '?' | ',' | ';' | ':') || trimmed.is_empty() {
+        return text.to_string();
+    }
+    let last_word = trimmed.split_whitespace().next_back().unwrap_or("");
+    // A trailing dot that belongs to "e.g." is punctuation, not an opener.
+    if last_word.ends_with('.') {
+        return text.to_string();
+    }
+    if text.contains(['.', '!', '?']) {
+        format!("{text}.")
+    } else {
+        text.to_string()
+    }
+}
+
 /// True when the sentence-case pass must keep its hands off a word.
 pub fn is_protected(word: &str) -> bool {
-    let core =
-        word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-' && c != '.');
+    // `@` survives the trim: for a handle it IS the word, and stripping it
+    // first would leave a bare lowercase term that looks unprotected.
+    let core = word.trim_matches(|c: char| {
+        !c.is_alphanumeric() && c != '_' && c != '-' && c != '.' && c != '@'
+    });
     if core.is_empty() {
         return true;
     }
@@ -300,6 +386,12 @@ fn is_abbreviation(word: &str) -> bool {
 }
 
 pub fn remove_fillers(text: &str, fillers: &[String]) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() {
+        return String::new();
+    }
+
+    // Prepare and sort phrases longest first, as before.
     let mut phrases: Vec<Vec<String>> = fillers
         .iter()
         .map(|filler| {
@@ -310,44 +402,121 @@ pub fn remove_fillers(text: &str, fillers: &[String]) -> String {
         })
         .filter(|phrase: &Vec<String>| !phrase.is_empty())
         .collect();
-    // Longest first, so "you know" wins over "know".
     phrases.sort_by_key(|phrase| std::cmp::Reverse(phrase.len()));
 
-    let words = words_of(text);
+    let n = words.len();
     let lowered: Vec<String> = words.iter().map(|w| bare(w)).collect();
-    let mut drop = vec![false; words.len()];
 
-    for phrase in &phrases {
-        let span = phrase.len();
-        if span > words.len() {
-            continue;
-        }
-        for start in 0..=(words.len() - span) {
-            if (0..span).any(|offset| drop[start + offset]) {
+    // drop[i] == true means words[i] is removed.
+    let mut drop = vec![false; n];
+
+    // Contextual phrases ("like", "you know", "i mean") are only removable in a
+    // filler context. Everything else in the list is an unambiguous filler.
+    fn is_contextual(phrase: &[String]) -> bool {
+        let joined = phrase.join(" ");
+        CONTEXTUAL_FILLERS.contains(&joined.as_str())
+    }
+
+    // Iterative fixpoint: a contextual filler may become removable because the
+    // word before it was just removed as another filler.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for phrase in &phrases {
+            let span = phrase.len();
+            if span == 0 || span > n {
                 continue;
             }
-            let matches = (0..span).all(|offset| lowered[start + offset] == phrase[offset]);
-            if matches {
-                // Never remove a word that is part of a protected term.
-                let protected = (0..span).any(|offset| is_protected(words[start + offset]));
-                if protected {
+            for start in 0..=(n - span) {
+                if (0..span).any(|o| drop[start + o]) {
                     continue;
                 }
-                for offset in 0..span {
-                    drop[start + offset] = true;
+                let matches = (0..span).all(|o| lowered[start + o] == phrase[o]);
+                if !matches {
+                    continue;
+                }
+                // Protected tokens are never removed.
+                if (0..span).any(|o| is_protected(words[start + o])) {
+                    continue;
+                }
+                let contextual = is_contextual(phrase);
+                let mut removable = !contextual;
+                if contextual {
+                    let comma_before =
+                        start > 0 && words[start - 1].trim_end().ends_with(',');
+                    let comma_after = words[start + span - 1].trim_end().ends_with(',');
+                    let at_end = start + span >= n
+                        || words[start + span]
+                            .chars()
+                            .next()
+                            .map(|c| matches!(c, '.' | '!' | '?' | ',' | ';' | ':'))
+                            .unwrap_or(true);
+                    let after_filler = start > 0 && drop[start - 1];
+                    let ends_sentence_punct = words[start + span - 1]
+                        .trim_end()
+                        .chars()
+                        .last()
+                        .map(|c| matches!(c, '.' | '!' | '?'))
+                        .unwrap_or(false);
+                    if (comma_before && comma_after)
+                        || (comma_before && at_end)
+                        || (comma_before && ends_sentence_punct)
+                        || after_filler
+                    {
+                        removable = true;
+                    }
+                }
+                if !removable {
+                    continue;
+                }
+                for o in 0..span {
+                    if !drop[start + o] {
+                        changed = true;
+                    }
+                    drop[start + o] = true;
                 }
             }
         }
     }
 
-    let kept: Vec<&str> = words
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| !drop[*index])
-        .map(|(_, word)| *word)
-        .collect();
+    // Stutter collapse: drop later occurrences of an immediately repeated word.
+    let allow_repeat = |w: &str| ALLOWED_REPEATS.contains(&w);
+    let clean_token = |w: &str| {
+        !w.chars().any(|c| matches!(c, '.' | '!' | '?' | ',' | ';' | ':' | '/' | '\\' | '@'))
+            && !is_protected(w)
+            && !w.chars().any(|c| c.is_ascii_digit())
+    };
+    let mut kept: Vec<usize> = (0..n).filter(|&idx| !drop[idx]).collect();
+    let mut i = 0;
+    while i < kept.len() {
+        let idx = kept[i];
+        let wb = lowered[idx].clone();
+        if !allow_repeat(&wb) && clean_token(words[idx]) {
+            let mut j = i + 1;
+            while j < kept.len() {
+                let nidx = kept[j];
+                if lowered[nidx] != wb {
+                    break;
+                }
+                if !clean_token(words[nidx]) {
+                    break;
+                }
+                drop[nidx] = true;
+                j += 1;
+            }
+            kept = (0..n).filter(|&x| !drop[x]).collect();
+            // advance past the run we just collapsed
+            i += 1;
+            while i < kept.len() && kept[i] <= idx {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
 
-    kept.join(" ")
+    let kept_words: Vec<&str> = (0..n).filter(|&idx| !drop[idx]).map(|idx| words[idx]).collect();
+    kept_words.join(" ")
 }
 
 #[cfg(test)]
@@ -408,9 +577,13 @@ mod tests {
             "install npm and then use typescript. ios apps need xcode.",
             &cleanup(true),
         );
+        // npm/ios keep their conventional lowercase, but "typescript" gets
+        // its canonical brand casing (BRAND_TERMS), same as in the other
+        // pinned cases below - the engine emits it lowercase and every
+        // consumer wants TypeScript.
         assert_eq!(
             out,
-            "Install npm and then use typescript. ios apps need xcode."
+            "Install npm and then use TypeScript. ios apps need xcode."
         );
     }
 
@@ -454,10 +627,17 @@ mod tests {
         let mut options = cleanup(true);
         options.remove_filler_words = true;
         options.filler_words = vec!["like".into(), "um".into()];
-        // "like" as a whole word goes; "likely" and "likelihood" must not.
+        // "like" as a whole word goes only when it is a clear filler; "like
+        // this" is a kept, non-filler use, and "likely"/"likelihood" are
+        // never touched.
         assert_eq!(
             process("it is likely you like this likelihood", &options),
-            "It is likely you this likelihood"
+            "It is likely you like this likelihood"
+        );
+        // Comma-delimited "like" is removed while "likely"/"likelihood" stay.
+        assert_eq!(
+            process("it is, like, likely you will like this likelihood", &options),
+            "It is, likely you will like this likelihood"
         );
     }
 
@@ -526,5 +706,151 @@ mod tests {
         let twice = process(&once, &options);
         assert_eq!(once, "So the API, returns JSON. I'm using TypeScript.");
         assert_eq!(once, twice, "clean-up must be idempotent");
+    }
+
+    // --- GAP 1: contextual "like" ---
+    #[test]
+    fn like_is_kept_in_real_uses() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["like".into(), "um".into()];
+        for input in [
+            "I like it",
+            "looks like rain",
+            "would you like tea",
+            "like a boss",
+            "like this",
+            "feels like rain",
+        ] {
+            let out = process(input, &options);
+            assert_eq!(out, capitalize_sentences(input), "kept: {input} -> {out}");
+        }
+    }
+
+    #[test]
+    fn like_is_removed_when_comma_delimited() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["like".into(), "um".into()];
+        assert_eq!(process("it was, like, huge", &options), "It was, huge");
+    }
+
+    // --- GAP 1: "you know" / "I mean" ---
+    #[test]
+    fn you_know_and_i_mean_contextual() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["you know".into(), "i mean".into(), "um".into()];
+        assert_eq!(process("It was, you know, fine", &options), "It was, fine");
+        assert_eq!(process("It was, I mean, fine", &options), "It was, fine");
+        // kept when carrying meaning
+        assert_eq!(process("Do you know him", &options), "Do you know him");
+        assert_eq!(process("I mean it", &options), "I mean it");
+    }
+
+    // --- GAP 1: unambiguous fillers ---
+    #[test]
+    fn unambiguous_fillers_removed_anywhere() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into(), "uh".into(), "er".into(), "erm".into(),
+            "hmm".into(), "ah".into(), "umm".into(), "uhh".into()];
+        // start, middle, end
+        assert_eq!(process("um hello world", &options), "Hello world");
+        assert_eq!(process("hello um world", &options), "Hello world");
+        assert_eq!(process("hello world um", &options), "Hello world");
+        // substrings untouched
+        assert_eq!(process("umbrella error human uhura", &options), "Umbrella error human uhura");
+    }
+
+    // --- GAP 2: stutter collapse ---
+    #[test]
+    fn stutter_collapsed() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into()];
+        assert_eq!(process("I I think", &options), "I think");
+        assert_eq!(process("the the cat", &options), "The cat");
+        assert_eq!(process("we we we should", &options), "We should");
+    }
+
+    #[test]
+    fn stutter_kept_intentional() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into()];
+        assert_eq!(process("very very good", &options), "Very very good");
+        assert_eq!(process("had had enough", &options), "Had had enough");
+        assert_eq!(process("that that is", &options), "That that is");
+        assert_eq!(process("no no way", &options), "No no way");
+        assert_eq!(process("so so true", &options), "So so true");
+        assert_eq!(process("bye bye", &options), "Bye bye");
+        assert_eq!(process("really really good", &options), "Really really good");
+        assert_eq!(process("Go. Go now", &options), "Go. Go now.");
+        assert_eq!(process("10 10", &options), "10 10");
+    }
+
+    // --- GAP 3: protected tokens byte-for-byte ---
+    #[test]
+    fn protected_tokens_survive_pipeline() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into(), "like".into()];
+        for tok in ["github.com/foo/bar", "a.b@c.com", "@someone",
+                    "C:\\Users\\me\\file.txt", "snake_case_name"] {
+            assert_eq!(process(tok, &options), tok, "protected: {tok}");
+        }
+    }
+
+    // --- only fillers / empty ---
+    #[test]
+    fn only_fillers_returns_empty() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["um".into(), "uh".into()];
+        assert_eq!(process("um uh um", &options), "");
+        assert_eq!(process("", &options), "");
+        assert_eq!(process("   ", &options), "");
+    }
+
+    // --- idempotence ---
+    #[test]
+    fn cleanup_is_idempotent_for_new_cases() {
+        let mut options = cleanup(true);
+        options.remove_filler_words = true;
+        options.filler_words = vec!["like".into(), "um".into(), "you know".into()];
+        let cases = [
+            "it was, like, huge",
+            "I like it",
+            "I I think we should go",
+            "very very good",
+            "Go. Go now",
+            "github.com/foo/bar",
+            "um so we go",
+        ];
+        for c in cases {
+            let once = process(c, &options);
+            let twice = process(&once, &options);
+            assert_eq!(once, twice, "idempotent: {c}");
+        }
+    }
+
+    // --- toggles ---
+    #[test]
+    fn toggles_off_leave_output_unchanged() {
+        let raw_in = "  um I I think, like, we go  ";
+        // master toggle off
+        let mut off = cleanup(false);
+        off.remove_filler_words = true;
+        off.filler_words = vec!["like".into(), "um".into()];
+        assert_eq!(process(raw_in, &off), raw_in.trim());
+
+        // filler toggle off
+        let mut filler_off = cleanup(true);
+        filler_off.remove_filler_words = false;
+        filler_off.filler_words = vec!["like".into(), "um".into()];
+        // with filler off, "um"/"like" stay; spacing/case still apply
+        let out = process(raw_in, &filler_off);
+        assert!(out.contains("um") || out.contains("Um"), "filler stayed: {out}");
     }
 }
