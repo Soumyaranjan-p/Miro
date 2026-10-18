@@ -119,22 +119,29 @@ if (-not $zig) {
 }
 
 # --- 4. whisper.cpp build inputs --------------------------------------------
-# whisper-rs-sys runs bindgen by default, which needs libclang. It also ships
-# pre-generated bindings and this switch uses them instead, which removes a
-# build-time dependency on LLVM and makes the build reproducible. Set it to
-# '0' to run bindgen again.
-if (-not $env:WHISPER_DONT_GENERATE_BINDINGS) {
-    $env:WHISPER_DONT_GENERATE_BINDINGS = '1'
-}
-
+# whisper-rs-sys ships pre-generated bindings, but those were generated from
+# Linux headers: on Windows they fail to compile with
+#   E0080: attempt to compute `12_usize - 16_usize` (size_of "G_fpos_t" - 16)
+# inside the generated bindings. Windows builds therefore must run bindgen,
+# which is why WHISPER_DONT_GENERATE_BINDINGS is deliberately NOT set here;
+# a libclang.dll is required for that (see step 4b).
+#
 # Only needed if you re-enable bindgen above.
 if (-not $env:LIBCLANG_PATH) {
+    # The pip `clang` wheel is the preferred source; clang-sys itself can also
+    # pick up a standard LLVM install, so leave it when one is present.
     try {
         $clangNative = & python -c "import os,clang;print(os.path.join(os.path.dirname(clang.__file__),'native'))" 2>$null
         if ($clangNative -and (Test-Path (Join-Path $clangNative.Trim() 'libclang.dll'))) {
             $env:LIBCLANG_PATH = $clangNative.Trim()
         }
     } catch { }
+    if (-not $env:LIBCLANG_PATH) {
+        $standardLlvm = 'C:\Program Files\LLVM\bin'
+        if (Test-Path (Join-Path $standardLlvm 'libclang.dll')) {
+            $env:LIBCLANG_PATH = $standardLlvm
+        }
+    }
 }
 
 Write-Host "Miro build environment"
