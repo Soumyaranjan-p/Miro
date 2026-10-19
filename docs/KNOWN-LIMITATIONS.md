@@ -97,7 +97,9 @@ Miro logs it and the overlay's Cancel button still works.
   removing the word "like" from "I like this" is what you asked for when you
   turn it on.
 - **Very short or quiet captures are reported as "no speech detected"** rather
-  than being inserted as an empty transcript.
+  than being inserted as an empty transcript. A recording that reached the
+  engine but produced no words is reported separately, as "nothing was
+  recognized".
 - **A long recording takes time to transcribe.** The maximum recording length
   (default 300 s) bounds how bad this can get; the overlay shows processing the
   whole time.

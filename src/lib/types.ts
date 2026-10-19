@@ -54,6 +54,7 @@ export type ErrorCode =
   | "engine_timeout"
   | "engine_unavailable"
   | "audio_empty"
+  | "transcript_empty"
   | "audio_too_long"
   | "shortcut_conflict"
   | "shortcut_invalid"

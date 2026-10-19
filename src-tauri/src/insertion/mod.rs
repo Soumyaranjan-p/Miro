@@ -50,7 +50,7 @@ const PASTE_SETTLE_MS: u64 = 180;
 /// Types `text` into the window the user was in when they started dictating.
 pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
     if text.trim().is_empty() {
-        return Err(Failure::AudioEmpty);
+        return Err(Failure::TranscriptEmpty);
     }
 
     if !target.is_still_foreground() {
@@ -122,7 +122,7 @@ mod tests {
     fn empty_text_is_not_typed_anywhere() {
         let target = Target { hwnd: 0, pid: 0 };
         let error = insert("   ", target).unwrap_err();
-        assert!(matches!(error, Failure::AudioEmpty));
+        assert!(matches!(error, Failure::TranscriptEmpty));
     }
 
     #[test]

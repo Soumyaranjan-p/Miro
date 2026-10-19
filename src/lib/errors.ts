@@ -96,6 +96,10 @@ const COPY: Record<ErrorCode, ErrorCopy> = {
     title: "No speech detected",
     hint: "Check the input device level and try again.",
   },
+  transcript_empty: {
+    title: "Nothing was recognized",
+    hint: "Speak closer to the microphone, or check the language setting for the model.",
+  },
   audio_too_long: {
     title: "Recording reached the maximum length",
     hint: "Miro stopped and transcribed what it had. Raise the limit in Settings.",

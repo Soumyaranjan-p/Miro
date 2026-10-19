@@ -446,7 +446,9 @@ impl Session {
         if text.trim().is_empty() {
             privacy::zeroize_string(&mut text);
             self.reset(app);
-            self.fail(app, Failure::AudioEmpty, None);
+            // The audio reached the engine and no words came back: not the
+            // same thing as capturing no audio, so report it honestly.
+            self.fail(app, Failure::TranscriptEmpty, None);
             return;
         }
 

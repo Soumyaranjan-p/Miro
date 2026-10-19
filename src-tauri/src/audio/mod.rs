@@ -33,13 +33,15 @@ use resample::{downmix_to_mono, peak, rms, Resampler, TARGET_SAMPLE_RATE};
 
 /// Level frames per second sent to the overlay (spec asks for 30-60 Hz).
 const LEVEL_HZ: u64 = 50;
-/// Below this windowed RMS a clip counts as quiet rather than speech.
-const SILENCE_RMS: f32 = 0.0035;
+/// Below this windowed RMS a window counts as silence rather than speech.
+const SILENCE_RMS: f32 = 0.002;
 /// Clips shorter than this can never be speech, however loud.
 const MIN_SPEECH_MS: u128 = 250;
-/// A loud-window share at or below this is a stray click, not a voice: one
-/// loud 20 ms window per 50 windows is exactly this fraction.
-const LOUD_FRACTION_THRESHOLD: f32 = 0.02;
+/// Fewer audible 20 ms windows than this, and the audio is a stray click or
+/// background hum rather than a voice: real speech needs at least ~60 ms of
+/// sound. Judged as an absolute count, not a share of the clip, so a short
+/// utterance followed by a pause still passes.
+const MIN_LOUD_WINDOWS: usize = 3;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -604,10 +606,9 @@ fn run_capture(
         return CaptureOutcome::Failed(failure);
     }
 
-    // Downmix and resample once, now that recording is over.
-    let mono = downmix_to_mono(&raw, channels);
-    // Diagnostics: per-channel level and the first-channel cross-correlation,
-    // to catch an array whose channels average each other away in the mix.
+    // Downmix and resample once, now that recording is over. Diagnostics run
+    // first: per-channel level and the first-channel cross-correlation, to
+    // catch a mic array whose channels are recorded in opposite polarity.
     let channel_rms: Vec<f32> = (0..channels as usize)
         .map(|c| {
             let column: Vec<f32> = raw
@@ -620,6 +621,27 @@ fn run_capture(
         })
         .collect();
     let channel_corr = channel_cross_correlation(&raw, channels);
+    let mut mono = downmix_to_mono(&raw, channels);
+    if channel_corr < -0.5 {
+        // Anti-correlated channels cancel in the average, turning speech into
+        // near-silence. Prefer whichever single channel carries most energy.
+        let loudest = channel_rms
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .map(|(index, _)| index)
+            .unwrap_or(0);
+        eprintln!(
+            "[miro-audio] downmix: channels are anti-correlated ({channel_corr:.3}); \
+             keeping channel {loudest} instead of averaging"
+        );
+        mono = raw
+            .iter()
+            .skip(loudest)
+            .step_by(channels as usize)
+            .copied()
+            .collect();
+    }
     eprintln!(
         "[miro-audio] downmix: {} -> {} samples ({} ch); per-channel rms {:?}; corr {:.3}",
         raw.len(),
@@ -630,29 +652,33 @@ fn run_capture(
     );
     discard(raw);
     let mut resampler = Resampler::new(sample_rate);
-    let mut samples = resampler.process(&mono, false);
-    samples.extend(resampler.process(&[], true)); // flush the tail
+    let mut resampled = resampler.process(&mono, false);
+    resampled.extend(resampler.process(&[], true)); // flush the tail
     discard(mono);
     let expected_16k = TARGET_SAMPLE_RATE as u128 * duration_ms / 1000;
     eprintln!(
         "[miro-audio] resampled: {} samples at {} Hz (expected ~{expected_16k})",
-        samples.len(),
+        resampled.len(),
         TARGET_SAMPLE_RATE
     );
 
-    if has_no_speech(&samples, duration_ms) {
+    if has_no_speech(&resampled, duration_ms) {
         eprintln!(
-            "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud ratio {:.4} (speech cutoff 0.02, silence rms {}) ",
-            samples.len(),
-            loud_fraction(&samples),
-            SILENCE_RMS
+            "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud windows {} of {} \
+             (need {}, speech rms cutoff {}, whole-clip rms {:.4})",
+            resampled.len(),
+            loud_windows(&resampled),
+            resampled.len() / (TARGET_SAMPLE_RATE as usize / 50).max(1),
+            MIN_LOUD_WINDOWS,
+            SILENCE_RMS,
+            rms(&resampled)
         );
-        discard(samples);
+        discard(resampled);
         return CaptureOutcome::Failed(Failure::AudioEmpty);
     }
 
     CaptureOutcome::Recorded {
-        samples,
+        samples: resampled,
         duration_ms,
         limit_reached: shared
             .limit_reached
@@ -670,34 +696,28 @@ fn take_samples(shared: &Shared) -> Vec<f32> {
 
 /// True when a clip is too short or too quiet to be speech.
 ///
-/// `<=` on purpose: a single loud window (one keyboard clack, one door) is a
-/// fraction of exactly one window in twenty, not a voice.
+/// Speech is judged by an absolute count of audible 20 ms windows, not by a
+/// share of the whole clip, so a few spoken words followed by a pause still
+/// pass - what matters is that real sound is present, not that the user
+/// talked for the entire recording. The whole-clip RMS check catches a clip
+/// that is pure room tone however it is windowed.
 pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
     if samples.is_empty() || duration_ms < MIN_SPEECH_MS {
         return true;
     }
-    loud_fraction(samples) <= LOUD_FRACTION_THRESHOLD
+    if rms(samples) <= SILENCE_RMS {
+        return true;
+    }
+    loud_windows(samples) < MIN_LOUD_WINDOWS
 }
 
-/// Share of 20 ms windows over the speech RMS threshold.
-///
-/// Same windowing as [`has_no_speech`]; exposed so the `audio_empty`
-/// diagnostic line can say why a clip was judged speechless.
-fn loud_fraction(samples: &[f32]) -> f32 {
+/// Count of 20 ms windows over the speech RMS threshold.
+fn loud_windows(samples: &[f32]) -> usize {
     let window = (TARGET_SAMPLE_RATE as usize / 50).max(1); // 20 ms
-    let mut loud_windows = 0usize;
-    let mut windows = 0usize;
-    for chunk in samples.chunks(window) {
-        windows += 1;
-        if rms(chunk) > SILENCE_RMS {
-            loud_windows += 1;
-        }
-    }
-    if windows == 0 {
-        0.0
-    } else {
-        loud_windows as f32 / windows as f32
-    }
+    samples
+        .chunks(window)
+        .filter(|chunk| rms(chunk) > SILENCE_RMS)
+        .count()
 }
 
 /// Enumerates input devices for the settings window.
@@ -892,6 +912,33 @@ mod tests {
             *sample = 0.8;
         }
         assert!(has_no_speech(&samples, 1000));
+    }
+
+    #[test]
+    fn speech_followed_by_a_long_pause_is_still_speech() {
+        // One second of speech, then three seconds of quiet before the Stop
+        // press: the old whole-clip fraction gate rejected exactly this, and
+        // real dictation pauses trip it just the same.
+        let mut samples = vec![0.0001f32; TARGET_SAMPLE_RATE as usize * 4];
+        for sample in samples[TARGET_SAMPLE_RATE as usize..TARGET_SAMPLE_RATE as usize * 2]
+            .iter_mut()
+        {
+            *sample = 0.2;
+        }
+        assert!(!has_no_speech(&samples, 4000));
+    }
+
+    #[test]
+    fn anti_correlated_channels_are_reported_negative() {
+        // Two channels of the same wave with opposite polarity - the array
+        // layout that deletes itself when the channels are averaged.
+        let tone: Vec<f32> = (0..9600).map(|i| ((i as f32) / 100.0).sin()).collect();
+        let mut raw = Vec::with_capacity(tone.len() * 2);
+        for sample in &tone {
+            raw.push(*sample);
+            raw.push(-*sample);
+        }
+        assert!(channel_cross_correlation(&raw, 2) < -0.99);
     }
 
     #[test]
