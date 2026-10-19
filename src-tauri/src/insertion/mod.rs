@@ -53,7 +53,7 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
         return Err(Failure::TranscriptEmpty);
     }
 
-    if !target.is_still_foreground() {
+    if !target.is_still_foreground() && !target.refocus_after_miro_intercept() {
         return Err(Failure::FocusChanged);
     }
 
@@ -85,7 +85,7 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
 /// not paste at all: replacing a clipboard it could not save would destroy data
 /// the user still expects to be there.
 pub fn insert_via_clipboard(text: &str, target: Target) -> Result<InsertOutcome> {
-    if !target.is_still_foreground() {
+    if !target.is_still_foreground() && !target.refocus_after_miro_intercept() {
         return Err(Failure::FocusChanged);
     }
 
@@ -123,6 +123,18 @@ mod tests {
         let target = Target { hwnd: 0, pid: 0 };
         let error = insert("   ", target).unwrap_err();
         assert!(matches!(error, Failure::TranscriptEmpty));
+    }
+
+    #[test]
+    fn a_real_window_switch_is_never_recovered() {
+        // In a plain test run no Miro window holds the foreground, so focus
+        // recovery must refuse; typing only ever resumes when Miro's own UI
+        // intercepted the click.
+        let target = Target {
+            hwnd: 123_456,
+            pid: 999_999,
+        };
+        assert!(!target.refocus_after_miro_intercept());
     }
 
     #[test]

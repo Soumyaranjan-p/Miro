@@ -11,8 +11,8 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::Threading::{
-    GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+    AttachThreadInput, GetCurrentProcessId, GetCurrentThreadId, OpenProcess,
+    QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
@@ -20,9 +20,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, SetWindowLongPtrW,
-    GWL_EXSTYLE, MA_NOACTIVATE, WM_MOUSEACTIVATE, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW,
+    GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, SetForegroundWindow,
+    SetWindowLongPtrW, GWL_EXSTYLE, MA_NOACTIVATE, WM_MOUSEACTIVATE, WS_EX_APPWINDOW,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 use crate::errors::{Failure, Result};
@@ -56,6 +56,41 @@ impl Target {
     pub fn is_still_foreground(&self) -> bool {
         let current = unsafe { GetForegroundWindow() };
         current.0 as isize == self.hwnd
+    }
+
+    /// Puts the target back in the foreground when one of Miro's own windows
+    /// is in front of it.
+    ///
+    /// The only way a Miro window can hold the foreground at the moment of
+    /// insertion is the user operating Miro's own UI - most often clicking
+    /// the overlay's Stop button, which the webview child answers by
+    /// activating the overlay's host window. That is not "the user went
+    /// somewhere else", so Miro hands focus back and types into the target.
+    /// Any genuine switch to another application keeps failing the focus
+    /// check as before; this never re-focuses on its behalf.
+    pub fn refocus_after_miro_intercept(&self) -> bool {
+        if self.belongs_to_this_process() || !foreground_is_ours() {
+            return false;
+        }
+
+        let handle = HWND(self.hwnd as *mut c_void);
+        let restored = unsafe { SetForegroundWindow(handle) };
+        if !restored.as_bool() {
+            unsafe {
+                // Re-set focus was refused: borrow foreground rights from
+                // the window that has them, try once more, then hand them
+                // back. Miro itself holds the foreground here, so this is
+                // the documented allowance for regaining focus.
+                let mut owner_pid = 0u32;
+                let fg_owner = GetForegroundWindow();
+                let fg_thread = GetWindowThreadProcessId(fg_owner, Some(&mut owner_pid));
+                let caller_thread = GetCurrentThreadId();
+                let _ = AttachThreadInput(caller_thread, fg_thread, true);
+                let _ = SetForegroundWindow(handle);
+                let _ = AttachThreadInput(caller_thread, fg_thread, false);
+            }
+        }
+        self.is_still_foreground()
     }
 
     pub fn belongs_to_this_process(&self) -> bool {
@@ -386,6 +421,21 @@ unsafe extern "system" fn overlay_subclass_proc(
         return LRESULT(MA_NOACTIVATE as isize);
     }
     unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
+}
+
+/// True when the foreground window right now belongs to Miro's own process.
+///
+/// Only Miro's overlay and settings windows can put this process in front,
+/// and only through a click on Miro's own UI, so this is what separates
+/// "clicked the Stop button" from "the user switched to another app".
+fn foreground_is_ours() -> bool {
+    let current = unsafe { GetForegroundWindow() };
+    if current.0.is_null() {
+        return false;
+    }
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(current, Some(&mut pid)) };
+    pid == unsafe { GetCurrentProcessId() }
 }
 
 /// A file path for a process id, used only to describe targets in logs.
