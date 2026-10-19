@@ -23,6 +23,7 @@ pub mod win;
 pub use win::Target;
 
 use crate::errors::{Failure, Result};
+use crate::logging::{self, Event};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -53,7 +54,17 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
         return Err(Failure::TranscriptEmpty);
     }
 
-    if !target.is_still_foreground() && !target.refocus_after_miro_intercept() {
+    if !target.is_still_foreground()
+        && !target.refocus_after_miro_intercept()
+        && !target.foreground_acceptable()
+    {
+        logging::event(Event::Failure {
+            code: "focus_changed",
+            detail: win::describe_focus_mismatch(
+                &target,
+                Target::capture_foreground().ok().as_ref(),
+            ),
+        });
         return Err(Failure::FocusChanged);
     }
 
@@ -85,7 +96,17 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
 /// not paste at all: replacing a clipboard it could not save would destroy data
 /// the user still expects to be there.
 pub fn insert_via_clipboard(text: &str, target: Target) -> Result<InsertOutcome> {
-    if !target.is_still_foreground() && !target.refocus_after_miro_intercept() {
+    if !target.is_still_foreground()
+        && !target.refocus_after_miro_intercept()
+        && !target.foreground_acceptable()
+    {
+        logging::event(Event::Failure {
+            code: "focus_changed",
+            detail: win::describe_focus_mismatch(
+                &target,
+                Target::capture_foreground().ok().as_ref(),
+            ),
+        });
         return Err(Failure::FocusChanged);
     }
 

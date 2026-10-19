@@ -28,8 +28,8 @@ pub const MAX_FILLER_WORD_LEN: usize = 32;
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
     #[default]
-    Toggle,
     PushToTalk,
+    Toggle,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -76,20 +76,23 @@ impl Default for Cleanup {
             enabled: true,
             normalize_whitespace: true,
             capitalize_sentences: true,
-            // Off by default: removing words is the one rule that can lose meaning.
-            remove_filler_words: false,
-               filler_words: vec![
-       "um".into(),
-       "umm".into(),
-       "uh".into(),
-       "uhh".into(),
-       "er".into(),
-       "erm".into(),
-       "hmm".into(),
-       "you know".into(),
-       "i mean".into(),
-       "like".into(),
-   ],
+            // On by default. "like", "you know" and "i mean" are only removed
+            // in a filler context - comma-delimited or at a clause boundary -
+            // so real uses of those words ("I like it", "Do you know him")
+            // keep their meaning; only soundalike stumbles are touched.
+            remove_filler_words: true,
+            filler_words: vec![
+                "um".into(),
+                "umm".into(),
+                "uh".into(),
+                "uhh".into(),
+                "er".into(),
+                "erm".into(),
+                "hmm".into(),
+                "you know".into(),
+                "i mean".into(),
+                "like".into(),
+            ],
         }
     }
 }
@@ -117,9 +120,11 @@ impl Default for Settings {
         Self {
             version: CONFIG_VERSION,
             shortcut: DEFAULT_SHORTCUT.to_string(),
-            mode: Mode::Toggle,
+            // "Ctrl+Alt" is modifiers-only, and a modifiers-only hotkey can
+            // only be delivered by push-to-talk: hold to talk, release to stop.
+            mode: Mode::PushToTalk,
             microphone: None,
-            model_id: "base.en".to_string(),
+            model_id: "small.en".to_string(),
             language: "en".to_string(),
             max_recording_seconds: 300,
             cleanup: Cleanup::default(),

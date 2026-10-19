@@ -115,7 +115,7 @@ pub const CATALOG: &[ModelSpec] = &[
         languages: "English",
         parameters: "74 M",
         quality: "balanced",
-        recommended: true,
+        recommended: false,
         multilingual: false,
     },
     ModelSpec {
@@ -125,7 +125,7 @@ pub const CATALOG: &[ModelSpec] = &[
         languages: "English",
         parameters: "244 M",
         quality: "accurate",
-        recommended: false,
+        recommended: true,
         multilingual: false,
     },
     ModelSpec {
@@ -545,8 +545,8 @@ mod tests {
             1,
             "exactly one model is the recommended default"
         );
-        assert_eq!(recommended[0].id, "base.en");
-        assert!(spec("base.en").is_some());
+        assert_eq!(recommended[0].id, "small.en");
+        assert!(spec("small.en").is_some());
         assert!(spec("nope").is_none());
     }
 

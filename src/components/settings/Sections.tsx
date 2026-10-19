@@ -9,7 +9,7 @@ import { LevelMeter } from "../overlay/LevelMeter";
 import { Banner, Button, Mono, Pill, ProgressBar, Row, Section, Segmented } from "./Controls";
 import { ShortcutField } from "./ShortcutField";
 
-const DEFAULT_SHORTCUT = "Ctrl+Alt+Space";
+const DEFAULT_SHORTCUT = "Ctrl+Alt";
 
 interface SectionProps {
   settings: Settings;

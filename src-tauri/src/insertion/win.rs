@@ -98,6 +98,30 @@ impl Target {
         self.pid == own
     }
 
+    /// True when typing may proceed even though the exact window captured at
+    /// dictation start is no longer in front.
+    ///
+    /// Two situation are still the user's intent rather than a focus change:
+    ///   * the foreground belongs to the same *process* as the target.
+    ///     Chromium/Electron applications replace their top-level HWND while
+    ///     staying in place (fullscreen switches, re-attaching tabs), and a
+    ///     click inside the same app lands focus on a sibling window. Either
+    ///     way the words belong to that app.
+    ///   * the recording itself started from one of Miro's own windows, in
+    ///     which case there is no meaningful place for text inside Miro, and
+    ///     whatever real application the user is looking at now is the target.
+    pub fn foreground_acceptable_for(&self, current: &Target) -> bool {
+        current.pid == self.pid || self.belongs_to_this_process()
+    }
+
+    /// The runtime form of [`Target::foreground_acceptable_for`], using
+    /// whatever window is in front at this moment.
+    pub fn foreground_acceptable(&self) -> bool {
+        Target::capture_foreground()
+            .map(|current| self.foreground_acceptable_for(&current))
+            .unwrap_or(false)
+    }
+
     /// Heuristic for the UIPI wall: a non-elevated process cannot open an
     /// elevated one for query access. Used to explain *why* typing failed
     /// rather than guessing at a generic error.
@@ -133,6 +157,27 @@ pub fn target_kind(target: &Target) -> &'static str {
         "elevated"
     } else {
         "app"
+    }
+}
+
+/// Names (program only, no paths, never any dictation content) the window
+/// dictation started in and the one that was in front when typing came due.
+/// This is what a `focus_changed` refusal is for, so the refusal itself says
+/// exactly what was captured and what moved.
+pub fn describe_focus_mismatch(target: &Target, current: Option<&Target>) -> String {
+    let name = |t: &Target| {
+        process_path(t.pid)
+            .as_deref()
+            .and_then(|path| {
+                std::path::Path::new(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+            })
+            .unwrap_or_else(|| target_kind(t).to_string())
+    };
+    match current {
+        Some(current) => format!("{} -> {}", name(target), name(current)),
+        None => format!("{} -> none", name(target)),
     }
 }
 
@@ -514,5 +559,43 @@ mod tests {
         assert!(is_low_surrogate(0xDFFF));
         assert!(!is_low_surrogate(0xD800));
         assert!(!is_high_surrogate(b'a' as u16));
+    }
+
+    #[test]
+    fn a_new_window_of_the_same_app_is_still_the_target() {
+        // The app recreated its top-level window, or the user clicked a
+        // sibling window of the same program: the words belong there.
+        let target = Target { hwnd: 100, pid: 42 };
+        assert!(target.foreground_acceptable_for(&Target { hwnd: 100, pid: 42 }));
+        assert!(target.foreground_acceptable_for(&Target { hwnd: 200, pid: 42 }));
+        // A different program is still a focus change.
+        assert!(!target.foreground_acceptable_for(&Target { hwnd: 300, pid: 43 }));
+    }
+
+    #[test]
+    fn dictation_started_from_miro_types_into_whatever_is_in_front() {
+        // Text held inside Miro's own process has no meaningful home there,
+        // so the window in front when the words arrive is the target.
+        let own = Target {
+            hwnd: 7,
+            pid: unsafe { GetCurrentProcessId() },
+        };
+        assert!(own.foreground_acceptable_for(&Target { hwnd: 900, pid: 55 }));
+        assert!(own.foreground_acceptable_for(&own));
+    }
+
+    #[test]
+    fn a_focus_mismatch_names_both_programs_or_falls_back() {
+        // A pid that cannot be opened (e.g. the system idle pseudo-process)
+        // falls back to the kind label instead of an executable name.
+        let target = Target {
+            hwnd: 1,
+            pid: 0xFFFF_FFFF,
+        };
+        assert_eq!(
+            describe_focus_mismatch(&target, None),
+            "elevated -> none",
+            "an unqueryable pid falls back to the content-free kind"
+        );
     }
 }

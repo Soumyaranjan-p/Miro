@@ -205,10 +205,7 @@ impl Capture {
                 Ok(outcome) => break outcome,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     if self.is_stopping()
-                        && grace_started
-                            .get_or_insert_with(Instant::now)
-                            .elapsed()
-                            >= STOP_GRACE
+                        && grace_started.get_or_insert_with(Instant::now).elapsed() >= STOP_GRACE
                     {
                         break CaptureOutcome::Failed(Failure::Internal(
                             "the audio thread did not report back in time".into(),
@@ -968,8 +965,8 @@ mod tests {
         // press: the old whole-clip fraction gate rejected exactly this, and
         // real dictation pauses trip it just the same.
         let mut samples = vec![0.0001f32; TARGET_SAMPLE_RATE as usize * 4];
-        for sample in samples[TARGET_SAMPLE_RATE as usize..TARGET_SAMPLE_RATE as usize * 2]
-            .iter_mut()
+        for sample in
+            samples[TARGET_SAMPLE_RATE as usize..TARGET_SAMPLE_RATE as usize * 2].iter_mut()
         {
             *sample = 0.2;
         }
@@ -985,7 +982,12 @@ mod tests {
         let window_max = TARGET_SAMPLE_RATE as usize * 17;
         let window_min = TARGET_SAMPLE_RATE as usize * 12;
         let mut samples = vec![0.0f32; TARGET_SAMPLE_RATE as usize * 30];
-        for (i, sample) in samples.iter_mut().enumerate().skip(window_min).take(window_max - window_min) {
+        for (i, sample) in samples
+            .iter_mut()
+            .enumerate()
+            .skip(window_min)
+            .take(window_max - window_min)
+        {
             *sample = 0.004 * (i as f64 / 40.0).sin() as f32;
         }
         assert!(!has_no_speech(&samples, 30_000));

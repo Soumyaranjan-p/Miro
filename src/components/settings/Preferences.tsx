@@ -10,7 +10,7 @@ interface SectionProps {
   update: (patch: SettingsPatch) => Promise<Settings>;
 }
 
-const FILLER_DEFAULT = "um, uh, erm, you know, like";
+const FILLER_DEFAULT = "um, umm, uh, uhh, er, erm, hmm, you know, i mean, like";
 
 export function TextSection({ settings, update }: SectionProps) {
   const cleanup = settings.cleanup;
@@ -60,7 +60,7 @@ export function TextSection({ settings, update }: SectionProps) {
           </Row>
           <Row
             label="Remove filler words"
-            hint="Off by default. Terms that look like fillers inside real words are left alone."
+            hint={'On by default. "like", "you know" and "i mean" are only removed in a filler context (comma-delimited or at a clause boundary), so meaning is preserved.'}
           >
             <Toggle
               label="Remove filler words"

@@ -688,7 +688,11 @@ mod tests {
 
     #[test]
     fn newlines_collapse_and_lines_are_trimmed() {
-        let out = process("first line   \n\n\n   second line", &cleanup(true));
+        // Filler removal is the field this test does not care about, so it is
+        // pinned explicitly instead of inheriting the default.
+        let mut options = cleanup(true);
+        options.remove_filler_words = false;
+        let out = process("first line   \n\n\n   second line", &options);
         assert_eq!(out, "First line\nSecond line");
     }
 
