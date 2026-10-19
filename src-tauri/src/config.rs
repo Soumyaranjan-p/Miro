@@ -18,7 +18,7 @@ use crate::logging::{self, Event};
 
 pub const CONFIG_VERSION: u32 = 1;
 pub const CONFIG_FILE: &str = "config.json";
-pub const DEFAULT_SHORTCUT: &str = "Ctrl+Alt+Space";
+pub const DEFAULT_SHORTCUT: &str = "Ctrl+Alt";
 pub const MIN_RECORDING_SECONDS: u32 = 30;
 pub const MAX_RECORDING_SECONDS: u32 = 600;
 pub const MAX_FILLER_WORDS: usize = 64;
@@ -78,13 +78,18 @@ impl Default for Cleanup {
             capitalize_sentences: true,
             // Off by default: removing words is the one rule that can lose meaning.
             remove_filler_words: false,
-            filler_words: vec![
-                "um".into(),
-                "uh".into(),
-                "erm".into(),
-                "you know".into(),
-                "like".into(),
-            ],
+               filler_words: vec![
+       "um".into(),
+       "umm".into(),
+       "uh".into(),
+       "uhh".into(),
+       "er".into(),
+       "erm".into(),
+       "hmm".into(),
+       "you know".into(),
+       "i mean".into(),
+       "like".into(),
+   ],
         }
     }
 }

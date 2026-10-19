@@ -10,6 +10,8 @@
 //!     a callback that discards it, so segment text has no route to stderr.
 //!   * `no_context` is set for the same reason: each dictation stands alone.
 //!   * Translation is always off. Miro transcribes; it does not translate.
+//!   * Beam search plus silence/hallucination guards favour accuracy over
+//!     raw speed. The initial prompt is a fixed constant, never user text.
 
 use std::path::Path;
 
@@ -19,6 +21,15 @@ use whisper_rs::{
 
 use super::EngineOptions;
 use crate::errors::{Failure, Result};
+
+/// A fixed style hint. It nudges Whisper toward punctuated, sentence-cased
+/// output and the correct spelling of common technical terms. It is a
+/// constant: nothing from a previous dictation ever enters it.
+const STYLE_PROMPT: &str =
+    "Hello, this is a sentence. I use TypeScript, JavaScript, GitHub, Node.js, and Kubernetes.";
+
+/// Segments whose no-speech probability is above this are treated as silence.
+const NO_SPEECH_THRESHOLD: f32 = 0.6;
 
 pub struct WhisperEngine {
     context: WhisperContext,
@@ -50,7 +61,10 @@ impl WhisperEngine {
             .create_state()
             .map_err(|error| Failure::ModelLoad(describe(error)))?;
 
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        let mut params = FullParams::new(SamplingStrategy::BeamSearch {
+            beam_size: 5,
+            patience: -1.0,
+        });
         params.set_n_threads(options.threads as i32);
         params.set_translate(false);
         params.set_no_context(true);
@@ -59,9 +73,20 @@ impl WhisperEngine {
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
 
+        // Silence and hallucination guards: stops phantom output such as
+        // "Thank you." or "[BLANK_AUDIO]" on quiet or empty clips.
+        params.set_no_speech_thold(NO_SPEECH_THRESHOLD);
+        params.set_suppress_blank(true);
+        params.set_suppress_nst(true);
+
         match options.language.as_deref() {
             Some("auto") | Some("") | None => params.set_detect_language(true),
             Some(language) => params.set_language(Some(language)),
+        }
+
+        // The style prompt is English, so only use it for English dictation.
+        if matches!(options.language.as_deref(), Some("en")) {
+            params.set_initial_prompt(STYLE_PROMPT);
         }
 
         state
