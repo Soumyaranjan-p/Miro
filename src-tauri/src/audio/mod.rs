@@ -42,6 +42,14 @@ const MIN_SPEECH_MS: u128 = 250;
 /// sound. Judged as an absolute count, not a share of the clip, so a short
 /// utterance followed by a pause still passes.
 const MIN_LOUD_WINDOWS: usize = 3;
+/// How long the audio thread may take to wrap up (downmix, resample, checks)
+/// once a stop was asked for, before the supervisor declares it hung.
+const STOP_GRACE: Duration = Duration::from_secs(30);
+/// Peak level a quiet recording is amplified to before the engine sees it.
+const TARGET_PEAK: f32 = 0.6;
+/// Ceiling on that amplification, so a noise-only clip is never inflated
+/// into something that looks like speech.
+const MAX_GAIN: f32 = 32.0;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -185,14 +193,35 @@ impl Capture {
         if self.joined {
             return CaptureOutcome::Cancelled;
         }
-        let outcome = self
-            .finished
-            .recv_timeout(Duration::from_secs(20))
-            .unwrap_or_else(|_| {
-                CaptureOutcome::Failed(Failure::Internal(
-                    "the audio thread did not report back in time".into(),
-                ))
-            });
+        // The capture thread reports back when the recording ends, which is
+        // whenever the user asks for it - a dictation far longer than any
+        // fixed timeout is a normal thing to wait through, not a hung thread.
+        // So a deadline runs only from the moment a stop is in flight: after
+        // that the thread just owes the wrap-up (downmix, resample, checks),
+        // which gets a generous grace period.
+        let mut grace_started: Option<Instant> = None;
+        let outcome = loop {
+            match self.finished.recv_timeout(Duration::from_secs(1)) {
+                Ok(outcome) => break outcome,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if self.is_stopping()
+                        && grace_started
+                            .get_or_insert_with(Instant::now)
+                            .elapsed()
+                            >= STOP_GRACE
+                    {
+                        break CaptureOutcome::Failed(Failure::Internal(
+                            "the audio thread did not report back in time".into(),
+                        ));
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    break CaptureOutcome::Failed(Failure::Internal(
+                        "the audio thread did not report back in time".into(),
+                    ));
+                }
+            }
+        };
         if let Some(handle) = self.thread.take() {
             let _ = handle.join();
         }
@@ -655,6 +684,7 @@ fn run_capture(
     let mut resampled = resampler.process(&mono, false);
     resampled.extend(resampler.process(&[], true)); // flush the tail
     discard(mono);
+    normalize_peak(&mut resampled);
     let expected_16k = TARGET_SAMPLE_RATE as u128 * duration_ms / 1000;
     eprintln!(
         "[miro-audio] resampled: {} samples at {} Hz (expected ~{expected_16k})",
@@ -665,13 +695,12 @@ fn run_capture(
     if has_no_speech(&resampled, duration_ms) {
         eprintln!(
             "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud windows {} of {} \
-             (need {}, speech rms cutoff {}, whole-clip rms {:.4})",
+             (need {}, speech rms cutoff {}) - nothing over the speech floor",
             resampled.len(),
             loud_windows(&resampled),
             resampled.len() / (TARGET_SAMPLE_RATE as usize / 50).max(1),
             MIN_LOUD_WINDOWS,
-            SILENCE_RMS,
-            rms(&resampled)
+            SILENCE_RMS
         );
         discard(resampled);
         return CaptureOutcome::Failed(Failure::AudioEmpty);
@@ -697,18 +726,37 @@ fn take_samples(shared: &Shared) -> Vec<f32> {
 /// True when a clip is too short or too quiet to be speech.
 ///
 /// Speech is judged by an absolute count of audible 20 ms windows, not by a
-/// share of the whole clip, so a few spoken words followed by a pause still
-/// pass - what matters is that real sound is present, not that the user
-/// talked for the entire recording. The whole-clip RMS check catches a clip
-/// that is pure room tone however it is windowed.
+/// share of the whole clip and not by the clip's average level: a few spoken
+/// words inside a long recording average out below any whole-clip threshold,
+/// so only "was there real sound anywhere" is a fair test. The expected norm
+/// is for clips on a healthy mic to enter this function at a natural volume.
 pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
     if samples.is_empty() || duration_ms < MIN_SPEECH_MS {
         return true;
     }
-    if rms(samples) <= SILENCE_RMS {
-        return true;
-    }
     loud_windows(samples) < MIN_LOUD_WINDOWS
+}
+
+/// Brings a quietly recorded clip up to a level the engine can use.
+///
+/// A laptop mic at a low Windows input level records speech around -50 dBFS;
+/// the engine expects ordinary conversation levels. Peak-normalising the
+/// clip - with a gain ceiling so a noise-only recording is never inflated
+/// into something that looks like speech - puts a quiet voice back inside
+/// the engine's comfort zone. A clip that is already loud enough is left
+/// exactly as recorded.
+fn normalize_peak(samples: &mut [f32]) {
+    let measured = peak(samples);
+    if measured > 1e-6 && measured < TARGET_PEAK {
+        let gain = (TARGET_PEAK / measured).min(MAX_GAIN);
+        eprintln!(
+            "[miro-audio] normalize: peak {measured:.4} x{gain:.1} -> peak {:.4}",
+            (measured * gain).min(TARGET_PEAK)
+        );
+        for sample in samples.iter_mut() {
+            *sample = (*sample * gain).clamp(-1.0, 1.0);
+        }
+    }
 }
 
 /// Count of 20 ms windows over the speech RMS threshold.
@@ -926,6 +974,55 @@ mod tests {
             *sample = 0.2;
         }
         assert!(!has_no_speech(&samples, 4000));
+    }
+
+    #[test]
+    fn a_faint_voice_in_a_long_quiet_recording_is_speech() {
+        // The field failure, rebuilt: ~5 s of a voice barely over the speech
+        // floor inside a 30 s recording. The whole-clip RMS came in at
+        // ~0.0012, under any average-level cutoff, yet 250 windows carried
+        // sound. Only the window count is a fair judge of that clip.
+        let window_max = TARGET_SAMPLE_RATE as usize * 17;
+        let window_min = TARGET_SAMPLE_RATE as usize * 12;
+        let mut samples = vec![0.0f32; TARGET_SAMPLE_RATE as usize * 30];
+        for (i, sample) in samples.iter_mut().enumerate().skip(window_min).take(window_max - window_min) {
+            *sample = 0.004 * (i as f64 / 40.0).sin() as f32;
+        }
+        assert!(!has_no_speech(&samples, 30_000));
+    }
+
+    #[test]
+    fn a_quiet_clip_is_brought_up_to_a_usable_level() {
+        let mut samples = vec![0.0f32; 16_000];
+        samples[100] = 0.02;
+        samples[101] = -0.01;
+        normalize_peak(&mut samples);
+        let measured = peak(&samples);
+        assert!(
+            (measured - TARGET_PEAK).abs() < 0.01,
+            "peak {measured}, expected ~{TARGET_PEAK}"
+        );
+    }
+
+    #[test]
+    fn a_loud_clip_is_left_alone() {
+        let mut samples = vec![0.0f32; 16_000];
+        samples[100] = 0.8;
+        samples[101] = -0.2;
+        let before = samples.clone();
+        normalize_peak(&mut samples);
+        assert_eq!(samples, before);
+    }
+
+    #[test]
+    fn a_noise_floor_clip_is_never_amplified_into_speech() {
+        let mut samples = vec![0.00001f32; 16_000];
+        normalize_peak(&mut samples);
+        let measured = peak(&samples);
+        assert!(
+            measured < 0.01,
+            "the gain ceiling must keep noise quiet, got peak {measured}"
+        );
     }
 
     #[test]
