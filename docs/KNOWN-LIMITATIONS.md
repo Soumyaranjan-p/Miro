@@ -92,10 +92,11 @@ Miro logs it and the overlay's Cancel button still works.
 - **No punctuation is invented.** If the engine does not punctuate, Miro does
   not guess. Clean-up repairs spacing and capitalisation; it never adds a comma
   or a full stop that was not spoken.
-- **Filler-word removal can change meaning if used carelessly.** It is off by
-  default for that reason. Terms inside protected words are left alone, but
-  removing the word "like" from "I like this" is what you asked for when you
-  turn it on.
+- **Filler removal is on by default.** The unambiguous fillers ("um", "uh" and
+  friends) are removed wherever they appear as whole words. "like", "you know"
+  and "i mean" are only removed in a filler context - comma-delimited or at a
+  clause boundary - so real uses of those words keep their meaning. Terms
+  inside protected words are left alone.
 - **Very short or quiet captures are reported as "no speech detected"** rather
   than being inserted as an empty transcript. A recording that reached the
   engine but produced no words is reported separately, as "nothing was

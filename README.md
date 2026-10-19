@@ -14,8 +14,9 @@ in memory and are never written to disk.
 
 - **Global shortcut.** Toggle mode (press to start, press to stop) or
   push-to-talk (hold to talk). Configurable, with real conflict detection.
-- **Local transcription.** whisper.cpp with a quantised `base.en` model by
-  default; larger and multilingual models are opt-in downloads you confirm.
+- **Local transcription.** whisper.cpp with a quantised `small.en` model by
+  default; smaller, larger and multilingual models are opt-in downloads you
+  confirm.
 - **Types into the app you were in.** Unicode `SendInput` first, with a
   clipboard fallback that saves and restores your clipboard.
 - **A floating overlay** that shows recording, processing and errors, sits above

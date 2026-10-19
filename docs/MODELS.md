@@ -11,8 +11,8 @@ before you commit to anything.
 | Model | Languages | Parameters | Quantisation | Approx. size | Notes |
 |---|---|---|---|---|---|
 | `tiny.en` | English | 39 M | q5_1 | ~32 MB | fastest, noticeably less accurate |
-| `base.en` | English | 74 M | q5_1 | ~60 MB | **the default**: best speed/accuracy balance for dictation |
-| `small.en` | English | 244 M | q5_1 | ~190 MB | better punctuation and names, roughly 2-3x slower |
+| `base.en` | English | 74 M | q5_1 | ~60 MB | best speed/accuracy balance |
+| `small.en` | English | 244 M | q5_1 | ~190 MB | **the default**: better punctuation and names, roughly 2-3x slower than `base.en` |
 | `medium.en` | English | 769 M | q5_0 | ~540 MB | high accuracy, needs a fast CPU |
 | `tiny` | Multilingual | 39 M | q5_1 | ~32 MB | language detection, low accuracy |
 | `base` | Multilingual | 74 M | q5_1 | ~60 MB | good starting point for non-English |
