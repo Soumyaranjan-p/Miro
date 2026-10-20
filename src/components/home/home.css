@@ -155,23 +155,7 @@ html[data-view="home"] body {
 
 .miro-home__mascot {
   position: relative;
-  filter: drop-shadow(0 18px 44px rgb(120 150 255 / 0.25)) drop-shadow(0 6px 18px rgb(255 255 255 / 0.2));
-}
-
-/* Theme the mascot for the night stage via its CSS-variable seam. The SVG
-   geometry and motion stay untouched; only the palette is a home-scene concern.
-   (Colors match the delivered design: a soft white orb with dark eyes.) */
-.miro-home__mascot {
-  --miro-mascot-sphere-0: #ffffff;
-  --miro-mascot-sphere-1: #f3f5fb;
-  --miro-mascot-sphere-2: #e2e7f2;
-  --miro-mascot-rim: rgb(255 255 255 / 0.85);
-  --miro-mascot-rim-accent: #59b8ff;
-  --miro-mascot-eye: #222b45;
-  --miro-mascot-accent: #59b8ff;
-  --miro-mascot-error-eye: #b9c2d6;
-  --miro-mascot-drop: #8ab8ff;
-  --miro-mascot-highlight: rgb(255 255 255 / 0.5);
+  filter: drop-shadow(0 18px 44px rgb(120 150 255 / 0.25)) drop-shadow(0 6px 18px rgb(0 0 0 / 0.35));
 }
 
 @keyframes miro-home-breathe {
