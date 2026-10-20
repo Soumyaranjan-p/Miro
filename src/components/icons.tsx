@@ -149,3 +149,52 @@ export const IconWaveform = (p: IconProps) => (
     <path d="M8 8.5v7M11.5 5.5v13M15 8v8M18.5 10.5v3" />
   </Svg>
 );
+
+export const IconHome = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 10.5 12 4l7.5 6.5" />
+    <path d="M6.5 9.5V19a1 1 0 001 1h9a1 1 0 001-1V9.5" />
+    <path d="M10 20v-5.5h4V20" />
+  </Svg>
+);
+
+export const IconChat = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 4.5c4.7 0 8.5 3.2 8.5 7.2 0 4-3.8 7.2-8.5 7.2-1 0-2-.14-2.9-.4L4.5 20l1.2-3.2a6.9 6.9 0 01-2.2-5.1c0-4 3.8-7.2 8.5-7.2z" />
+  </Svg>
+);
+
+export const IconPlus = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+);
+
+export const IconGear = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M12 3.4l1 2.3a6.4 6.4 0 011.9.8l2.4-1 2 2-1 2.4c.36.6.63 1.23.8 1.9l2.3.9v2.6l-2.3.9a6.4 6.4 0 01-.8 1.9l1 2.4-2 2-2.4-1a6.4 6.4 0 01-1.9.8l-.9 2.3h-2.6l-.9-2.3a6.4 6.4 0 01-1.9-.8l-2.4 1-2-2 1-2.4a6.4 6.4 0 01-.8-1.9l-2.3-.9v-2.6l2.3-.9c.17-.67.44-1.3.8-1.9l-1-2.4 2-2 2.4 1a6.4 6.4 0 011.9-.8l.9-2.3h2.6z" />
+  </Svg>
+);
+
+export const IconVolume = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 9.5v5h3l4.5 3.7V5.8L7 9.5H4z" />
+    <path d="M15.5 9.2a4 4 0 010 5.6" />
+    <path d="M18 7a7 7 0 010 10" />
+  </Svg>
+);
+
+export const IconVolumeOff = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 9.5v5h3l4.5 3.7V5.8L7 9.5H4z" />
+    <path d="M16 9.5l4.5 5M20.5 9.5l-4.5 5" />
+  </Svg>
+);
+
+export const IconBackArrow = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M11.5 5.5L5 12l6.5 6.5" />
+    <path d="M5.6 12H19" />
+  </Svg>
+);

@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { SettingsApp } from "./components/settings/SettingsApp";
+import { HomeApp } from "./components/home/HomeApp";
 import { applyTheme } from "./lib/theme";
 import "./styles/theme.css";
 
@@ -12,7 +12,7 @@ const container = document.getElementById("root");
 if (container) {
   createRoot(container).render(
     <StrictMode>
-      <SettingsApp />
+      <HomeApp />
     </StrictMode>,
   );
 }
