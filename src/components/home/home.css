@@ -13,6 +13,7 @@
   --home-ink-dim: rgb(234 238 251 / 0.66);
   --home-ink-faint: rgb(234 238 251 / 0.4);
   --home-glow: rgb(196 214 255 / 0.55);
+  --home-grid: rgb(126 155 255 / 0.15);
   --home-accent: #ff4d5e;
 }
 
@@ -31,7 +32,7 @@ html[data-view="home"] body {
   background: #05081a;
 }
 
-/* --- atmosphere: haze, dust, star particles -------------------------------- */
+/* --- atmosphere: haze, dust, star particles, grid floor -------------------- */
 
 .miro-home__haze {
   position: absolute;
@@ -69,6 +70,39 @@ html[data-view="home"] body {
   animation: miro-home-twinkle var(--duration, 8s) ease-in-out infinite;
   animation-delay: var(--delay, 0s);
   pointer-events: none;
+}
+
+.miro-home__grid-run {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.miro-home__grid {
+  position: absolute;
+  left: -50%;
+  right: -50%;
+  top: 0;
+  height: 200%;
+  background:
+    repeating-linear-gradient(to right, var(--home-grid) 0 1px, transparent 1px 68px),
+    repeating-linear-gradient(to bottom, var(--home-grid) 0 1px, transparent 1px 68px);
+  transform: perspective(520px) rotateX(64deg);
+  transform-origin: 50% 0%;
+  mask-image: linear-gradient(to bottom, transparent 0%, rgb(0 0 0 / 0.7) 46%, rgb(0 0 0 / 0.98) 100%);
+  animation: miro-home-grid-drift 36s linear infinite;
+}
+
+@keyframes miro-home-grid-drift {
+  from {
+    transform: perspective(520px) rotateX(64deg) translateY(0);
+  }
+  to {
+    transform: perspective(520px) rotateX(64deg) translateY(-68px);
+  }
 }
 
 @keyframes miro-home-twinkle {
@@ -345,6 +379,9 @@ html[data-view="home"] body {
 .miro-home.is-paused .miro-home__mascot-float {
   animation-play-state: paused !important;
 }
+.miro-home.is-paused .miro-home__grid {
+  animation-play-state: paused !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .miro-home__particle {
@@ -359,6 +396,9 @@ html[data-view="home"] body {
   .miro-home__mascot-float {
     animation: none;
     transform: translateY(0);
+  }
+  .miro-home__grid {
+    animation: none;
   }
   .miro-home__corner-sparkle {
     animation: none;

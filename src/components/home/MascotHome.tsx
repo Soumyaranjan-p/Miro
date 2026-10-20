@@ -231,6 +231,10 @@ export function MascotHome({
         />
       ))}
 
+      <div className="miro-home__grid-run">
+        <div className="miro-home__grid" />
+      </div>
+
       <div className="miro-home__mascot-run">
         <div className="miro-home__glow" />
         <div className="miro-home__halo" />
