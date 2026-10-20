@@ -13,7 +13,7 @@
   --home-ink-dim: rgb(234 238 251 / 0.66);
   --home-ink-faint: rgb(234 238 251 / 0.4);
   --home-glow: rgb(196 214 255 / 0.55);
-  --home-grid: rgb(126 155 255 / 0.09);
+  --home-grid: rgb(126 155 255 / 0.15);
   --home-accent: #ff4d5e;
 }
 
@@ -92,7 +92,7 @@ html[data-view="home"] body {
     repeating-linear-gradient(to bottom, var(--home-grid) 0 1px, transparent 1px 68px);
   transform: perspective(520px) rotateX(64deg);
   transform-origin: 50% 0%;
-  mask-image: linear-gradient(to bottom, transparent 0%, rgb(0 0 0 / 0.55) 46%, rgb(0 0 0 / 0.95) 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, rgb(0 0 0 / 0.7) 46%, rgb(0 0 0 / 0.98) 100%);
   animation: miro-home-grid-drift 36s linear infinite;
 }
 
