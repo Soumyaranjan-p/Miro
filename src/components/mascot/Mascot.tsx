@@ -14,7 +14,8 @@ const PILL_BASE_HEIGHT = 56;
 const PILL_BASE_Y = 68;
 const PILL_GROWTH = 0.2;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-const GREETING_FALLBACK_MS = 1500;
+/** The greeting holds on screen for two seconds before it settles away. */
+const GREETING_FALLBACK_MS = 2000;
 
 function clamp01(value: number): number {
   if (Number.isNaN(value)) return 0;
