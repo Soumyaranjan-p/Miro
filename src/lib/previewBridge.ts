@@ -25,6 +25,8 @@ const settings: Settings = {
   version: 1,
   shortcut: "Ctrl+Alt",
   mode: "push_to_talk",
+  homeMode: "home",
+  soundOn: true,
   microphone: null,
   modelId: "small.en",
   language: "en",

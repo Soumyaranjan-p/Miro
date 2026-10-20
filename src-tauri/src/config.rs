@@ -34,6 +34,16 @@ pub enum Mode {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
+pub enum HomeMode {
+    /// Normal Mode: dictation as it works today.
+    #[default]
+    Home,
+    /// Intent Mode: rendered as a "coming soon" placeholder for now.
+    Intent,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum Theme {
     #[default]
     System,
@@ -103,6 +113,10 @@ pub struct Settings {
     pub version: u32,
     pub shortcut: String,
     pub mode: Mode,
+    /// Which screen the home window opens on: dictation home or Intent Mode.
+    pub home_mode: HomeMode,
+    /// Volume-cue toggle exposed by the home window's sound button.
+    pub sound_on: bool,
     /// `None` follows the Windows default input device.
     pub microphone: Option<String>,
     pub model_id: String,
@@ -123,6 +137,8 @@ impl Default for Settings {
             // "Ctrl+Alt" is modifiers-only, and a modifiers-only hotkey can
             // only be delivered by push-to-talk: hold to talk, release to stop.
             mode: Mode::PushToTalk,
+            home_mode: HomeMode::Home,
+            sound_on: true,
             microphone: None,
             model_id: "small.en".to_string(),
             language: "en".to_string(),
@@ -143,6 +159,8 @@ impl Default for Settings {
 pub struct SettingsPatch {
     pub shortcut: Option<String>,
     pub mode: Option<Mode>,
+    pub home_mode: Option<HomeMode>,
+    pub sound_on: Option<bool>,
     #[serde(deserialize_with = "double_option")]
     pub microphone: Option<Option<String>>,
     pub model_id: Option<String>,
@@ -213,6 +231,12 @@ impl Settings {
         }
         if let Some(mode) = patch.mode {
             self.mode = mode;
+        }
+        if let Some(home_mode) = patch.home_mode {
+            self.home_mode = home_mode;
+        }
+        if let Some(sound_on) = patch.sound_on {
+            self.sound_on = sound_on;
         }
         if let Some(microphone) = patch.microphone {
             self.microphone = microphone
@@ -368,6 +392,17 @@ mod tests {
         assert!(!dir.join(CONFIG_FILE).exists());
         assert!(dir.join("config.invalid.json").exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn home_mode_and_sound_toggle_persist_through_patches() {
+        let mut settings = Settings::default();
+        let patch: SettingsPatch =
+            serde_json::from_str(r#"{"homeMode":"intent","soundOn":false}"#).unwrap();
+        settings.apply(patch);
+
+        assert_eq!(settings.home_mode, HomeMode::Intent);
+        assert!(!settings.sound_on);
     }
 
     #[test]

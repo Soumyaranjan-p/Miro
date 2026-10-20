@@ -9,6 +9,8 @@
 export type DictationMode = "toggle" | "push_to_talk";
 export type ThemePreference = "system" | "light" | "dark";
 export type OverlayPosition = "bottom-center" | "bottom-right" | "center";
+/** Which screen the home window opens on: the dictation home or Intent Mode. */
+export type HomeMode = "home" | "intent";
 
 /** Deterministic, LLM-free text cleanup. `enabled: false` means raw engine text. */
 export interface CleanupOptions {
@@ -24,6 +26,10 @@ export interface Settings {
   /** Canonical `Ctrl+Alt+Space` form, stored as the plugin's shortcut string. */
   shortcut: string;
   mode: DictationMode;
+  /** Home window: last selected pill mode. */
+  homeMode: HomeMode;
+  /** Home window sound toggle. */
+  soundOn: boolean;
   /** cpal device id, or null for the system default device. */
   microphone: string | null;
   modelId: string;
