@@ -148,7 +148,6 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let (removed, failed) = privacy::sweep_temp();
 
     let config = ConfigStore::new(&config_dir);
-    let existed = config.path().exists();
     let settings = config.load();
 
     let app_state = AppState::new(config, settings.clone());
@@ -210,10 +209,9 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     handle.state::<Session>().refresh_runtime(handle);
 
-    // First run: there is nothing configured yet, so open Settings.
-    if !existed {
-        windows::show_settings(handle);
-    }
+    // The home window is the app's face: show it at startup. The tray keeps
+    // it available afterwards; on first run it is simply empty until shown.
+    windows::show_settings(handle);
 
     Ok(())
 }

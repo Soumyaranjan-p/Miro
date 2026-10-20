@@ -147,7 +147,7 @@ pub fn toggle_settings(app: &AppHandle) {
 pub fn create_tray(app: &AppHandle) -> Result<()> {
     let toggle = MenuItem::with_id(app, "toggle", "Start dictation", true, None::<&str>)
         .map_err(|e| Failure::Internal(format!("tray item: {e}")))?;
-    let settings = MenuItem::with_id(app, "settings", "Show settings", true, None::<&str>)
+    let settings = MenuItem::with_id(app, "settings", "Show Miro", true, None::<&str>)
         .map_err(|e| Failure::Internal(format!("tray item: {e}")))?;
     let quit = MenuItem::with_id(app, "quit", "Quit Miro", true, None::<&str>)
         .map_err(|e| Failure::Internal(format!("tray item: {e}")))?;
