@@ -254,6 +254,29 @@ pub fn resume_shortcut(app: AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
+// ------------------------------------------------------------------ splash --
+
+/// The splash webview has painted its panel; reveal the window unless the
+/// fallback timer already did. Idempotent by design.
+#[tauri::command]
+pub async fn notify_splash_ready(
+    app: AppHandle,
+    splash: tauri::State<'_, crate::state::SplashFlow>,
+) -> CmdResult<()> {
+    crate::windows::show_splash(&app, &splash);
+    Ok(())
+}
+
+/// The splash motion finished; hide the window. Idempotent by design.
+#[tauri::command]
+pub async fn splash_finished(
+    app: AppHandle,
+    splash: tauri::State<'_, crate::state::SplashFlow>,
+) -> CmdResult<()> {
+    crate::windows::finish_splash(&app, &splash);
+    Ok(())
+}
+
 // ------------------------------------------------------------------ models --
 
 #[tauri::command]

@@ -306,6 +306,10 @@ export const previewBridge: MiroBridge = {
   async openExternal(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
   },
+  // The preview harness has no windows to reveal or hide; the splash plays out
+  // purely in CSS when its page is opened directly in a browser.
+  async notifySplashReady() {},
+  async splashFinished() {},
   on,
 };
 

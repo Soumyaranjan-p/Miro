@@ -17,10 +17,23 @@ use crate::insertion::win;
 
 pub const OVERLAY_LABEL: &str = "overlay";
 pub const SETTINGS_LABEL: &str = "main";
+pub const SPLASH_LABEL: &str = "splash";
 const OVERLAY_WIDTH: f64 = 380.0;
 const OVERLAY_HEIGHT: f64 = 132.0;
 /// Gap between the overlay and the edge of the work area.
 const OVERLAY_MARGIN: i32 = 28;
+
+/// The splash panel: a small square that slides in on the right edge of the
+/// primary monitor while the mascot greets the user, then slides away again.
+const SPLASH_SIZE: f64 = 220.0;
+/// Gap between the splash panel and the right edge of the work area.
+const SPLASH_MARGIN: i32 = 10;
+/// If the webview has not reported the panel as painted after this long,
+/// reveal the window anyway; a blank flash beats no splash at all.
+const SPLASH_READY_FALLBACK_MS: u64 = 300;
+/// Shows the slide-in (260ms), the greeting hold (2000ms) and the slide-out
+/// (300ms), rounded up with slack so the webview always finishes first.
+const SPLASH_TOTAL_MS: u64 = 2_700;
 
 /// Creates the overlay window, hidden, and makes it non-activating.
 pub fn create_overlay(app: &AppHandle) -> Result<WebviewWindow> {
@@ -58,6 +71,110 @@ pub fn create_settings(app: &AppHandle) -> Result<WebviewWindow> {
             .build()
             .map_err(|e| Failure::Internal(format!("create settings window: {e}")))?;
     Ok(window)
+}
+
+/// Creates the splash window, hidden, on the first launch of the process; a
+/// window already managed under the splash label is reused untouched.
+///
+/// Like the overlay it never activates, never shows in the taskbar and has no
+/// shadow - but it is pure decoration, so clicks pass through entirely.
+pub fn create_or_take_splash(app: &AppHandle) -> Result<WebviewWindow> {
+    if let Some(existing) = app.get_webview_window(SPLASH_LABEL) {
+        return Ok(existing);
+    }
+
+    let window =
+        WebviewWindowBuilder::new(app, SPLASH_LABEL, WebviewUrl::App("splash.html".into()))
+            .title("Miro")
+            .inner_size(SPLASH_SIZE, SPLASH_SIZE)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .resizable(false)
+            .shadow(false)
+            .focused(false)
+            .visible(false)
+            .build()
+            .map_err(|e| Failure::Internal(format!("create splash window: {e}")))?;
+
+    let hwnd = raw_hwnd(&window)?;
+    win::make_non_activating(hwnd)?;
+    let _ = window.set_ignore_cursor_events(true);
+
+    Ok(window)
+}
+
+/// Reveals the splash once: right-edge of the primary monitor, vertically
+/// centred. The webview reports when the panel is painted; this is a no-op if
+/// the fallback timer got there first, so the motion can never restart.
+pub fn show_splash(app: &AppHandle, splash: &crate::state::SplashFlow) {
+    if !splash.begin_reveal() {
+        return;
+    }
+    let Some(window) = app.get_webview_window(SPLASH_LABEL) else {
+        return;
+    };
+    if let Err(failure) = place_splash(&window) {
+        crate::logging::event(crate::logging::Event::Failure {
+            code: failure.code().as_str(),
+            detail: failure.detail().unwrap_or_default(),
+        });
+    }
+    // Showing a non-activating window does not move focus.
+    let _ = window.show();
+}
+
+/// Ends the splash sequence once. The window is hidden rather than destroyed
+/// so the webview is still there, fully loaded, at the next launch.
+pub fn finish_splash(app: &AppHandle, splash: &crate::state::SplashFlow) {
+    if !splash.begin_finish() {
+        return;
+    }
+    if let Some(window) = app.get_webview_window(SPLASH_LABEL) {
+        let _ = window.hide();
+    }
+}
+
+/// The full launch splash: reveals the window from the fallback timer if the
+/// webview has not reported ready, then hides it once the sequence is over.
+pub fn run_splash_sequence(app: &AppHandle, splash: &crate::state::SplashFlow) {
+    let app = app.clone();
+    let splash = splash.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(SPLASH_READY_FALLBACK_MS));
+        show_splash(&app, &splash);
+        std::thread::sleep(std::time::Duration::from_millis(
+            SPLASH_TOTAL_MS - SPLASH_READY_FALLBACK_MS,
+        ));
+        finish_splash(&app, &splash);
+    });
+}
+
+fn place_splash(window: &WebviewWindow) -> Result<()> {
+    let monitor = window
+        .primary_monitor()
+        .map_err(|e| Failure::Internal(format!("splash monitor: {e}")))?
+        .ok_or_else(|| Failure::Internal("no primary monitor available".into()))?;
+
+    let size = window
+        .outer_size()
+        .map_err(|e| Failure::Internal(format!("splash size: {e}")))?;
+    let scale = monitor.scale_factor();
+    let margin = ((SPLASH_MARGIN as f64) * scale).round() as i32;
+
+    let origin = monitor.position();
+    let bounds = monitor.size();
+    let x = origin.x + bounds.width as i32 - size.width as i32 - margin;
+    let y = (origin.y + (bounds.height as i32 - size.height as i32) / 2).clamp(
+        origin.y,
+        origin.y + bounds.height as i32 - size.height as i32,
+    );
+
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|e| Failure::Internal(format!("place splash: {e}")))?;
+    Ok(())
 }
 
 fn raw_hwnd(window: &WebviewWindow) -> Result<isize> {

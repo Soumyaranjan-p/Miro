@@ -62,6 +62,10 @@ export interface MiroBridge {
   openModelsFolder(): Promise<void>;
   openAppDataFolder(): Promise<void>;
   openExternal(url: string): Promise<void>;
+  /** The splash panel has rendered; Rust may reveal the splash window now. */
+  notifySplashReady(): Promise<void>;
+  /** The splash sequence finished; Rust should hide the splash window. */
+  splashFinished(): Promise<void>;
   on<T>(event: MiroEventName, handler: (payload: T) => void): () => void;
 }
 
@@ -110,6 +114,8 @@ const tauriBridge: MiroBridge = {
   openModelsFolder: () => invoke("open_models_folder"),
   openAppDataFolder: () => invoke("open_app_data_folder"),
   openExternal: (url) => invoke("open_external", { url }),
+  notifySplashReady: () => invoke("notify_splash_ready"),
+  splashFinished: () => invoke("splash_finished"),
   on: subscribe,
 };
 
@@ -153,6 +159,8 @@ export const ipc: MiroBridge = {
   openModelsFolder: async () => (await bridge()).openModelsFolder(),
   openAppDataFolder: async () => (await bridge()).openAppDataFolder(),
   openExternal: async (url) => (await bridge()).openExternal(url),
+  notifySplashReady: async () => (await bridge()).notifySplashReady(),
+  splashFinished: async () => (await bridge()).splashFinished(),
   on: <T,>(event: MiroEventName, handler: (payload: T) => void) => subscribe<T>(event, handler),
 };
 
