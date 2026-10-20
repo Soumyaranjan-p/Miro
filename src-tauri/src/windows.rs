@@ -50,7 +50,7 @@ pub fn create_overlay(app: &AppHandle) -> Result<WebviewWindow> {
 pub fn create_settings(app: &AppHandle) -> Result<WebviewWindow> {
     let window =
         WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
-            .title("Miro Settings")
+            .title("Miro")
             .inner_size(820.0, 760.0)
             .min_inner_size(620.0, 520.0)
             .visible(false)
