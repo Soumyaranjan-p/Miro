@@ -23,11 +23,11 @@ const OVERLAY_HEIGHT: f64 = 132.0;
 /// Gap between the overlay and the edge of the work area.
 const OVERLAY_MARGIN: i32 = 28;
 
-/// The splash panel: a small square that slides in on the right edge of the
-/// primary monitor while the mascot greets the user, then slides away again.
-const SPLASH_SIZE: f64 = 220.0;
-/// Gap between the splash panel and the right edge of the work area.
-const SPLASH_MARGIN: i32 = 10;
+/// The splash panel: a wide bar at the top of the primary monitor.
+const SPLASH_WIDTH: f64 = 1000.0;
+const SPLASH_HEIGHT: f64 = 200.0;
+/// Gap between the splash panel and the top edge of the work area.
+const SPLASH_MARGIN: i32 = 40;
 /// If the webview has not reported the panel as painted after this long,
 /// reveal the window anyway; a blank flash beats no splash at all.
 const SPLASH_READY_FALLBACK_MS: u64 = 300;
@@ -86,7 +86,7 @@ pub fn create_or_take_splash(app: &AppHandle) -> Result<WebviewWindow> {
     let window =
         WebviewWindowBuilder::new(app, SPLASH_LABEL, WebviewUrl::App("splash.html".into()))
             .title("Miro")
-            .inner_size(SPLASH_SIZE, SPLASH_SIZE)
+            .inner_size(SPLASH_WIDTH, SPLASH_HEIGHT)
             .decorations(false)
             .transparent(true)
             .always_on_top(true)
@@ -165,11 +165,10 @@ fn place_splash(window: &WebviewWindow) -> Result<()> {
 
     let origin = monitor.position();
     let bounds = monitor.size();
-    let x = origin.x + bounds.width as i32 - size.width as i32 - margin;
-    let y = (origin.y + (bounds.height as i32 - size.height as i32) / 2).clamp(
-        origin.y,
-        origin.y + bounds.height as i32 - size.height as i32,
-    );
+
+    // Center horizontally, push to the top vertically
+    let x = origin.x + (bounds.width as i32 - size.width as i32) / 2;
+    let y = origin.y + margin;
 
     window
         .set_position(PhysicalPosition::new(x, y))

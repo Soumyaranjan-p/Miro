@@ -12,11 +12,8 @@ const isStaticPose =
   new URLSearchParams(window.location.search).has("static");
 
 /**
- * The launch splash content: a dark glass panel that slides in from the right
+ * The launch splash content: a dark glass panel that slides in from the top
  * edge of the primary monitor while the mascot says hello, then slides away.
- * Rust creates the window hidden; only after this tree has painted does it
- * call `notify_splash_ready`, which is what reveals it on screen - so the
- * slide-in never starts on a blank frame.
  */
 export function SplashApp() {
   const [leaving, setLeaving] = useState(false);
@@ -26,9 +23,7 @@ export function SplashApp() {
   // The panel is up and rendered - Rust can reveal the window now.
   useEffect(() => {
     if (isStaticPose) return;
-    void ipc.notifySplashReady().catch(() => {
-      /* Rust hides the window on its own schedule if this ever fails. */
-    });
+    void ipc.notifySplashReady().catch(() => {});
   }, []);
 
   // Pause the panel's own CSS motion while the window is hidden.
@@ -48,13 +43,10 @@ export function SplashApp() {
 
   const onPanelAnimationEnd = (event: AnimationEvent<HTMLElement>) => {
     if (event.target !== event.currentTarget) return;
-    // Both the slide-out and the reduced-motion fade-out end the sequence.
     if (event.animationName === "miro-splash-out" || event.animationName === "miro-splash-fade-out") {
       if (finishedRef.current) return;
       finishedRef.current = true;
-      void ipc.splashFinished().catch(() => {
-        /* Rust also hides the window on a timer; this only informs it earlier. */
-      });
+      void ipc.splashFinished().catch(() => {});
     }
   };
 
