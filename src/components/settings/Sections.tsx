@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorText } from "../../lib/errors";
-import { formatBytes, formatPercent, formatShortcut } from "../../lib/format";
+import { formatBytes, formatPercent } from "../../lib/format";
 import { useLevelHistory } from "../../lib/hooks";
 import { ipc, type ModelProgress, type SettingsPatch } from "../../lib/ipc";
 import type { MicrophoneInfo, ModelInfo, RuntimeStatus, Settings } from "../../lib/types";
@@ -9,7 +9,7 @@ import { LevelMeter } from "../overlay/LevelMeter";
 import { Banner, Button, Mono, Pill, ProgressBar, Row, Section, Segmented } from "./Controls";
 import { ShortcutField } from "./ShortcutField";
 
-const DEFAULT_SHORTCUT = "Ctrl+Alt";
+const DEFAULT_SHORTCUT = "ControlRight";
 
 interface SectionProps {
   settings: Settings;
@@ -39,7 +39,7 @@ export function DictationSection({ settings, update }: SectionProps) {
         label="Shortcut"
         hint={
           <>
-            Default is <Mono>{formatShortcut(DEFAULT_SHORTCUT)}</Mono>. Miro reports a conflict instead of failing silently.
+            Default is the right <Mono>Ctrl</Mono> key. Miro reports a conflict instead of failing silently.
           </>
         }
       >
