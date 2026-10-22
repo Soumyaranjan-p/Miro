@@ -27,10 +27,15 @@ export function StatusStrip({ status }: { status: RuntimeStatus | null }) {
           ? "No model installed"
           : "Engine failed";
 
-  const shortcutTone = status.shortcut.registered ? "success" : "danger";
-  const shortcutText = status.shortcut.registered
-    ? `${formatShortcut(status.shortcut.shortcut)}${status.shortcut.mechanism === "keyboard_hook" ? " (hook)" : ""}`
-    : "Shortcut not registered";
+  const hotkeyTone = (mechanism: string): "success" | "warn" | "danger" =>
+    mechanism === "none" ? "danger" : mechanism === "keyboard_hook" ? "warn" : "success";
+  const hotkeyText = (role: string) => {
+    const hotkey = status.hotkeys.find((entry) => entry.role === role);
+    if (!hotkey) return "Not configured";
+    return hotkey.registered
+      ? `${formatShortcut(hotkey.shortcut)}${hotkey.mechanism === "keyboard_hook" ? " (hook)" : ""}`
+      : "Not registered";
+  };
 
   const micTone =
     status.microphone.state === "available"
@@ -60,9 +65,15 @@ export function StatusStrip({ status }: { status: RuntimeStatus | null }) {
       <Pill tone={engineTone} title={status.engine.backend}>
         {engineText}
       </Pill>
-      <Pill tone={shortcutTone} title={status.shortcut.detail ?? undefined}>
-        {shortcutText}
-      </Pill>
+      {status.hotkeys.map((hotkey) => (
+        <Pill
+          key={hotkey.role}
+          tone={hotkeyTone(hotkey.mechanism)}
+          title={hotkey.detail ?? undefined}
+        >
+          {hotkeyText(hotkey.role)}
+        </Pill>
+      ))}
       <Pill tone={micTone} title={status.microphone.detail ?? undefined}>
         {micText}
       </Pill>
