@@ -19,20 +19,23 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio::{self, Capture, CaptureControl, CaptureMode, CaptureOutcome, LevelFrame};
-use crate::config::{Mode, Settings};
+use crate::config::{HomeMode, Settings};
 use crate::engine::{self, Engine, EngineOptions};
 use crate::errors::{Failure, Result};
 use crate::events::{self, OverlayState, RuntimeStatus};
 use crate::hotkeys::registry as shortcut_registry;
 use crate::insertion::{self, Target};
+use crate::keyboard_hook::{KeySignal, KeyboardHook, PressEvent};
 use crate::logging::{self, Event};
 use crate::privacy::{self, PendingText};
-use crate::state::{self, ShortcutRuntime};
+use crate::state::{self};
 use crate::textproc;
 use crate::windows;
 
 /// How long a failed insertion stays available for Retry or Copy.
 const RETRY_WINDOW: Duration = Duration::from_secs(20);
+/// How long a successful transcript stays in the Home panel, in memory only.
+const SUCCESS_WINDOW: Duration = Duration::from_secs(120);
 /// How long the success state stays on screen.
 const INSERTED_VISIBLE: Duration = Duration::from_millis(1100);
 /// A model load that takes longer than this is treated as stuck.
@@ -97,6 +100,18 @@ impl Session {
 
     /// Starts recording. Refuses if a dictation is already in flight.
     pub fn start(&self, app: &AppHandle) -> Result<()> {
+        // Incident mode is a visual state for now: dictation does not run in
+        // it. The refusal is silent-but-logged - the mode was chosen on
+        // purpose, so a hotkey in a game or another app must not yank the app
+        // into recording.
+        if state::state(app).settings().home_mode != HomeMode::Home {
+            logging::event(Event::Failure {
+                code: "incident_mode",
+                detail: "dictation is only available in Normal mode".to_string(),
+            });
+            return Ok(());
+        }
+
         let settings = state::state(app).settings();
         logging::event(Event::DictationStarted { mode: "toggle" });
 
@@ -286,6 +301,7 @@ impl Session {
                     OverlayState::Inserted {
                         characters: result.characters,
                         audio_ms: 0,
+                        retry_id: Some(retry_id),
                     },
                 );
                 self.schedule_hide(app.clone());
@@ -452,7 +468,22 @@ impl Session {
             return;
         }
 
+        // Word statistics are numeric aggregates only; the text itself is
+        // zeroized moments below and never stored anywhere.
+        let words = text.split_whitespace().count() as u32;
         let characters = text.chars().count();
+
+        // The transcript is handed to the pending store so the Home panel can
+        // offer Copy and Paste-in without the text passing through disk,
+        // events or logs.
+        let retry_id = {
+            let mut inner = lock(&self.inner);
+            inner.next_retry_id += 1;
+            let id = inner.next_retry_id;
+            inner.pending.store(text.clone(), id);
+            id
+        };
+
         let outcome = insertion::insert(&text, target);
 
         match outcome {
@@ -475,9 +506,12 @@ impl Session {
                     OverlayState::Inserted {
                         characters: result.characters,
                         audio_ms,
+                        retry_id: Some(retry_id),
                     },
                 );
                 self.schedule_hide(app.clone());
+                crate::stats::record_dictation(app, words, u64::try_from(audio_ms).unwrap_or(0));
+                self.schedule_retry_expiry(app.clone(), retry_id, SUCCESS_WINDOW);
 
                 if limit_reached {
                     // The safety limit stopped the recording, so say so even
@@ -493,17 +527,9 @@ impl Session {
                     code: failure.code().as_str(),
                     characters: 0,
                 });
-                let retry_id = {
-                    let mut inner = lock(&self.inner);
-                    inner.next_retry_id += 1;
-                    let id = inner.next_retry_id;
-                    // The text is handed over rather than copied: this is the
-                    // retry window, and it is the only place it can live.
-                    inner.pending.store(text, id);
-                    id
-                };
+                // The panel copy is already in the pending store under the id.
                 self.reset(app);
-                self.schedule_retry_expiry(app.clone(), retry_id);
+                self.schedule_retry_expiry(app.clone(), retry_id, RETRY_WINDOW);
                 let code = failure.code();
                 let detail = failure.detail();
                 let retryable = failure.retryable();
@@ -517,6 +543,59 @@ impl Session {
                         retry_id: retryable.then_some(retry_id),
                     },
                 );
+            }
+        }
+    }
+
+    /// Reads the transcript kept in memory for the Home panel. Deliberate: a
+    /// transcript entering a webview is a feature decision, not a leak -
+    /// nothing here persists it or broadcasts it.
+    pub fn peek_pending(&self, retry_id: u64) -> Option<String> {
+        lock(&self.inner).pending.peek(retry_id).map(str::to_string)
+    }
+
+    /// Types the pending transcript into the app the user currently has in
+    /// front - the Home panel's "Paste into the active app" action, distinct
+    /// from `retry`, which targets the window captured at record time.
+    pub fn paste_pending(&self, app: &AppHandle, retry_id: u64) -> Result<()> {
+        let Some(mut text) = lock(&self.inner).pending.peek(retry_id).map(str::to_string) else {
+            return Err(Failure::Internal(
+                "that transcript is no longer available".into(),
+            ));
+        };
+
+        let target = match Target::capture_foreground() {
+            Ok(target) => target,
+            Err(failure) => {
+                privacy::zeroize_string(&mut text);
+                return Err(failure);
+            }
+        };
+        let outcome = insertion::insert(&text, target);
+        privacy::zeroize_string(&mut text);
+
+        match outcome {
+            Ok(result) => {
+                lock(&self.inner).pending.take(retry_id);
+                logging::event(Event::InsertionFinished {
+                    ok: true,
+                    code: "ok",
+                    characters: result.characters,
+                });
+                emit_overlay(
+                    app,
+                    OverlayState::Inserted {
+                        characters: result.characters,
+                        audio_ms: 0,
+                        retry_id: Some(retry_id),
+                    },
+                );
+                self.schedule_hide(app.clone());
+                Ok(())
+            }
+            Err(failure) => {
+                emit_overlay(app, OverlayState::error(&failure, Some(retry_id)));
+                Err(failure)
             }
         }
     }
@@ -605,9 +684,9 @@ impl Session {
 
     /// Clears the retry text when the window closes, and takes the dead buttons
     /// off the screen with it.
-    fn schedule_retry_expiry(&self, app: AppHandle, retry_id: u64) {
+    fn schedule_retry_expiry(&self, app: AppHandle, retry_id: u64, window: Duration) {
         thread::spawn(move || {
-            thread::sleep(RETRY_WINDOW);
+            thread::sleep(window);
             let session = app.state::<Session>();
             let expired = {
                 let mut inner = lock(&session.inner);
@@ -630,6 +709,7 @@ impl Session {
         let app_state = state::state(app);
         let settings = app_state.settings();
         let shortcut = app_state.shortcut_runtime();
+        let hotkeys = app_state.hotkeys_runtime();
         let temp = app_state.temp_state();
         let (mic_state, mic_detail) = state::microphone_state();
 
@@ -673,6 +753,16 @@ impl Session {
                 mechanism: shortcut.mechanism.as_str(),
                 detail: shortcut.detail,
             },
+            hotkeys: hotkeys
+                .into_iter()
+                .map(|hotkey| events::HotkeyStatus {
+                    role: hotkey.role,
+                    registered: hotkey.registered,
+                    shortcut: hotkey.shortcut,
+                    mechanism: hotkey.mechanism.as_str(),
+                    detail: hotkey.detail,
+                })
+                .collect(),
             microphone: events::MicrophoneStatus {
                 state: mic_state,
                 detail: mic_detail,
@@ -689,21 +779,9 @@ impl Session {
         let _ = app.emit(events::RUNTIME_EVENT, status);
     }
 
-    /// Records the shortcut registration outcome for the status strip.
-    pub fn publish_shortcut(
-        &self,
-        app: &AppHandle,
-        shortcut: String,
-        mechanism: crate::hotkeys::Mechanism,
-        detail: Option<String>,
-    ) {
-        let registered = mechanism != crate::hotkeys::Mechanism::None;
-        state::state(app).set_shortcut_runtime(ShortcutRuntime {
-            registered,
-            shortcut,
-            mechanism,
-            detail,
-        });
+    /// Records the live status of every global hotkey for the status strip.
+    pub fn publish_hotkeys(&self, app: &AppHandle, hotkeys: Vec<state::HotkeyRuntime>) {
+        state::state(app).set_hotkeys_runtime(hotkeys);
         self.publish_runtime(app);
     }
 
@@ -722,8 +800,10 @@ fn short_device_label(settings: &Settings) -> String {
 
 /// Applies the keyboard-hook decision for the current settings.
 ///
-/// Kept here so that mode and shortcut changes go through one place: the hook
-/// exists exactly when push-to-talk with a modifier-only combination is active.
+/// Kept here so that hotkey changes go through one place: the hook exists
+/// exactly when at least one configured hotkey needs it - a modifiers-only
+/// combination, or a hotkey whose plugin registration was refused by the
+/// operating system.
 pub struct HookBinding {
     pub hook: Option<crate::keyboard_hook::KeyboardHook>,
 }
@@ -733,37 +813,47 @@ impl HookBinding {
         Self { hook: None }
     }
 
+    /// Installs the hook for the given hotkeys and routes its signals:
+    /// the dictation role drives push-to-talk, the mode roles switch mode on
+    /// the press edge only.
     pub fn apply(
         &mut self,
         app: &AppHandle,
-        settings: &Settings,
+        hotkeys: Vec<crate::keyboard_hook::WatchedHotkey>,
     ) -> Result<crate::hotkeys::Mechanism> {
-        // Any previous hook goes away first: it must never outlive the mode
-        // that justified it.
+        // Any previous hook goes away first: it must never outlive the binding
+        // list that justified it.
         self.hook = None;
 
-        let hotkey = crate::hotkeys::Hotkey::parse(&settings.shortcut)?;
-
-        if settings.mode != Mode::PushToTalk || hotkey.plugin_expressible() {
+        if hotkeys.is_empty() {
             return Ok(crate::hotkeys::Mechanism::Plugin);
         }
 
-        let (tx, rx) = std::sync::mpsc::channel::<crate::keyboard_hook::PressEvent>();
-        let hook = crate::keyboard_hook::KeyboardHook::start(&hotkey, tx)?;
+        let (tx, rx) = std::sync::mpsc::channel::<KeySignal>();
+        let hook = KeyboardHook::start(&hotkeys, tx)?;
 
         let app_handle = app.clone();
         thread::Builder::new()
-            .name("miro-ptt".to_string())
+            .name("miro-hotkeys".to_string())
             .spawn(move || {
-                while let Ok(event) = rx.recv() {
+                while let Ok(signal) = rx.recv() {
                     let session = app_handle.state::<Session>();
-                    session.on_push_to_talk(
-                        &app_handle,
-                        event == crate::keyboard_hook::PressEvent::Down,
-                    );
+                    match signal.role {
+                        "dictation" => {
+                            session.on_push_to_talk(&app_handle, signal.event == PressEvent::Down)
+                        }
+                        "normal" if signal.event == PressEvent::Down => {
+                            let _ = crate::commands::switch_home_mode(&app_handle, HomeMode::Home);
+                        }
+                        "incident" if signal.event == PressEvent::Down => {
+                            let _ =
+                                crate::commands::switch_home_mode(&app_handle, HomeMode::Intent);
+                        }
+                        _ => {}
+                    }
                 }
             })
-            .map_err(|e| Failure::Internal(format!("spawn push-to-talk thread: {e}")))?;
+            .map_err(|e| Failure::Internal(format!("spawn hotkey thread: {e}")))?;
 
         self.hook = Some(hook);
         Ok(crate::hotkeys::Mechanism::KeyboardHook)
@@ -799,6 +889,7 @@ mod tests {
             OverlayState::Inserted {
                 characters: 42,
                 audio_ms: 1000,
+                retry_id: Some(7),
             },
             OverlayState::Copied { characters: 42 },
             OverlayState::Error {

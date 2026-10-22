@@ -13,10 +13,10 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-use crate::config::{Settings, SettingsPatch};
+use crate::config::{HomeMode, Mode, Settings, SettingsPatch};
 use crate::errors::{ErrorCode, Failure};
 use crate::events::{self, ModelProgress, RuntimeStatus};
-use crate::hotkeys::Hotkey;
+use crate::hotkeys::{Hotkey, Mechanism};
 use crate::models;
 use crate::session::{HookBinding, Session};
 use crate::state::AppState;
@@ -112,8 +112,19 @@ pub fn set_settings(
     let before = app_state.settings();
     let after = app_state.update(patch)?;
 
-    if after.shortcut != before.shortcut || after.mode != before.mode {
-        apply_shortcut(&app, &after)?;
+    if after.shortcut != before.shortcut
+        || after.normal_shortcut != before.normal_shortcut
+        || after.incident_shortcut != before.incident_shortcut
+        || after.mode != before.mode
+    {
+        apply_global_hotkeys(&app, &after)?;
+    }
+    if after.home_mode != before.home_mode {
+        // Leaving a mode abandons whatever was in flight: Incident mode is a
+        // visual state, so a recording migrating between modes would be
+        // surprising.
+        session.cancel(&app);
+        crate::stats::on_mode_changed(&app);
     }
     if after.model_id != before.model_id {
         // The next dictation loads the new model; the old one is released now.
@@ -128,35 +139,184 @@ pub fn set_settings(
     Ok(after)
 }
 
-/// (Re)registers the dictation shortcut and the push-to-talk binding for the
-/// given settings. Used at start-up and whenever the mode or keys change.
-pub fn apply_shortcut(app: &AppHandle, settings: &Settings) -> CmdResult<()> {
-    let registry = crate::hotkeys::registry(app);
+/// The single source of truth for the application mode visible everywhere.
+/// Used by the plugin-hotkey dispatcher and by nothing else lazily: the UI
+/// goes through `set_settings`, which mirrors the same side effects.
+pub fn switch_home_mode(app: &AppHandle, mode: HomeMode) -> CmdResult<()> {
+    let app_state = app.state::<AppState>();
+    let before = app_state.settings();
+    if before.home_mode == mode {
+        return Ok(());
+    }
+    let after = app_state.update(SettingsPatch {
+        home_mode: Some(mode),
+        ..SettingsPatch::default()
+    })?;
+
     let session = app.state::<Session>();
+    session.cancel(app);
+    crate::stats::on_mode_changed(app);
+    session.refresh_runtime(app);
+    let _ = app.emit(events::SETTINGS_EVENT, after.clone());
+    Ok(())
+}
+
+/// Plans and applies all three global hotkeys.
+///
+/// Used at start-up and whenever any of the hotkeys or the dictation
+/// interaction mode changes. Per-hotkey outcomes are published even when the
+/// overall call fails, so the Shortcuts page can show exactly which
+/// combination lost the fight for the operating system.
+pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<()> {
+    let registry = crate::hotkeys::registry(app);
     let hooks = app.state::<Mutex<HookBinding>>();
 
     // Anything previously active goes first: a half-applied binding would mean
-    // two shortcuts, or a hook running for a mode that no longer exists.
+    // two shortcuts, or a hook running for a hotkey that no longer exists.
     if let Ok(mut binding) = hooks.lock() {
         binding.stop();
     }
     let _ = registry.unregister(app);
 
-    let hotkey = Hotkey::parse(&settings.shortcut).map_err(CommandError::from)?;
+    // One final status per hotkey, in display order.
+    let mut results: Vec<(&str, bool, String, Option<String>, Mechanism)> = Vec::new();
 
-    let mechanism =
-        if settings.mode == crate::config::Mode::PushToTalk && !hotkey.plugin_expressible() {
-            let mut binding = hooks.lock().map_err(|_| {
-                CommandError::from(Failure::Internal("hook state was poisoned".into()))
-            })?;
-            binding.apply(app, settings).map_err(CommandError::from)?
+    // Parse all three up front; a malformed hotkey is reported for its own
+    // role, while the remaining two are still applied.
+    let roles = [
+        ("dictation", &settings.shortcut, settings.mode),
+        ("normal", &settings.normal_shortcut, Mode::PushToTalk),
+        ("incident", &settings.incident_shortcut, Mode::PushToTalk),
+    ];
+
+    let mut parsed: Vec<(&str, Hotkey)> = Vec::new();
+    for (role, text, dictation_mode) in roles {
+        match Hotkey::parse(text) {
+            Ok(hotkey) => {
+                // A modifiers-only dictation key cannot be a toggle: there is
+                // no second press to call for.
+                if role == "dictation"
+                    && dictation_mode == Mode::Toggle
+                    && !hotkey.plugin_expressible()
+                {
+                    results.push((
+                        role,
+                        false,
+                        hotkey.to_canonical(),
+                        Some(
+                            "this combination cannot start and stop dictation on its own; choose a key"
+                                .to_string(),
+                        ),
+                        Mechanism::None,
+                    ));
+                    continue;
+                }
+                parsed.push((role, hotkey));
+            }
+            Err(failure) => {
+                results.push((
+                    role,
+                    false,
+                    text.to_string(),
+                    failure.detail(),
+                    Mechanism::None,
+                ));
+            }
+        }
+    }
+
+    let mut seen: Vec<String> = Vec::new();
+    let mut hook_set: Vec<crate::keyboard_hook::WatchedHotkey> = Vec::new();
+
+    for (role, hotkey) in parsed {
+        let canonical = hotkey.to_canonical();
+        if seen.contains(&canonical) {
+            results.push((
+                role,
+                false,
+                canonical.clone(),
+                Some("this combination is already in use - pick a different one".to_string()),
+                Mechanism::None,
+            ));
+            continue;
+        }
+        seen.push(canonical.clone());
+
+        if hotkey.plugin_expressible() {
+            match crate::hotkeys::register_plugin(app, &hotkey) {
+                Ok(()) => {
+                    results.push((role, true, canonical, None, Mechanism::Plugin));
+                }
+                Err(failure) => {
+                    // The operating system refused the registration - typically
+                    // because another application owns the combination. A
+                    // single held key can still be watched by the keyboard
+                    // hook, which observes without consuming.
+                    if matches!(hotkey, Hotkey::SingleKey { .. }) {
+                        results.push((
+                            role,
+                            true,
+                            canonical,
+                            failure.detail(),
+                            Mechanism::KeyboardHook,
+                        ));
+                        hook_set.push(crate::keyboard_hook::watch(&hotkey, role)?);
+                    } else {
+                        results.push((
+                            role,
+                            false,
+                            canonical,
+                            failure
+                                .detail()
+                                .or_else(|| Some("already taken by another application".into())),
+                            Mechanism::None,
+                        ));
+                    }
+                }
+            }
         } else {
-            registry
-                .register(app, hotkey.clone(), settings.mode)
-                .map_err(CommandError::from)?
-        };
+            hook_set.push(crate::keyboard_hook::watch(&hotkey, role)?);
+            results.push((role, true, canonical, None, Mechanism::KeyboardHook));
+        }
+    }
 
-    session.publish_shortcut(app, hotkey.to_canonical(), mechanism, None);
+    // Install the hook, if anything needs it, before publishing: the hook
+    // failing to start means those hotkeys are not really registered, and the
+    // status has to say so honestly.
+    let mut hook_failure: Option<String> = None;
+    if !hook_set.is_empty() {
+        let mut binding = hooks
+            .lock()
+            .map_err(|_| CommandError::from(Failure::Internal("hook state was poisoned".into())))?;
+        if let Err(failure) = binding.apply(app, hook_set) {
+            hook_failure = failure.detail();
+        }
+    }
+
+    let mut runtimes: Vec<crate::state::HotkeyRuntime> = Vec::new();
+    for (role, mut registered, canonical, detail, mut mechanism) in results {
+        if hook_failure.is_some() && mechanism == Mechanism::KeyboardHook {
+            registered = false;
+            mechanism = Mechanism::None;
+        }
+        runtimes.push(crate::state::HotkeyRuntime {
+            role: match role {
+                "dictation" => "dictation",
+                "normal" => "normal",
+                _ => "incident",
+            },
+            registered,
+            shortcut: canonical,
+            mechanism,
+            detail: if registered {
+                detail
+            } else {
+                hook_failure.clone()
+            },
+        });
+    }
+    app.state::<Session>().publish_hotkeys(app, runtimes);
+
     Ok(())
 }
 
@@ -189,7 +349,28 @@ pub fn check_shortcut(
 
     let normalized = parsed.to_canonical();
 
-    if settings.mode == crate::config::Mode::Toggle && !parsed.plugin_expressible() {
+    // Two of our own hotkeys cannot be the same gesture.
+    for (other, label) in [
+        (&settings.shortcut, "the dictation hotkey"),
+        (&settings.normal_shortcut, "the Normal mode hotkey"),
+        (&settings.incident_shortcut, "the Incident mode hotkey"),
+    ] {
+        if let Ok(other_hotkey) = Hotkey::parse(other) {
+            if other_hotkey.same_target(&parsed) {
+                return ShortcutCheck {
+                    ok: false,
+                    normalized: Some(normalized),
+                    reason: Some(format!("already used as {label}")),
+                    conflict_with: Some(label.to_string()),
+                };
+            }
+        }
+    }
+
+    // A modifiers-only dictation key cannot be a toggle: there is no second
+    // press to call for. SingleKey is fine as a toggle (the key itself is
+    // the second press).
+    if settings.mode == Mode::Toggle && matches!(parsed, Hotkey::ModifiersOnly { .. }) {
         return ShortcutCheck {
             ok: false,
             normalized: Some(normalized),
@@ -198,8 +379,8 @@ pub fn check_shortcut(
         };
     }
 
-    // Prove the operating system accepts it, then hand the registration back to
-    // whatever is currently configured.
+    // Prove the operating system accepts it, then hand the registrations
+    // back to whatever was live.
     let registry = crate::hotkeys::registry(&app);
     let current = registry.active();
     let _ = registry.unregister(&app);
@@ -209,12 +390,13 @@ pub fn check_shortcut(
             .register(plugin_shortcut)
             .map_err(|error| error.to_string())
     } else {
+        // Not plugin-expressible; the hook path will decide later.
         Ok(())
     };
 
     let _ = app.global_shortcut().unregister_all();
-    if let Some(current) = current {
-        let _ = registry.register(&app, current, settings.mode);
+    for hotkey in current {
+        let _ = crate::hotkeys::register_plugin(&app, &hotkey);
     }
 
     match probe {
@@ -235,23 +417,22 @@ pub fn check_shortcut(
 
 #[tauri::command]
 pub fn suspend_shortcut(app: AppHandle) -> CmdResult<()> {
-    let state = app.state::<AppState>();
-    let settings = state.settings();
+    // Everything goes: the plugin registrations and the hook. While the
+    // settings window is capturing keys, no hotkey may fire - not even the
+    // hook-delivered ones.
     crate::hotkeys::registry(&app)
         .suspend(&app)
         .map_err(CommandError::from)?;
-    let _ = settings;
+    let hooks = app.state::<Mutex<HookBinding>>();
+    if let Ok(mut binding) = hooks.lock() {
+        binding.stop();
+    }
     Ok(())
 }
 
 #[tauri::command]
-pub fn resume_shortcut(app: AppHandle) -> CmdResult<()> {
-    let state = app.state::<AppState>();
-    let settings = state.settings();
-    crate::hotkeys::registry(&app)
-        .resume(&app, settings.mode)
-        .map_err(CommandError::from)?;
-    Ok(())
+pub fn resume_shortcut(app: AppHandle, app_state: State<'_, AppState>) -> CmdResult<()> {
+    apply_global_hotkeys(&app, &app_state.settings())
 }
 
 // ------------------------------------------------------------------ splash --
@@ -475,6 +656,31 @@ pub fn copy_pending_transcript(
 #[tauri::command]
 pub fn toggle_dictation(app: AppHandle, session: State<'_, Session>) {
     session.toggle(&app);
+}
+
+/// The transcript kept in memory for the Home panel, addressed by the id the
+/// event carried. Deliberate feature decision: the text enters a webview so
+/// the user can read, copy and paste it, but nothing here persists it.
+#[tauri::command]
+pub fn get_pending_transcript(session: State<'_, Session>, retry_id: u64) -> CmdResult<String> {
+    session.peek_pending(retry_id).ok_or_else(|| CommandError {
+        code: ErrorCode::Cancelled,
+        detail: Some("that transcript is no longer available".into()),
+    })
+}
+
+/// Types the pending transcript into the app the user has in front.
+#[tauri::command]
+pub fn paste_pending(app: AppHandle, session: State<'_, Session>, retry_id: u64) -> CmdResult<()> {
+    session
+        .paste_pending(&app, retry_id)
+        .map_err(CommandError::from)
+}
+
+/// Usage statistics: numeric aggregates only, stored next to the config.
+#[tauri::command]
+pub fn get_stats(app: AppHandle) -> CmdResult<crate::stats::StatsSummary> {
+    crate::stats::summary(&app).map_err(CommandError::from)
 }
 
 // ------------------------------------------------------------------ shell --

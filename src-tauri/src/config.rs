@@ -18,7 +18,10 @@ use crate::logging::{self, Event};
 
 pub const CONFIG_VERSION: u32 = 1;
 pub const CONFIG_FILE: &str = "config.json";
-pub const DEFAULT_SHORTCUT: &str = "Ctrl+Alt";
+/// Default dictation hotkey: hold Right Ctrl to talk.
+pub const DEFAULT_SHORTCUT: &str = "ControlRight";
+pub const DEFAULT_NORMAL_SHORTCUT: &str = "Ctrl+Alt";
+pub const DEFAULT_INCIDENT_SHORTCUT: &str = "Ctrl+Alt+Space";
 pub const MIN_RECORDING_SECONDS: u32 = 30;
 pub const MAX_RECORDING_SECONDS: u32 = 600;
 pub const MAX_FILLER_WORDS: usize = 64;
@@ -111,7 +114,12 @@ impl Default for Cleanup {
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     pub version: u32,
+    /// The dictation hotkey: press (toggle) or hold (push-to-talk) to record.
     pub shortcut: String,
+    /// Hotkey that switches back to Normal mode (`home`).
+    pub normal_shortcut: String,
+    /// Hotkey that switches to Incident mode (`intent`), the alert visual state.
+    pub incident_shortcut: String,
     pub mode: Mode,
     /// Which screen the home window opens on: dictation home or Intent Mode.
     pub home_mode: HomeMode,
@@ -134,6 +142,8 @@ impl Default for Settings {
         Self {
             version: CONFIG_VERSION,
             shortcut: DEFAULT_SHORTCUT.to_string(),
+            normal_shortcut: DEFAULT_NORMAL_SHORTCUT.to_string(),
+            incident_shortcut: DEFAULT_INCIDENT_SHORTCUT.to_string(),
             // "Ctrl+Alt" is modifiers-only, and a modifiers-only hotkey can
             // only be delivered by push-to-talk: hold to talk, release to stop.
             mode: Mode::PushToTalk,
@@ -158,6 +168,8 @@ impl Default for Settings {
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingsPatch {
     pub shortcut: Option<String>,
+    pub normal_shortcut: Option<String>,
+    pub incident_shortcut: Option<String>,
     pub mode: Option<Mode>,
     pub home_mode: Option<HomeMode>,
     pub sound_on: Option<bool>,
@@ -197,8 +209,16 @@ impl Settings {
     pub fn normalize(&mut self) {
         self.version = CONFIG_VERSION;
         self.shortcut = self.shortcut.trim().to_string();
+        self.normal_shortcut = self.normal_shortcut.trim().to_string();
+        self.incident_shortcut = self.incident_shortcut.trim().to_string();
         if self.shortcut.is_empty() {
             self.shortcut = DEFAULT_SHORTCUT.to_string();
+        }
+        if self.normal_shortcut.is_empty() {
+            self.normal_shortcut = DEFAULT_NORMAL_SHORTCUT.to_string();
+        }
+        if self.incident_shortcut.is_empty() {
+            self.incident_shortcut = DEFAULT_INCIDENT_SHORTCUT.to_string();
         }
         self.max_recording_seconds = self
             .max_recording_seconds
@@ -228,6 +248,12 @@ impl Settings {
     pub fn apply(&mut self, patch: SettingsPatch) {
         if let Some(shortcut) = patch.shortcut {
             self.shortcut = shortcut;
+        }
+        if let Some(shortcut) = patch.normal_shortcut {
+            self.normal_shortcut = shortcut;
+        }
+        if let Some(shortcut) = patch.incident_shortcut {
+            self.incident_shortcut = shortcut;
         }
         if let Some(mode) = patch.mode {
             self.mode = mode;
@@ -471,6 +497,23 @@ mod tests {
         ];
         settings.normalize();
         assert_eq!(settings.cleanup.filler_words, vec!["um", "you know"]);
+    }
+
+    #[test]
+    fn mode_hotkeys_persist_and_fall_back_to_defaults_when_blank() {
+        let mut settings = Settings::default();
+        settings.apply(
+            serde_json::from_str(
+                r#"{"normalShortcut":"Ctrl+Shift+N","incidentShortcut":"Ctrl+Shift+I"}"#,
+            )
+            .unwrap(),
+        );
+        assert_eq!(settings.normal_shortcut, "Ctrl+Shift+N");
+        assert_eq!(settings.incident_shortcut, "Ctrl+Shift+I");
+
+        settings.normal_shortcut = "   ".into();
+        settings.normalize();
+        assert_eq!(settings.normal_shortcut, DEFAULT_NORMAL_SHORTCUT);
     }
 
     #[test]

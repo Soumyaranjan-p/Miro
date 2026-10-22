@@ -41,6 +41,10 @@ pub enum OverlayState {
         characters: usize,
         #[serde(rename = "audioMs")]
         audio_ms: u128,
+        /// Where the transcript is kept in memory for the Home panel's Copy
+        /// and Paste actions. Still no transcript text in the event.
+        #[serde(rename = "retryId")]
+        retry_id: Option<u64>,
     },
     /// The transcript went to the clipboard instead of being typed.
     Copied {
@@ -93,6 +97,18 @@ pub struct ShortcutStatus {
     pub detail: Option<String>,
 }
 
+/// Status of one named global hotkey, addressed by role. The Shortcuts page
+/// renders one row per entry.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HotkeyStatus {
+    pub role: &'static str,
+    pub registered: bool,
+    pub shortcut: String,
+    pub mechanism: &'static str,
+    pub detail: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MicrophoneStatus {
@@ -115,6 +131,8 @@ pub struct RuntimeStatus {
     pub models_dir: String,
     pub engine: EngineStatus,
     pub shortcut: ShortcutStatus,
+    /// Every named global hotkey with its live registration status.
+    pub hotkeys: Vec<HotkeyStatus>,
     pub microphone: MicrophoneStatus,
     pub temp: TempStatus,
 }

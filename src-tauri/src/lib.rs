@@ -24,9 +24,11 @@ pub mod models;
 pub mod privacy;
 pub mod session;
 pub mod state;
+pub mod stats;
 pub mod textproc;
 pub mod windows;
 
+use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
@@ -36,7 +38,7 @@ use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
 
 use config::ConfigStore;
 use errors::Failure;
-use hotkeys::ShortcutRegistry;
+use hotkeys::{Hotkey, ShortcutRegistry};
 use logging::Event;
 use session::{HookBinding, Session};
 use state::AppState;
@@ -109,6 +111,9 @@ pub fn run() {
             commands::retry_insertion,
             commands::copy_pending_transcript,
             commands::toggle_dictation,
+            commands::get_pending_transcript,
+            commands::paste_pending,
+            commands::get_stats,
             commands::open_models_folder,
             commands::open_app_data_folder,
             commands::open_external,
@@ -180,11 +185,10 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     windows::create_overlay(handle)?;
     windows::create_settings(handle)?;
     windows::create_or_take_splash(handle)?;
-    windows::create_island(handle)?;
     windows::create_tray(handle)?;
 
-    // --- shortcut --------------------------------------------------------------
-    if let Err(failure) = commands::apply_shortcut(handle, &settings) {
+    // --- shortcuts -------------------------------------------------------------
+    if let Err(failure) = commands::apply_global_hotkeys(handle, &settings) {
         logging::event(Event::Failure {
             code: failure.code.as_str(),
             detail: failure
@@ -215,6 +219,10 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     handle.state::<Session>().refresh_runtime(handle);
 
+    // The statistics bookkeeping anchors the mode the app starts in, so time
+    // spent in it is counted even without any dictation.
+    crate::stats::on_mode_changed(handle);
+
     // The home window is the app's face: show it at startup. The tray keeps
     // it available afterwards; on first run it is simply empty until shown.
     windows::show_settings(handle);
@@ -226,8 +234,9 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// One handler for every registered shortcut: the dictation key and the Escape
-/// cancel key that only exists while a recording is in flight.
+/// One handler for every registered shortcut: the dictation key, the two
+/// mode-switch keys, and the Escape cancel key that only exists while a
+/// recording is in flight.
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     logging::event(Event::ShortcutTriggered {
         state: if event.state == ShortcutState::Pressed {
@@ -236,29 +245,60 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
             "released"
         },
     });
+    let pressed = event.state == ShortcutState::Pressed;
     let app_state = app.state::<AppState>();
     let settings = app_state.settings();
     let session = app.state::<Session>();
 
-    let Ok(hotkey) = hotkeys::Hotkey::parse(&settings.shortcut) else {
-        return;
-    };
+    // Which configured hotkey does the pressed combination belong to?
+    let role = [
+        ("dictation", &settings.shortcut),
+        ("normal", &settings.normal_shortcut),
+        ("incident", &settings.incident_shortcut),
+    ]
+    .into_iter()
+    .find_map(|(role, text)| {
+        Hotkey::parse(text)
+            .ok()
+            .and_then(|hotkey| hotkey.to_plugin_shortcut().ok())
+            .filter(|candidate| candidate == shortcut)
+            .map(|_| role)
+    });
 
-    if ShortcutRegistry::is_cancel(shortcut, &hotkey) {
-        session.cancel(app);
-        return;
-    }
-
-    match settings.mode {
-        config::Mode::Toggle => {
-            if event.state == ShortcutState::Pressed {
-                session.toggle(app);
+    match role {
+        Some("normal") if pressed => {
+            let _ = commands::switch_home_mode(app, config::HomeMode::Home);
+        }
+        Some("incident") if pressed => {
+            let _ = commands::switch_home_mode(app, config::HomeMode::Intent);
+        }
+        Some("dictation") => {
+            if settings.mode == config::Mode::PushToTalk {
+                // Both edges of a hold mean something; repeats are harmless
+                // because the phase machine ignores stale presses.
+                session.on_push_to_talk(app, pressed);
+            } else if pressed {
+                // Toggle mode on Windows repeats while a key is held. The
+                // phase machine tolerates it, but the toggle would flicker;
+                // a short debounce keeps one press one toggle.
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_millis() as u64)
+                    .unwrap_or(0);
+                if now.saturating_sub(app_state.last_toggle_ms.load(Ordering::Relaxed)) > 400 {
+                    app_state.last_toggle_ms.store(now, Ordering::Relaxed);
+                    session.toggle(app);
+                }
             }
         }
-        // With push-to-talk the plugin delivers both edges, so the key release
-        // is what ends the recording.
-        config::Mode::PushToTalk => {
-            session.on_push_to_talk(app, event.state == ShortcutState::Pressed);
+        _ => {
+            // Escape, registered only while a recording is in flight.
+            let Ok(hotkey) = Hotkey::parse(&settings.shortcut) else {
+                return;
+            };
+            if ShortcutRegistry::is_cancel(shortcut, &hotkey) {
+                session.cancel(app);
+            }
         }
     }
 }
@@ -272,6 +312,7 @@ fn shutdown(handle: &AppHandle) {
         session.stop_probe();
         session.cancel(handle);
     }
+    crate::stats::flush_on_exit(handle);
     if let Some(downloads) = handle.try_state::<commands::Downloads>() {
         downloads.cancel_all();
     }

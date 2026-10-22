@@ -18,7 +18,6 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use crate::config::Mode;
 use crate::errors::{Failure, Result};
 use crate::logging::{self, Event};
 
@@ -32,6 +31,8 @@ pub enum Hotkey {
     Combo { modifiers: String, key: String },
     /// Modifiers only, e.g. "Ctrl+Alt". Push-to-talk only.
     ModifiersOnly { modifiers: String },
+    /// One real key with no modifiers, e.g. "ControlRight": hold to talk.
+    SingleKey { key: String },
 }
 
 impl Hotkey {
@@ -75,7 +76,8 @@ impl Hotkey {
         match key {
             Some(key) => {
                 if modifier_text.is_empty() {
-                    return Err(Failure::ShortcutInvalid(text.to_string()));
+                    // A lone key with no modifiers is legal as a hold key.
+                    return Ok(Hotkey::SingleKey { key });
                 }
                 Ok(Hotkey::Combo {
                     modifiers: modifier_text,
@@ -100,6 +102,7 @@ impl Hotkey {
         match self {
             Hotkey::Combo { modifiers, key } => format!("{modifiers}+{key}"),
             Hotkey::ModifiersOnly { modifiers } => modifiers.clone(),
+            Hotkey::SingleKey { key } => key.clone(),
         }
     }
 
@@ -107,6 +110,7 @@ impl Hotkey {
         match self {
             Hotkey::Combo { modifiers, .. } => modifiers,
             Hotkey::ModifiersOnly { modifiers } => modifiers,
+            Hotkey::SingleKey { .. } => "",
         }
     }
 
@@ -114,19 +118,25 @@ impl Hotkey {
         match self {
             Hotkey::Combo { key, .. } => Some(key),
             Hotkey::ModifiersOnly { .. } => None,
+            Hotkey::SingleKey { key } => Some(key),
         }
     }
 
     /// Whether the plugin can be asked to deliver this combination, including
     /// key-release events.
     pub fn plugin_expressible(&self) -> bool {
-        matches!(self, Hotkey::Combo { .. })
+        matches!(self, Hotkey::Combo { .. } | Hotkey::SingleKey { .. })
     }
 
     /// The plugin's own representation, used for registration.
     pub fn to_plugin_shortcut(&self) -> Result<Shortcut> {
         let canonical = self.to_canonical();
         Shortcut::from_str(&canonical).map_err(|_| Failure::ShortcutInvalid(canonical))
+    }
+
+    /// True when two hotkeys would fire on the same physical gesture.
+    pub fn same_target(&self, other: &Hotkey) -> bool {
+        self.to_canonical() == other.to_canonical()
     }
 }
 
@@ -153,6 +163,21 @@ fn ordered_modifiers(modifiers: &[&'static str]) -> Vec<&'static str> {
 /// forms a person would type into a config file.
 fn canonical_key(word: &str) -> Option<String> {
     let lower = word.to_ascii_lowercase();
+    // Side-specific modifier keys are real keys, not modifiers: holding the
+    // right half of the keyboard's Ctrl must be possible as a hotkey.
+    let side_key = match lower.as_str() {
+        "controlright" | "rightctrl" | "rctrl" => "ControlRight",
+        "controlleft" | "leftctrl" | "lctrl" => "ControlLeft",
+        "altright" | "rightalt" | "ralt" => "AltRight",
+        "altleft" | "leftalt" | "lalt" => "AltLeft",
+        "shiftright" | "rightshift" => "ShiftRight",
+        "shiftleft" | "leftshift" => "ShiftLeft",
+        _ => "",
+    };
+    if !side_key.is_empty() {
+        return Some(side_key.to_string());
+    }
+
     let named = match lower.as_str() {
         "space" | "spacebar" => "Space",
         "enter" | "return" => "Enter",
@@ -262,11 +287,11 @@ pub struct Registration {
     pub detail: Option<String>,
 }
 
-/// Tracks what is currently registered so suspend/resume (used while the
-/// settings window is capturing a new combination) is exact.
+/// Tracks the hotkeys currently registered with the plugin so suspend/resume
+/// (used while the settings window is capturing a new combination) is exact.
 #[derive(Default)]
 pub struct ShortcutRegistry {
-    active: Mutex<Option<Hotkey>>,
+    active: Mutex<Vec<Hotkey>>,
     cancel_registered: Mutex<bool>,
     suspended: Mutex<bool>,
 }
@@ -276,80 +301,41 @@ impl ShortcutRegistry {
         Self::default()
     }
 
-    pub fn active(&self) -> Option<Hotkey> {
-        self.active.lock().ok().and_then(|guard| guard.clone())
+    /// The set of hotkeys believed to be live with the plugin.
+    pub fn active(&self) -> Vec<Hotkey> {
+        self.active
+            .lock()
+            .ok()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
     }
 
     pub fn is_suspended(&self) -> bool {
         self.suspended.lock().map(|guard| *guard).unwrap_or(false)
     }
 
-    /// Registers the dictation shortcut. Toggle mode rejects modifier-only
-    /// combinations, because a bare "hold two modifiers" gesture cannot start
-    /// and stop anything on its own.
-    pub fn register(&self, app: &AppHandle, hotkey: Hotkey, mode: Mode) -> Result<Mechanism> {
-        if mode == Mode::Toggle && !hotkey.plugin_expressible() {
-            return Err(Failure::ShortcutInvalid(hotkey.to_canonical()));
-        }
-
-        let canonical = hotkey.to_canonical();
-
-        match &hotkey {
-            Hotkey::Combo { .. } => {
-                let shortcut = hotkey.to_plugin_shortcut()?;
-                app.global_shortcut().register(shortcut).map_err(|error| {
-                    Failure::ShortcutConflict {
-                        shortcut: canonical.clone(),
-                        reason: error.to_string(),
-                    }
-                })?;
-                if let Ok(mut guard) = self.active.lock() {
-                    *guard = Some(hotkey);
-                }
-                logging::event(Event::ShortcutRegistered {
-                    shortcut: canonical,
-                    mechanism: Mechanism::Plugin.as_str(),
-                });
-                Ok(Mechanism::Plugin)
-            }
-            Hotkey::ModifiersOnly { .. } => {
-                // The hook is installed once, when push-to-talk becomes active;
-                // here we only record the intent.
-                if let Ok(mut guard) = self.active.lock() {
-                    *guard = Some(hotkey);
-                }
-                logging::event(Event::ShortcutRegistered {
-                    shortcut: canonical,
-                    mechanism: Mechanism::KeyboardHook.as_str(),
-                });
-                Ok(Mechanism::KeyboardHook)
-            }
+    /// Records the set of hotkeys that were successfully registered with the
+    /// plugin. Anything the plugin refused is left out and handled by the hook.
+    pub fn set_active(&self, hotkeys: Vec<Hotkey>) {
+        if let Ok(mut guard) = self.active.lock() {
+            *guard = hotkeys;
         }
     }
 
+    /// Releases every plugin registration. Hook-handled hotkeys are untouched;
+    /// the hook is owned by [`crate::session::HookBinding`].
     pub fn unregister(&self, app: &AppHandle) -> Result<()> {
-        if let Some(hotkey) = self.active() {
-            if let Ok(shortcut) = hotkey.to_plugin_shortcut() {
-                let _ = app.global_shortcut().unregister(shortcut);
-            }
-        }
-        if let Ok(mut guard) = self.active.lock() {
-            *guard = None;
-        }
+        let _ = app.global_shortcut().unregister_all();
         Ok(())
     }
 
-    /// Releases the dictation shortcut so the settings window can receive the
-    /// keys the user is trying to record.
+    /// Releases the plugin registrations so the settings window can receive
+    /// the keys the user is trying to record.
     pub fn suspend(&self, app: &AppHandle) -> Result<()> {
         if self.is_suspended() {
             return Ok(());
         }
-        if let Some(hotkey) = self.active() {
-            if let Ok(shortcut) = hotkey.to_plugin_shortcut() {
-                let _ = app.global_shortcut().unregister(shortcut);
-            }
-        }
+        self.unregister(app)?;
         if let Ok(mut guard) = self.suspended.lock() {
             *guard = true;
         }
@@ -357,31 +343,23 @@ impl ShortcutRegistry {
         Ok(())
     }
 
-    pub fn resume(&self, app: &AppHandle, mode: Mode) -> Result<Mechanism> {
+    /// Re-registers whatever was suspended.
+    pub fn resume(&self, app: &AppHandle) -> Result<()> {
         if let Ok(mut guard) = self.suspended.lock() {
             *guard = false;
         }
-        let Some(hotkey) = self.active() else {
-            return Ok(Mechanism::None);
-        };
-        let canonical = hotkey.to_canonical();
-        match hotkey {
-            Hotkey::Combo { .. } => {
-                let shortcut = hotkey.to_plugin_shortcut()?;
+        for hotkey in self.active() {
+            if let Ok(shortcut) = hotkey.to_plugin_shortcut() {
                 app.global_shortcut().register(shortcut).map_err(|error| {
                     Failure::ShortcutConflict {
-                        shortcut: canonical,
+                        shortcut: hotkey.to_canonical(),
                         reason: error.to_string(),
                     }
                 })?;
-                logging::event(Event::ShortcutResumed);
-                Ok(Mechanism::Plugin)
-            }
-            Hotkey::ModifiersOnly { .. } => {
-                let _ = mode;
-                Ok(Mechanism::KeyboardHook)
             }
         }
+        logging::event(Event::ShortcutResumed);
+        Ok(())
     }
 
     /// Escape is only ours while it could mean "cancel this dictation".
@@ -430,6 +408,19 @@ impl ShortcutRegistry {
             }
         }
     }
+}
+
+/// Registers one hotkey with the global-shortcut plugin, mapping failures to
+/// the same conflict error the rest of the system speaks.
+pub fn register_plugin(app: &AppHandle, hotkey: &Hotkey) -> Result<()> {
+    let canonical = hotkey.to_canonical();
+    let shortcut = hotkey.to_plugin_shortcut()?;
+    app.global_shortcut()
+        .register(shortcut)
+        .map_err(|error| Failure::ShortcutConflict {
+            shortcut: canonical,
+            reason: error.to_string(),
+        })
 }
 
 /// Convenience wrapper used by the plugin handler.
@@ -484,9 +475,20 @@ mod tests {
     }
 
     #[test]
-    fn a_shortcut_without_modifiers_is_refused() {
-        assert!(Hotkey::parse("KeyA").is_err());
-        assert!(Hotkey::parse("Space").is_err());
+    fn a_lone_real_key_is_a_single_key_hotkey() {
+        // A bare key with no modifiers is deliberately legal now - the
+        // default dictation key is the right Ctrl key, held.
+        assert!(matches!(
+            Hotkey::parse("KeyA").unwrap(),
+            Hotkey::SingleKey { .. }
+        ));
+        assert!(matches!(
+            Hotkey::parse("Space").unwrap(),
+            Hotkey::SingleKey { .. }
+        ));
+        // But a lone modifier alone still cannot do anything useful.
+        assert!(Hotkey::parse("Ctrl").is_err());
+        assert!(Hotkey::parse("Alt").is_err());
     }
 
     #[test]
