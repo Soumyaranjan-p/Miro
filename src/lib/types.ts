@@ -26,7 +26,11 @@ export interface Settings {
   /** Canonical `Ctrl+Alt+Space` form, stored as the plugin's shortcut string. */
   shortcut: string;
   mode: DictationMode;
-  /** Home window: last selected pill mode. */
+  /** Normal-mode hotkey: switches the home window to Normal mode. */
+  normalShortcut: string;
+  /** Incident-mode hotkey: switches the home window to Incident mode. */
+  incidentShortcut: string;
+  /** Home window: last selected mode - Normal ("home") or Incident ("intent"). */
   homeMode: HomeMode;
   /** Home window sound toggle. */
   soundOn: boolean;
@@ -82,7 +86,7 @@ export type OverlayState =
   | { kind: "hidden" }
   | { kind: "recording"; deviceLabel: string; startedAtMs: number; maxSeconds: number }
   | { kind: "processing"; startedAtMs: number }
-  | { kind: "inserted"; characters: number; audioMs: number }
+  | { kind: "inserted"; characters: number; audioMs: number; retryId: number | null }
   | { kind: "copied"; characters: number }
   | {
       kind: "error";
@@ -128,6 +132,18 @@ export interface ModelInfo {
   download: ModelDownloadState | null;
 }
 
+/**
+ * One configured global hotkey and how it ended up registered. `role` is the
+ * stable label the dispatcher uses: "dictation", "normal", "incident".
+ */
+export interface HotkeyStatus {
+  role: string;
+  registered: boolean;
+  shortcut: string;
+  mechanism: "plugin" | "keyboard_hook" | "none";
+  detail: SafeDetail;
+}
+
 export interface RuntimeStatus {
   version: string;
   platform: string;
@@ -138,12 +154,8 @@ export interface RuntimeStatus {
     backend: string;
     detail: SafeDetail;
   };
-  shortcut: {
-    registered: boolean;
-    shortcut: string;
-    mechanism: "plugin" | "keyboard_hook" | "none";
-    detail: SafeDetail;
-  };
+  /** All three rebindable hotkeys, one entry each. */
+  hotkeys: HotkeyStatus[];
   microphone: {
     state: "unknown" | "available" | "missing" | "permission_denied";
     detail: SafeDetail;
@@ -175,4 +187,33 @@ export interface LevelFrame {
   level: number;
   /** 0..1 peak since the last frame, for the meter's falling edge. */
   peak: number;
+}
+
+/**
+ * One day of usage aggregates. Numeric only: no transcripts, no word lists.
+ * `date` is the local ISO calendar day the numbers belong to.
+ */
+export interface StatsDay {
+  date: string;
+  dictations: number;
+  words: number;
+  speechMs: number;
+  /** Time spent in Normal mode, beginning on that local day. */
+  normalMs: number;
+  /** Time spent in Incident mode, beginning on that local day. */
+  incidentMs: number;
+}
+
+/** Aggregated numbers for the Statistics page. Read-only, from `stats.json`. */
+export interface StatsSummary {
+  totalDictations: number;
+  totalWords: number;
+  totalSpeechMs: number;
+  normalMs: number;
+  incidentMs: number;
+  /** Average words per minute over all recorded speech, or null without data. */
+  wordsPerMinute: number | null;
+  /** Consecutive days ending today (or yesterday) with at least one dictation. */
+  streakDays: number;
+  days: StatsDay[];
 }

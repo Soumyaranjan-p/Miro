@@ -42,6 +42,9 @@ ureq = { version = "3", default-features = false, features = ["native-tls", "gzi
 thiserror = "2"
 zeroize = "1"
 
+# Local calendar date for the daily usage statistics buckets.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
 [features]
 default = ["engine-whisper"]
 engine-whisper = ["dep:whisper-rs"]

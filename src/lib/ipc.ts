@@ -8,6 +8,7 @@ import type {
   Settings,
   ShortcutCheck,
   OverlayState,
+  StatsSummary,
 } from "./types";
 
 export const EVENTS = {
@@ -59,6 +60,14 @@ export interface MiroBridge {
   retryInsertion(retryId: number): Promise<void>;
   copyPendingTranscript(retryId: number): Promise<void>;
   toggleDictation(): Promise<void>;
+  /** Switch the whole app between Normal ("home") and Incident ("intent"). */
+  switchMode(mode: "home" | "intent"): Promise<void>;
+  /** Reads the in-memory transcript the events referenced. Rust-only state. */
+  getPendingTranscript(retryId: number): Promise<string>;
+  /** Types the pending transcript into whatever app the user has front. */
+  pastePending(retryId: number): Promise<void>;
+  /** Usage statistics: numeric aggregates only. */
+  getStats(): Promise<StatsSummary>;
   openModelsFolder(): Promise<void>;
   openAppDataFolder(): Promise<void>;
   openExternal(url: string): Promise<void>;
@@ -113,6 +122,10 @@ const tauriBridge: MiroBridge = {
   retryInsertion: (retryId) => invoke("retry_insertion", { retryId }),
   copyPendingTranscript: (retryId) => invoke("copy_pending_transcript", { retryId }),
   toggleDictation: () => invoke("toggle_dictation"),
+  switchMode: (mode) => invoke("switch_home_mode", { mode }),
+  getPendingTranscript: (retryId) => invoke("get_pending_transcript", { retryId }),
+  pastePending: (retryId) => invoke("paste_pending", { retryId }),
+  getStats: () => invoke("get_stats"),
   openModelsFolder: () => invoke("open_models_folder"),
   openAppDataFolder: () => invoke("open_app_data_folder"),
   openExternal: (url) => invoke("open_external", { url }),
@@ -159,6 +172,10 @@ export const ipc: MiroBridge = {
   retryInsertion: async (id) => (await bridge()).retryInsertion(id),
   copyPendingTranscript: async (id) => (await bridge()).copyPendingTranscript(id),
   toggleDictation: async () => (await bridge()).toggleDictation(),
+  switchMode: async (mode) => (await bridge()).switchMode(mode),
+  getPendingTranscript: async (id) => (await bridge()).getPendingTranscript(id),
+  pastePending: async (id) => (await bridge()).pastePending(id),
+  getStats: async () => (await bridge()).getStats(),
   openModelsFolder: async () => (await bridge()).openModelsFolder(),
   openAppDataFolder: async () => (await bridge()).openAppDataFolder(),
   openExternal: async (url) => (await bridge()).openExternal(url),

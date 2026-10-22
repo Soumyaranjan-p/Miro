@@ -1,30 +1,26 @@
-/* Miro desktop shell: near-black surfaces, 1px hairline borders, 16px
-   radius cards, and a single warm orange accent. */
+/* Miro desktop shell: 232px sidebar, near-black ink, 1px hairlines, 16px
+   radius cards, one warm ember accent, and the fox watching everything.
+
+   Colours come from src/styles/theme.css tokens so the shell follows the
+   user's theme choice; only shell layout class names live here. Note the
+   `msh-` prefix: `theme.css` owns `.miro-card`, `.miro-btn` and friends for
+   the settings-section components. */
 :root {
   color-scheme: dark;
-  --miro-ink: #0c0d0f;
-  --miro-sidebar: #0c0d0f;
-  --miro-card: #141518;
-  --miro-line: #232527;
-  --miro-text: #ececec;
-  --miro-muted: #9a9ba0;
-  --miro-accent: #f28c3b;
-  --miro-accent-soft: #f28c3b26;
-  --miro-green: #4ade80;
-  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
-.miro-shell {
+.msh-app {
   display: flex;
   height: 100vh;
-  background: var(--miro-sidebar);
-  color: var(--miro-text);
+  background: var(--miro-bg);
+  color: var(--miro-ink);
   user-select: none;
 }
 
 /* ---------- sidebar ---------- */
 
-.miro-sidebar {
+.msh-sidebar {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -32,366 +28,399 @@
   min-width: 232px;
   padding: 18px 12px 12px;
   border-right: 1px solid var(--miro-line);
+  background: var(--miro-surface);
   overflow-y: auto;
 }
 
-.miro-sidebar__brand {
+.msh-sidebar__brand {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 2px 10px 14px;
+}
+
+.msh-sidebar__brand-name {
   font-size: 21px;
   font-weight: 700;
   letter-spacing: 0.2px;
+  color: var(--miro-ink);
 }
 
-.miro-sidebar__label {
-  padding: 8px 10px 2px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--miro-muted);
-}
-
-.miro-sidebar__group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.miro-sidebar__item {
+.msh-sidebar__item {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 11px;
   background: transparent;
-  color: var(--miro-text);
-  font: 500 13.5px/1 "Inter", "Segoe UI", system-ui, sans-serif;
+  color: var(--miro-muted);
+  font: 500 13.5px/1 var(--font-sans);
   text-align: left;
   cursor: pointer;
 }
 
-.miro-sidebar__item:hover {
-  background: #ffffff08;
+.msh-sidebar__item:hover {
+  background: var(--miro-track);
+  color: var(--miro-ink);
 }
 
-.miro-sidebar__item.is-active {
+.msh-sidebar__item:focus-visible {
+  outline: 2px solid var(--miro-ring);
+  outline-offset: 2px;
+}
+
+.msh-sidebar__item.is-active {
   background: var(--miro-accent-soft);
-  border-color: #f28c3b40;
-  color: #ffd9b5;
+  border-color: color-mix(in oklab, var(--miro-accent) 35%, transparent);
+  color: var(--miro-accent);
 }
 
-.miro-sidebar__item svg {
+.msh-sidebar__item svg {
   opacity: 0.9;
 }
 
-.miro-sidebar__status {
+/* The mode pill pinned to the bottom of the sidebar: click to flip. */
+.msh-modepill {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   margin-top: auto;
   padding: 10px 12px;
-  border-radius: 999px;
   border: 1px solid var(--miro-line);
-  background: #101114;
-  color: var(--miro-muted);
-  font-size: 12.5px;
+  border-radius: 999px;
+  background: var(--miro-surface-2);
+  color: var(--miro-ink);
+  font: 550 12.5px/1.2 var(--font-sans);
+  cursor: pointer;
+  text-align: left;
 }
 
-.miro-sidebar__dot {
+.msh-modepill:hover {
+  border-color: var(--miro-line-strong);
+}
+
+.msh-modepill:focus-visible {
+  outline: 2px solid var(--miro-ring);
+  outline-offset: 2px;
+}
+
+.msh-modepill.is-incident {
+  border-color: color-mix(in oklab, var(--miro-danger) 45%, transparent);
+  background: var(--miro-danger-soft);
+}
+
+.msh-modepill__dot {
   width: 8px;
   height: 8px;
   margin-left: -2px;
   border-radius: 50%;
-  background: var(--miro-green);
-  box-shadow: 0 0 6px #4ade8066;
+  background: var(--miro-success);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--miro-success) 55%, transparent);
+  flex: none;
+}
+
+.msh-modepill.is-incident .msh-modepill__dot {
+  background: var(--miro-danger);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--miro-danger) 55%, transparent);
+  animation: msh-breathe 2.4s ease-in-out infinite;
+}
+
+.msh-modepill__hint {
+  color: var(--miro-faint);
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+@keyframes msh-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* ---------- main column ---------- */
 
-.miro-main {
+.msh-main {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
   padding: 26px 30px 30px;
-  background: var(--miro-ink);
+  background: var(--miro-bg);
 }
 
-.miro-page {
+.msh-page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-width: 960px;
+  gap: 14px;
+  max-width: 860px;
 }
 
-.miro-page__head h1,
-.miro-hero h1 {
-  margin: 0 0 8px;
-  font-size: 30px;
+.msh-page__head h1 {
+  font-size: 21px;
   font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--miro-ink);
 }
 
-.miro-page__head p {
-  margin: 0;
+.msh-page__head p {
+  margin-top: 3px;
+  font-size: 13px;
   color: var(--miro-muted);
-  font-size: 14px;
 }
 
-.miro-card {
-  padding: 22px 24px;
-  border: 1px solid var(--miro-line);
+.msh-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.msh-grid > * {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .msh-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.msh-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .msh-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.msh-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 16px;
   border-radius: 16px;
-  background: var(--miro-card);
+  border: 1px solid var(--miro-line);
+  background: var(--miro-surface);
+  box-shadow: var(--shadow-soft);
 }
 
-.miro-card__title {
-  margin: 0 0 14px;
-  font-size: 17px;
-  font-weight: 650;
+.msh-kpi strong {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--miro-ink);
 }
 
-.miro-hero p {
-  margin: 0 0 18px;
+.msh-kpi span {
+  font-size: 11.5px;
   color: var(--miro-muted);
-  font-size: 14.5px;
 }
 
-.miro-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 11px 18px;
-  border: none;
-  border-radius: 12px;
-  background: var(--miro-accent);
-  color: #191106;
-  font: 600 13.5px/1 "Inter", "Segoe UI", system-ui, sans-serif;
-  cursor: pointer;
-}
+/* ---------- home hero ---------- */
 
-.miro-button:hover {
-  background: #fa9d55;
-}
-
-.miro-button__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #191106;
-  opacity: 0.85;
-}
-
-.miro-button--solid {
-  padding: 9px 16px;
-}
-
-.miro-mode {
+.msh-hero {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 18px;
-  padding: 12px 0;
-  border-top: 1px solid var(--miro-line);
+  padding: 20px 22px;
+  border-radius: 18px;
+  border: 1px solid var(--miro-line);
+  background:
+    radial-gradient(120% 160% at 8% 0%, color-mix(in oklab, var(--miro-accent) 12%, transparent), transparent 55%),
+    var(--miro-surface);
+  box-shadow: var(--shadow-soft);
 }
 
-.miro-mode:first-of-type {
-  border-top: none;
+.msh-hero__body {
+  min-width: 0;
 }
 
-.miro-mode strong {
-  font-size: 14px;
+.msh-hero__body h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--miro-ink);
 }
 
-.miro-mode p {
-  margin: 4px 0 0;
-  color: var(--miro-muted);
+.msh-hero__body p {
+  margin-top: 4px;
   font-size: 13px;
+  color: var(--miro-muted);
 }
 
-.miro-toggle {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  min-width: 44px;
-  border: none;
-  border-radius: 999px;
-  background: #2a2c30;
-  cursor: pointer;
-  transition: background 160ms ease;
+/* ---------- transcript panel ---------- */
+
+.msh-transcript {
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.miro-toggle span {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #f2f2f2;
-  transition: transform 160ms ease;
+.msh-transcript__text {
+  max-height: 150px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--miro-line);
+  background: var(--miro-surface-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--miro-ink);
+  white-space: pre-wrap;
+  user-select: text;
+  cursor: text;
 }
 
-.miro-toggle.is-on {
+.msh-transcript__text.is-placeholder {
+  color: var(--miro-faint);
+  border-style: dashed;
+}
+
+.msh-transcript__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.msh-transcript__meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--miro-faint);
+}
+
+.msh-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+}
+
+.msh-wave__bar {
+  width: 3px;
+  border-radius: 2px;
   background: var(--miro-accent);
+  min-height: 3px;
+  opacity: 0.9;
 }
 
-.miro-toggle.is-on span {
-  transform: translateX(20px);
+/* ---------- mode card ---------- */
+
+.msh-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.miro-toggle:focus-visible {
-  outline: 2px solid #f28c3b88;
+@media (max-width: 760px) {
+  .msh-modes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.msh-mode {
+  position: relative;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--miro-line);
+  background: var(--miro-surface-2);
+  cursor: pointer;
+  text-align: left;
+  color: var(--miro-ink);
+}
+
+.msh-mode:hover {
+  border-color: var(--miro-line-strong);
+}
+
+.msh-mode:focus-visible {
+  outline: 2px solid var(--miro-ring);
   outline-offset: 2px;
 }
 
-/* history + stats grid */
-
-.miro-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 252px;
-  gap: 18px;
-  align-items: start;
+.msh-mode.is-active {
+  border-color: color-mix(in oklab, var(--miro-accent) 55%, transparent);
+  background: var(--miro-accent-soft);
 }
 
-.miro-grid__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 10px;
+.msh-mode.is-active.is-incident {
+  border-color: color-mix(in oklab, var(--miro-danger) 55%, transparent);
+  background: var(--miro-danger-soft);
 }
 
-.miro-grid__label {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--miro-muted);
-}
-
-.miro-search {
+.msh-mode__name {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 220px;
-  padding: 8px 12px;
-  border: 1px solid var(--miro-line);
-  border-radius: 11px;
-  background: #101114;
-  color: var(--miro-muted);
-}
-
-.miro-search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  color: var(--miro-text);
-  font-size: 13px;
-  outline: none;
-}
-
-.miro-search input::placeholder {
-  color: #6b6c71;
-}
-
-.miro-history {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 16px;
-}
-
-.miro-history__row {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 9px 2px;
-  border-bottom: 1px solid #1d1f22;
   font-size: 13.5px;
-}
-
-.miro-history__row:last-child {
-  border-bottom: none;
-}
-
-.miro-history__when {
-  min-width: 74px;
-  color: var(--miro-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.miro-history__empty {
-  margin: 26px 0;
-  text-align: center;
-  color: var(--miro-muted);
-  font-size: 13px;
-}
-
-.miro-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 22px 20px;
-}
-
-.miro-stats__item strong {
-  display: block;
-  font-size: 34px;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
 }
 
-.miro-stats__item span {
+.msh-mode__desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--miro-muted);
-  font-size: 13px;
 }
 
-.miro-stats__foot {
+.msh-mode__check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--miro-accent);
+  color: var(--miro-accent-ink);
+}
+
+.msh-mode.is-active.is-incident .msh-mode__check {
+  background: var(--miro-danger);
+  color: #fff;
+}
+
+/* ---------- charts ---------- */
+
+.msh-chart {
+  height: 190px;
+}
+
+.msh-chart-sm {
+  height: 200px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 2px;
-  padding-top: 14px;
-  border-top: 1px solid var(--miro-line);
-  color: var(--miro-green);
-  font-size: 13px;
-  font-weight: 550;
+  justify-content: center;
 }
 
-/* lists on placeholder pages */
+/* ---------- status row under the mode card ---------- */
 
-.miro-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.msh-statusdot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--miro-success);
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
-.miro-list__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 11px 2px;
-  border-bottom: 1px solid #1d1f22;
-  font-size: 13.5px;
+.msh-statusdot.is-warn {
+  background: var(--miro-warn);
 }
 
-.miro-list__row:last-child {
-  border-bottom: none;
-}
-
-.miro-list__muted {
-  color: #63806b;
-  font-size: 11.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.msh-statusdot.is-danger {
+  background: var(--miro-danger);
 }

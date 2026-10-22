@@ -30,9 +30,9 @@ describe("overlay state machine", () => {
       initialOverlayState,
       recording,
       { type: "startProcessing", startedAtMs: 2_000 },
-      { type: "inserted", characters: 42, audioMs: 3_100 },
+      { type: "inserted", characters: 42, audioMs: 3_100, retryId: null },
     );
-    expect(state).toEqual({ kind: "inserted", characters: 42, audioMs: 3_100 });
+    expect(state).toEqual({ kind: "inserted", characters: 42, audioMs: 3_100, retryId: null });
   });
 
   it("ignores a second recording request while one is running", () => {
@@ -50,7 +50,7 @@ describe("overlay state machine", () => {
     const states = [
       apply(initialOverlayState, recording),
       apply(initialOverlayState, recording, { type: "startProcessing", startedAtMs: 2 }),
-      apply(initialOverlayState, recording, { type: "inserted", characters: 1, audioMs: 1 }),
+      apply(initialOverlayState, recording, { type: "inserted", characters: 1, audioMs: 1, retryId: null }),
       apply(initialOverlayState, recording, {
         type: "failed",
         code: "focus_changed",
@@ -82,7 +82,7 @@ describe("overlay state machine", () => {
   });
 
   it("never reports success or failure while hidden", () => {
-    expect(reduceOverlayState(initialOverlayState, { type: "inserted", characters: 5, audioMs: 10 })).toEqual({
+    expect(reduceOverlayState(initialOverlayState, { type: "inserted", characters: 5, audioMs: 10, retryId: null })).toEqual({
       kind: "hidden",
     });
     expect(
@@ -97,7 +97,7 @@ describe("overlay state machine", () => {
   });
 
   it("hides successes quickly and retryable errors never", () => {
-    expect(autoHideDelayMs({ kind: "inserted", characters: 1, audioMs: 1 })).toBe(1100);
+    expect(autoHideDelayMs({ kind: "inserted", characters: 1, audioMs: 1, retryId: null })).toBe(1100);
     expect(autoHideDelayMs({ kind: "copied", characters: 1 })).toBe(1100);
     expect(
       autoHideDelayMs({ kind: "error", code: "audio_empty", detail: null, retryable: false, retryId: null }),
@@ -124,6 +124,6 @@ describe("overlay state machine", () => {
     expect(isBusy(initialOverlayState)).toBe(false);
     expect(isBusy({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60 })).toBe(true);
     expect(isBusy({ kind: "processing", startedAtMs: 0 })).toBe(true);
-    expect(isBusy({ kind: "inserted", characters: 1, audioMs: 1 })).toBe(false);
+    expect(isBusy({ kind: "inserted", characters: 1, audioMs: 1, retryId: null })).toBe(false);
   });
 });

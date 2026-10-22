@@ -19,11 +19,14 @@ import type {
   RuntimeStatus,
   Settings,
   ShortcutCheck,
+  StatsSummary,
 } from "./types";
 
 const settings: Settings = {
   version: 1,
-  shortcut: "Ctrl+Alt",
+  shortcut: "ControlRight",
+  normalShortcut: "Ctrl+Alt",
+  incidentShortcut: "Ctrl+Alt+Space",
   mode: "push_to_talk",
   homeMode: "home",
   soundOn: true,
@@ -112,6 +115,45 @@ const models: ModelInfo[] = [
   },
 ];
 
+// Fixture usage statistics: enough days for the charts to look alive.
+const daysBack = 13;
+function previewStats(): StatsSummary {
+  const days: StatsSummary["days"] = [];
+  let totalWords = 0;
+  let totalDictations = 0;
+  let totalSpeechMs = 0;
+  for (let offset = daysBack; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+    // A quiet weekend, a Tuesday spike: plausible-enough fixtures.
+    const seed = Array.from(date.toDateString()).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    const dictations = Math.round((seed % 11) + (date.getDay() === 0 || date.getDay() === 6 ? 0 : 4));
+    const words = dictations * 26 + (seed % 40);
+    const speechMs = words * 420;
+    days.push({
+      date: date.toISOString().slice(0, 10),
+      dictations,
+      words,
+      speechMs,
+      normalMs: speechMs * 9,
+      incidentMs: offset % 3 === 0 ? speechMs * 4 : 0,
+    });
+    totalWords += words;
+    totalDictations += dictations;
+    totalSpeechMs += speechMs;
+  }
+  return {
+    totalDictations,
+    totalWords,
+    totalSpeechMs,
+    normalMs: totalSpeechMs * 9,
+    incidentMs: totalSpeechMs * 2,
+    wordsPerMinute: totalSpeechMs > 0 ? totalWords / (totalSpeechMs / 60_000) : null,
+    streakDays: 5,
+    days,
+  };
+}
+
 const microphones: MicrophoneInfo[] = [
   { id: "default", label: "System default", isDefault: true, sampleRate: 48_000, channels: 2 },
   { id: "Microphone Array (AMD Audio Device)", label: "Microphone Array (AMD Audio Device)", isDefault: false, sampleRate: 48_000, channels: 2 },
@@ -175,7 +217,7 @@ function scriptedCycle(): void {
     stopLevels();
     overlay({ kind: "processing", startedAtMs: Date.now() });
     window.setTimeout(() => {
-      overlay({ kind: "inserted", characters: 148, audioMs: 6400 });
+      overlay({ kind: "inserted", characters: 148, audioMs: 6400, retryId: 1 });
       window.setTimeout(() => overlay({ kind: "hidden" }), 1200);
     }, 1400);
   }, 4200);
@@ -199,7 +241,29 @@ export const previewBridge: MiroBridge = {
       platform: "dev preview",
       modelsDir: "%APPDATA%\\app.miro.dictation\\models",
       engine: { state: "ready", modelId: settings.modelId, backend: "preview", detail: null },
-      shortcut: { registered: true, shortcut: settings.shortcut, mechanism: "plugin", detail: "preview harness" },
+      hotkeys: [
+        {
+          role: "dictation",
+          registered: true,
+          shortcut: settings.shortcut,
+          mechanism: "keyboard_hook",
+          detail: null,
+        },
+        {
+          role: "normal",
+          registered: true,
+          shortcut: settings.normalShortcut,
+          mechanism: "plugin",
+          detail: null,
+        },
+        {
+          role: "incident",
+          registered: true,
+          shortcut: settings.incidentShortcut,
+          mechanism: "plugin",
+          detail: null,
+        },
+      ],
       microphone: { state: "available", detail: null },
       temp: { state: "clean", detail: null },
     };
@@ -282,15 +346,15 @@ export const previewBridge: MiroBridge = {
     stopLevels();
     overlay({ kind: "processing", startedAtMs: Date.now() });
     window.setTimeout(() => {
-      overlay({ kind: "inserted", characters: 96, audioMs: 3100 });
+      overlay({ kind: "inserted", characters: 96, audioMs: 3100, retryId: 1 });
       window.setTimeout(() => overlay({ kind: "hidden" }), 1200);
     }, 1200);
   },
   async retryInsertion() {
-    overlay({ kind: "inserted", characters: 96, audioMs: 3100 });
+    overlay({ kind: "inserted", characters: 96, audioMs: 3100, retryId: 1 });
   },
   async copyPendingTranscript() {
-    overlay({ kind: "inserted", characters: 96, audioMs: 3100 });
+    overlay({ kind: "inserted", characters: 96, audioMs: 3100, retryId: 1 });
   },
   async toggleDictation() {
     demoCounter += 1;
@@ -300,6 +364,19 @@ export const previewBridge: MiroBridge = {
       stopLevels();
       overlay({ kind: "hidden" });
     }
+  },
+  async switchMode(mode) {
+    await this.setSettings({ homeMode: mode });
+  },
+  // The preview has one fixture transcript, same as the overlay demo.
+  async getPendingTranscript() {
+    return "Standup notes: shipped the ribbon, inflamming the tray, then a quick lunch.";
+  },
+  async pastePending() {
+    overlay({ kind: "inserted", characters: 148, audioMs: 6400, retryId: null });
+  },
+  async getStats(): Promise<StatsSummary> {
+    return previewStats();
   },
   async openModelsFolder() {},
   async openAppDataFolder() {},
@@ -328,7 +405,7 @@ if (forcedState) {
         overlay({ kind: "processing", startedAtMs: Date.now() });
         break;
       case "inserted":
-        overlay({ kind: "inserted", characters: 148, audioMs: 6400 });
+        overlay({ kind: "inserted", characters: 148, audioMs: 6400, retryId: 1 });
         break;
       case "error":
         overlay({ kind: "error", code: "focus_changed", detail: null, retryable: true, retryId: 1 });

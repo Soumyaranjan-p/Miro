@@ -1,103 +1,94 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ipc } from "../../lib/ipc";
-import { FoxMascot } from "./FoxMascot";
+import { useReducedMotion, useRuntimeStatus, useSettings } from "../../lib/hooks";
+import { LiveFox, type FoxState } from "./LiveFox";
 import { PageHome } from "./PageHome";
-import { PlaceholderPage, type PageId } from "./PlaceholderPage";
-import {
-  IconGear,
-  IconHome,
-  IconIncident,
-  IconKeyboard,
-  IconNormal,
-  IconStats,
-  IconSun,
-} from "./Icons";
+import { PageShortcuts } from "./PageShortcuts";
+import { PageSettings } from "./PageSettings";
+import { PageStatistics } from "./PageStatistics";
+import { IconGear, IconHome, IconKeyboard, IconStats } from "./Icons";
 
-const MIRO_SECTIONS: Array<{ id: PageId; label: string; icon: ReactNode }> = [
+export type PageId = "home" | "statistics" | "shortcuts" | "settings";
+
+const PAGES: Array<{ id: PageId; label: string; icon: ReactNode }> = [
   { id: "home", label: "Home", icon: <IconHome /> },
   { id: "statistics", label: "Statistics", icon: <IconStats /> },
-  { id: "incident", label: "Incident mode", icon: <IconIncident /> },
-  { id: "normal", label: "Normal mode", icon: <IconNormal /> },
+  { id: "shortcuts", label: "Shortcuts", icon: <IconKeyboard /> },
   { id: "settings", label: "Settings", icon: <IconGear /> },
-];
-
-const ISLAND_SECTIONS: Array<{ id: PageId; label: string; icon: ReactNode }> = [
-  { id: "island-general", label: "General", icon: <IconSun /> },
-  { id: "island-shortcuts", label: "Shortcuts", icon: <IconKeyboard /> },
 ];
 
 function Sidebar({
   page,
   onNavigate,
-  normalMode,
+  incidentActive,
+  onToggleMode,
 }: {
   page: PageId;
   onNavigate: (next: PageId) => void;
-  normalMode: boolean;
+  incidentActive: boolean;
+  onToggleMode: () => void;
 }) {
   return (
-    <aside className="miro-sidebar">
-      <div className="miro-sidebar__brand">
-        <FoxMascot size={34} />
-        <span>Miro</span>
+    <aside className="msh-sidebar">
+      <div className="msh-sidebar__brand">
+        <SidebarFox />
+        <span className="msh-sidebar__brand-name">Miro</span>
       </div>
 
-      <SectionLabel>Flow</SectionLabel>
-      <nav className="miro-sidebar__group">
-        {MIRO_SECTIONS.map((item) => (
-          <SidebarItem key={item.id} active={item.id === page} onClick={() => onNavigate(item.id)}>
+      <nav className="msh-sidebar__group" aria-label="Sections">
+        {PAGES.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`msh-sidebar__item${item.id === page ? " is-active" : ""}`}
+            onClick={() => onNavigate(item.id)}
+          >
             {item.icon}
             <span>{item.label}</span>
-          </SidebarItem>
+          </button>
         ))}
       </nav>
 
-      <SectionLabel>Island</SectionLabel>
-      <nav className="miro-sidebar__group">
-        {ISLAND_SECTIONS.map((item) => (
-          <SidebarItem key={item.id} active={item.id === page} onClick={() => onNavigate(item.id)}>
-            {item.icon}
-            <span>{item.label}</span>
-          </SidebarItem>
-        ))}
-      </nav>
-
-      <div className="miro-sidebar__status" role="status">
-        <span className="miro-sidebar__dot" />
-        {normalMode ? "Normal mode is on" : "Normal mode is off"}
-      </div>
+      <button
+        type="button"
+        className={`msh-modepill${incidentActive ? " is-incident" : ""}`}
+        onClick={onToggleMode}
+        title={incidentActive ? "Back to Normal mode" : "Switch to Incident mode"}
+      >
+        <span className="msh-modepill__dot" aria-hidden />
+        <span>{incidentActive ? "Incident mode" : "Normal mode"}</span>
+        <span className="msh-modepill__hint">{incidentActive ? "on" : "on"}</span>
+      </button>
     </aside>
   );
 }
 
-function SectionLabel({ children }: { children: ReactNode }) {
-  return <div className="miro-sidebar__label">{children}</div>;
+/**
+ * The sidebar avatar mirrors the engine, not the page: incident mode shows on
+ * every page so the state is never missed.
+ */
+function SidebarFox(): ReactNode {
+  const { settings } = useSettings();
+  const { status } = useRuntimeStatus(8_000);
+  const incident = settings?.homeMode === "intent";
+  const state: FoxState = incident ? "incident" : status?.engine.state === "failed" ? "error" : "normal";
+  return <LiveFox size={34} state={state} reducedMotion label="Miro the fox" />;
 }
 
-function SidebarItem({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      className={`miro-sidebar__item${active ? " is-active" : ""}`}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
+function greeting(userName: string): string {
+  const hour = new Date().getHours();
+  const partOfDay =
+    hour < 5 ? "Late night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const tagline = "ready when you are";
+  return userName ? `${partOfDay}, ${userName} — ${tagline}` : `${partOfDay} — ${tagline}`;
 }
 
 export function MiroApp() {
   const [page, setPage] = useState<PageId>("home");
-  const [modeOn, setModeOn] = useState(true);
   const [userName, setUserName] = useState("");
+  const { settings } = useSettings();
+  const reducedMotion = useReducedMotion();
+  const incidentActive = settings?.homeMode === "intent";
 
   useEffect(() => {
     let cancelled = false;
@@ -114,14 +105,22 @@ export function MiroApp() {
     };
   }, []);
 
+  const toggleMode = () => {
+    void ipc.switchMode(incidentActive ? "home" : "intent").catch(() => undefined);
+  };
+
   return (
-    <div className="miro-shell">
-      <Sidebar page={page} onNavigate={setPage} normalMode={modeOn} />
-      <main className="miro-main">
+    <div className="msh-app" data-motion={reducedMotion ? "reduced" : "full"}>
+      <Sidebar page={page} onNavigate={setPage} incidentActive={incidentActive} onToggleMode={toggleMode} />
+      <main className="msh-main">
         {page === "home" ? (
-          <PageHome userName={userName} modeOn={modeOn} onModeChange={setModeOn} />
+          <PageHome greeting={greeting(userName)} onNavigateToStatistics={() => setPage("statistics")} />
+        ) : page === "statistics" ? (
+          <PageStatistics />
+        ) : page === "shortcuts" ? (
+          <PageShortcuts />
         ) : (
-          <PlaceholderPage id={page} />
+          <PageSettings />
         )}
       </main>
     </div>

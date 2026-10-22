@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EVENTS, asLevelFrame, asOverlayState, ipc, type ModelProgress, type SettingsPatch } from "./ipc";
 import { initialOverlayState, reduceOverlayState, type OverlayAction } from "./overlayState";
 import { applyTheme, prefersReducedMotion, watchReducedMotion, watchSystemTheme } from "./theme";
-import type { LevelFrame, OverlayState, RuntimeStatus, Settings } from "./types";
+import type { OverlayState, RuntimeStatus, Settings, StatsSummary } from "./types";
 
 /** Rust owns the settings; this hook only mirrors them and pushes patches back. */
 export function useSettings() {
@@ -131,4 +131,55 @@ export function useTick(active: boolean, intervalMs = 100): number {
   return now;
 }
 
-export type { LevelFrame };
+/**
+ * Usage aggregates for the Home panel and the Statistics page. Rust owns the
+ * numbers; this mirrors them and refreshes on an interval (a dictation only
+ * changes the totals, so a refresh tick is plenty).
+ */
+export function useStats(pollMs = 15_000) {
+  const [stats, setStats] = useState<StatsSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setStats(await ipc.getStats());
+      setError(null);
+    } catch (cause) {
+      setError(String(cause));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const id = window.setInterval(() => void refresh(), pollMs);
+    return () => window.clearInterval(id);
+  }, [refresh, pollMs]);
+
+  return { stats, error, refresh };
+}
+
+/** The latest mic level, cheap enough for the fox and status rows. */
+export function useMicLevel(active: boolean): number {
+  const [level, setLevel] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setLevel(0);
+      return;
+    }
+    let frame = 0;
+    let smoothed = 0;
+    const off = ipc.on<unknown>(EVENTS.micLevel, (payload) => {
+      const { level: raw } = asLevelFrame(payload);
+      // Slight attack, slow release: reads like a voice, not a metronome.
+      smoothed = raw > smoothed ? raw : smoothed * 0.86 + raw * 0.14;
+      frame += 1;
+      if (frame % 2 === 0) setLevel(smoothed);
+    });
+    return off;
+  }, [active]);
+
+  return level;
+}
+
+export type { StatsSummary };

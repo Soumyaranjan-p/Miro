@@ -3,7 +3,7 @@ import type { ErrorCode, OverlayState } from "./types";
 export type OverlayAction =
   | { type: "startRecording"; deviceLabel: string; startedAtMs: number; maxSeconds: number }
   | { type: "startProcessing"; startedAtMs: number }
-  | { type: "inserted"; characters: number; audioMs: number }
+  | { type: "inserted"; characters: number; audioMs: number; retryId: number | null }
   | { type: "copied"; characters: number }
   | { type: "failed"; code: ErrorCode; detail: string | null; retryable: boolean; retryId: number | null }
   | { type: "hide" };
@@ -31,7 +31,7 @@ export function reduceOverlayState(state: OverlayState, action: OverlayAction): 
       return { kind: "processing", startedAtMs: action.startedAtMs };
     case "inserted":
       if (state.kind === "hidden") return state;
-      return { kind: "inserted", characters: action.characters, audioMs: action.audioMs };
+      return { kind: "inserted", characters: action.characters, audioMs: action.audioMs, retryId: action.retryId };
     case "copied":
       if (state.kind === "hidden") return state;
       return { kind: "copied", characters: action.characters };
