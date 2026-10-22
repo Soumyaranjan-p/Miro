@@ -18,10 +18,16 @@ use crate::insertion::win;
 pub const OVERLAY_LABEL: &str = "overlay";
 pub const SETTINGS_LABEL: &str = "main";
 pub const SPLASH_LABEL: &str = "splash";
+pub const ISLAND_LABEL: &str = "island";
 const OVERLAY_WIDTH: f64 = 380.0;
 const OVERLAY_HEIGHT: f64 = 132.0;
 /// Gap between the overlay and the edge of the work area.
 const OVERLAY_MARGIN: i32 = 28;
+
+/// The notch island: a small black pill pinned to the top-centre of the
+/// primary monitor, sitting flush against the screen edge.
+const ISLAND_WIDTH: f64 = 320.0;
+const ISLAND_HEIGHT: f64 = 72.0;
 
 /// The splash panel: a wide bar at the top of the primary monitor.
 const SPLASH_WIDTH: f64 = 1000.0;
@@ -60,17 +66,73 @@ pub fn create_overlay(app: &AppHandle) -> Result<WebviewWindow> {
 
 /// Creates the settings window, hidden. It is an ordinary application window:
 /// it takes focus, it appears in the taskbar, it behaves like Windows expects.
+/// Closing it hides to the tray instead of exiting (handled in `lib.rs`).
 pub fn create_settings(app: &AppHandle) -> Result<WebviewWindow> {
     let window =
         WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
             .title("Miro")
-            .inner_size(820.0, 760.0)
-            .min_inner_size(620.0, 520.0)
+            .inner_size(1000.0, 700.0)
+            .min_inner_size(760.0, 560.0)
+            .resizable(true)
             .visible(false)
             .center()
             .build()
             .map_err(|e| Failure::Internal(format!("create settings window: {e}")))?;
     Ok(window)
+}
+
+/// Creates the island: an always-on-top, non-activating, transparent pill
+/// pinned to the top edge of the primary monitor. It never takes focus and it
+/// is not in the taskbar; the desktop and other windows stay usable beside it.
+pub fn create_island(app: &AppHandle) -> Result<WebviewWindow> {
+    let window =
+        WebviewWindowBuilder::new(app, ISLAND_LABEL, WebviewUrl::App("island.html".into()))
+            .title("Miro island")
+            .inner_size(ISLAND_WIDTH, ISLAND_HEIGHT)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .resizable(false)
+            .shadow(false)
+            .focused(false)
+            .visible(false)
+            .build()
+            .map_err(|e| Failure::Internal(format!("create island window: {e}")))?;
+
+    let hwnd = raw_hwnd(&window)?;
+    win::make_non_activating(hwnd)?;
+
+    if let Err(failure) = place_island(&window) {
+        crate::logging::event(crate::logging::Event::Failure {
+            code: failure.code().as_str(),
+            detail: failure.detail().unwrap_or_default(),
+        });
+    }
+    let _ = window.show();
+
+    Ok(window)
+}
+
+/// Pins the island to the top-centre edge of the primary monitor, flush with
+/// the screen's top row of physical pixels.
+fn place_island(window: &WebviewWindow) -> Result<()> {
+    let monitor = window
+        .primary_monitor()
+        .map_err(|e| Failure::Internal(format!("island monitor: {e}")))?
+        .ok_or_else(|| Failure::Internal("no primary monitor available".into()))?;
+
+    let size = window
+        .outer_size()
+        .map_err(|e| Failure::Internal(format!("island size: {e}")))?;
+    let origin = monitor.position();
+    let bounds = monitor.size();
+    let x = origin.x + (bounds.width as i32 - size.width as i32).max(0) / 2;
+
+    window
+        .set_position(PhysicalPosition::new(x, origin.y))
+        .map_err(|e| Failure::Internal(format!("place island: {e}")))?;
+    Ok(())
 }
 
 /// Creates the splash window, hidden, on the first launch of the process; a

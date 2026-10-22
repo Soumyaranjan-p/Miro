@@ -31,6 +31,7 @@ export default defineConfig({
         settings: entry("index.html"),
         overlay: entry("overlay.html"),
         splash: entry("splash.html"),
+        island: entry("island.html"),
       },
     },
   },

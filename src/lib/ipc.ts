@@ -66,6 +66,8 @@ export interface MiroBridge {
   notifySplashReady(): Promise<void>;
   /** The splash sequence finished; Rust should hide the splash window. */
   splashFinished(): Promise<void>;
+  /** The Windows user's display name for the Home greeting. */
+  getUserName(): Promise<string>;
   on<T>(event: MiroEventName, handler: (payload: T) => void): () => void;
 }
 
@@ -116,6 +118,7 @@ const tauriBridge: MiroBridge = {
   openExternal: (url) => invoke("open_external", { url }),
   notifySplashReady: () => invoke("notify_splash_ready"),
   splashFinished: () => invoke("splash_finished"),
+  getUserName: () => invoke("get_user_display_name"),
   on: subscribe,
 };
 
@@ -161,6 +164,7 @@ export const ipc: MiroBridge = {
   openExternal: async (url) => (await bridge()).openExternal(url),
   notifySplashReady: async () => (await bridge()).notifySplashReady(),
   splashFinished: async () => (await bridge()).splashFinished(),
+  getUserName: async () => (await bridge()).getUserName(),
   on: <T,>(event: MiroEventName, handler: (payload: T) => void) => subscribe<T>(event, handler),
 };
 

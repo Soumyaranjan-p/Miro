@@ -16,9 +16,9 @@ from pathlib import Path
 from PIL import Image
 
 MASTER = 1024
-# The avatar, committed next to this script. Any webp/png/jpg works; the
-# preferred source is the mascot portrait.
-SOURCE = Path(__file__).with_name("icon-source.webp")
+# The avatar, committed next to this script - the transparent-background
+# version, so every icon reads as a round pfp rather than a dark square.
+SOURCE = Path(__file__).with_name("icon-source.png")
 # Tauri reads its bundle icons from the crate directory, so this is where the
 # generated artwork lives.
 OUT_DIR = Path(__file__).resolve().parent.parent / "src-tauri" / "icons"

@@ -114,6 +114,7 @@ pub fn run() {
             commands::open_external,
             commands::notify_splash_ready,
             commands::splash_finished,
+            commands::get_user_display_name,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -179,6 +180,7 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     windows::create_overlay(handle)?;
     windows::create_settings(handle)?;
     windows::create_or_take_splash(handle)?;
+    windows::create_island(handle)?;
     windows::create_tray(handle)?;
 
     // --- shortcut --------------------------------------------------------------

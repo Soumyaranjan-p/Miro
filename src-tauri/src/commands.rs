@@ -277,6 +277,16 @@ pub async fn splash_finished(
     Ok(())
 }
 
+/// The Windows account name, for the Home greeting card. Display only.
+#[tauri::command]
+pub async fn get_user_display_name() -> CmdResult<String> {
+    let mut name = std::env::var("USERNAME").unwrap_or_default();
+    if let Some(first) = name.get(0..1) {
+        name = first.to_uppercase() + name[1..].as_ref();
+    }
+    Ok(name)
+}
+
 // ------------------------------------------------------------------ models --
 
 #[tauri::command]

@@ -310,6 +310,9 @@ export const previewBridge: MiroBridge = {
   // purely in CSS when its page is opened directly in a browser.
   async notifySplashReady() {},
   async splashFinished() {},
+  async getUserName() {
+    return "friend";
+  },
   on,
 };
 
