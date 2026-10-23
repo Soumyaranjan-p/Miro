@@ -55,6 +55,8 @@ export function autoHideDelayMs(state: OverlayState): number | null {
     case "inserted":
     case "copied":
       return 1100;
+    case "mode":
+      return 2200;
     case "hidden":
       return null;
     case "error":

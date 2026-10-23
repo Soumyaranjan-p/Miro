@@ -24,7 +24,7 @@ import type {
 
 const settings: Settings = {
   version: 1,
-  shortcut: "ControlRight",
+  shortcut: "Ctrl+M",
   normalShortcut: "Ctrl+Alt",
   incidentShortcut: "Ctrl+Alt+Space",
   mode: "push_to_talk",

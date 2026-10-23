@@ -145,6 +145,9 @@ pub fn switch_home_mode(app: &AppHandle, mode: HomeMode) -> CmdResult<()> {
     let app_state = app.state::<AppState>();
     let before = app_state.settings();
     if before.home_mode == mode {
+        // Even a no-op press answers on the overlay: a hotkey that says
+        // nothing feels broken.
+        acknowledge_mode(app, mode);
         return Ok(());
     }
     let after = app_state.update(SettingsPatch {
@@ -157,7 +160,27 @@ pub fn switch_home_mode(app: &AppHandle, mode: HomeMode) -> CmdResult<()> {
     crate::stats::on_mode_changed(app);
     session.refresh_runtime(app);
     let _ = app.emit(events::SETTINGS_EVENT, after.clone());
+    acknowledge_mode(app, mode);
     Ok(())
+}
+
+/// Briefly answers a mode hotkey on the overlay ("Miro calm" / "Miro on
+/// guard"), in both the changed and the no-op case. Skipped while a
+/// dictation is in flight: that overlay is busy telling a story already.
+fn acknowledge_mode(app: &AppHandle, mode: HomeMode) {
+    let session = app.state::<Session>();
+    if session.phase() != crate::session::Phase::Idle {
+        return;
+    }
+    crate::session::emit_overlay(
+        app,
+        events::OverlayState::Mode {
+            home_mode: match mode {
+                HomeMode::Home => "home",
+                HomeMode::Intent => "intent",
+            },
+        },
+    );
 }
 
 /// The command mirror of [`switch_home_mode`], exposed so the UI's mode pill
@@ -195,7 +218,7 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
         ("incident", &settings.incident_shortcut, Mode::PushToTalk),
     ];
 
-    let mut parsed: Vec<(&str, Hotkey)> = Vec::new();
+    let mut parsed: Vec<(&str, Hotkey, Mode)> = Vec::new();
     for (role, text, dictation_mode) in roles {
         match Hotkey::parse(text) {
             Ok(hotkey) => {
@@ -217,7 +240,7 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
                     ));
                     continue;
                 }
-                parsed.push((role, hotkey));
+                parsed.push((role, hotkey, dictation_mode));
             }
             Err(failure) => {
                 results.push((
@@ -234,7 +257,7 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
     let mut seen: Vec<String> = Vec::new();
     let mut hook_set: Vec<crate::keyboard_hook::WatchedHotkey> = Vec::new();
 
-    for (role, hotkey) in parsed {
+    for (role, hotkey, dictation_mode) in parsed {
         let canonical = hotkey.to_canonical();
         if seen.contains(&canonical) {
             results.push((
@@ -248,7 +271,13 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
         }
         seen.push(canonical.clone());
 
-        if hotkey.plugin_expressible() {
+        // Push-to-talk needs the key-RELEASE edge: the plugin's registration
+        // only ever fires a press on Windows, so a dictation combo must go
+        // through the keyboard hook, which observes both edges. Toggle mode
+        // starts and stops on presses alone, so the plugin is fine there.
+        let force_hook = role == "dictation" && dictation_mode == Mode::PushToTalk;
+
+        if hotkey.plugin_expressible() && !force_hook {
             match crate::hotkeys::register_plugin(app, &hotkey) {
                 Ok(()) => {
                     results.push((role, true, canonical, None, Mechanism::Plugin));

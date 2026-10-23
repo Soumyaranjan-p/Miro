@@ -64,6 +64,7 @@ export type ErrorCode =
   | "engine_timeout"
   | "engine_unavailable"
   | "audio_empty"
+  | "audio_silent"
   | "transcript_empty"
   | "audio_too_long"
   | "shortcut_conflict"
@@ -84,6 +85,7 @@ export type ErrorCode =
  */
 export type OverlayState =
   | { kind: "hidden" }
+  | { kind: "mode"; homeMode: "home" | "intent" }
   | { kind: "recording"; deviceLabel: string; startedAtMs: number; maxSeconds: number }
   | { kind: "processing"; startedAtMs: number }
   | { kind: "inserted"; characters: number; audioMs: number; retryId: number | null }
