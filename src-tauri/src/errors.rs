@@ -27,6 +27,7 @@ pub enum ErrorCode {
     EngineTimeout,
     EngineUnavailable,
     AudioEmpty,
+    AudioSilent,
     TranscriptEmpty,
     AudioTooLong,
     ShortcutConflict,
@@ -57,6 +58,7 @@ impl ErrorCode {
             ErrorCode::EngineTimeout => "engine_timeout",
             ErrorCode::EngineUnavailable => "engine_unavailable",
             ErrorCode::AudioEmpty => "audio_empty",
+            ErrorCode::AudioSilent => "audio_silent",
             ErrorCode::TranscriptEmpty => "transcript_empty",
             ErrorCode::AudioTooLong => "audio_too_long",
             ErrorCode::ShortcutConflict => "shortcut_conflict",
@@ -103,6 +105,8 @@ pub enum Failure {
     MicUnsupportedFormat(String),
     #[error("recording captured no usable audio")]
     AudioEmpty,
+    #[error("the microphone gave no audio at all - check the mic device and Windows' microphone privacy setting")]
+    AudioSilent,
     #[error("the engine transcribed no words from the recording")]
     TranscriptEmpty,
     #[error("recording reached the maximum length")]
@@ -144,6 +148,7 @@ impl Failure {
             Failure::MicDisconnected => ErrorCode::MicDisconnected,
             Failure::MicUnsupportedFormat(_) => ErrorCode::MicUnsupportedFormat,
             Failure::AudioEmpty => ErrorCode::AudioEmpty,
+            Failure::AudioSilent => ErrorCode::AudioSilent,
             Failure::TranscriptEmpty => ErrorCode::TranscriptEmpty,
             Failure::AudioTooLong => ErrorCode::AudioTooLong,
             Failure::ShortcutConflict { .. } => ErrorCode::ShortcutConflict,
@@ -169,6 +174,7 @@ impl Failure {
             | Failure::MicMissing
             | Failure::MicDisconnected
             | Failure::AudioEmpty
+            | Failure::AudioSilent
             | Failure::TranscriptEmpty
             | Failure::AudioTooLong
             | Failure::FocusChanged

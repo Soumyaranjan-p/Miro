@@ -16,10 +16,12 @@ use serde::{Deserialize, Serialize};
 use crate::errors::{Failure, Result};
 use crate::logging::{self, Event};
 
-pub const CONFIG_VERSION: u32 = 1;
+pub const CONFIG_VERSION: u32 = 2;
 pub const CONFIG_FILE: &str = "config.json";
-/// Default dictation hotkey: hold Right Ctrl to talk.
-pub const DEFAULT_SHORTCUT: &str = "ControlRight";
+/// Default dictation hotkey: hold to record, release to stop and type. Ctrl+M
+/// is a real key under Ctrl, which the keyboard hook can watch through both
+/// edges - the release edge is what push-to-talk needs to stop by itself.
+pub const DEFAULT_SHORTCUT: &str = "Ctrl+M";
 pub const DEFAULT_NORMAL_SHORTCUT: &str = "Ctrl+Alt";
 pub const DEFAULT_INCIDENT_SHORTCUT: &str = "Ctrl+Alt+Space";
 pub const MIN_RECORDING_SECONDS: u32 = 30;
@@ -144,8 +146,8 @@ impl Default for Settings {
             shortcut: DEFAULT_SHORTCUT.to_string(),
             normal_shortcut: DEFAULT_NORMAL_SHORTCUT.to_string(),
             incident_shortcut: DEFAULT_INCIDENT_SHORTCUT.to_string(),
-            // "Ctrl+Alt" is modifiers-only, and a modifiers-only hotkey can
-            // only be delivered by push-to-talk: hold to talk, release to stop.
+            // The dictation hotkey (Ctrl+M by default) carries both edges of a
+            // hold, so push-to-talk works with a combo as well as a key.
             mode: Mode::PushToTalk,
             home_mode: HomeMode::Home,
             sound_on: true,
@@ -205,6 +207,20 @@ where
 }
 
 impl Settings {
+    /// Carries a config written by an older build forward. Version 1 stored
+    /// the dictation default as the right Ctrl key; Ctrl+M is the default
+    /// now, so a file that still holds that literal moves with the default,
+    /// while any deliberately chosen key stays untouched.
+    pub fn migrate(&mut self) {
+        if self.version >= 2 {
+            return;
+        }
+        if self.shortcut.eq_ignore_ascii_case("controlright") {
+            self.shortcut = DEFAULT_SHORTCUT.to_string();
+        }
+        self.version = CONFIG_VERSION;
+    }
+
     /// Clamps and cleans values a user (or a hand-edited file) could get wrong.
     pub fn normalize(&mut self) {
         self.version = CONFIG_VERSION;
@@ -345,6 +361,7 @@ impl ConfigStore {
         match fs::read_to_string(&self.path) {
             Ok(raw) => match serde_json::from_str::<Settings>(&raw) {
                 Ok(mut settings) => {
+                    settings.migrate();
                     settings.normalize();
                     settings
                 }
@@ -418,6 +435,75 @@ mod tests {
         assert!(!dir.join(CONFIG_FILE).exists());
         assert!(dir.join("config.invalid.json").exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_old_right_ctrl_default_adopts_the_new_ctrl_m_default() {
+        let dir = temp_dir("migrate-default");
+        let store = ConfigStore::new(&dir);
+        let raw = r#"{
+            "version": 1,
+            "shortcut": "ControlRight",
+            "mode": "push_to_talk",
+            "homeMode": "home",
+            "soundOn": true,
+            "microphone": null,
+            "modelId": "small.en",
+            "language": "en",
+            "maxRecordingSeconds": 300,
+            "cleanup": {"enabled": true, "fillerWords": []}
+        }"#;
+        fs::write(dir.join(CONFIG_FILE), raw).unwrap();
+
+        let loaded = store.load();
+        assert_eq!(loaded.shortcut, DEFAULT_SHORTCUT);
+        assert_eq!(loaded.version, CONFIG_VERSION);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_deliberately_chosen_dictation_key_is_left_alone_by_the_migration() {
+        let dir = temp_dir("migrate-custom");
+        let store = ConfigStore::new(&dir);
+        let raw = r#"{
+            "version": 1,
+            "shortcut": "F4",
+            "mode": "push_to_talk",
+            "homeMode": "home",
+            "soundOn": true,
+            "microphone": null,
+            "modelId": "small.en",
+            "language": "en",
+            "maxRecordingSeconds": 300,
+            "cleanup": {"enabled": true, "fillerWords": []}
+        }"#;
+        fs::write(dir.join(CONFIG_FILE), raw).unwrap();
+
+        let loaded = store.load();
+        assert_eq!(loaded.shortcut, "F4");
+        assert_eq!(loaded.version, CONFIG_VERSION);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_v2_config_keeping_the_old_default_is_not_rewritten() {
+        // Settings::default() reports version 2, so a deliberate right-Ctrl
+        // choice survives the migration; only a v1 file (written before the
+        // default changed, and so carrying the shipped default) moves over.
+        let mut newer = Settings {
+            shortcut: "ControlRight".to_string(),
+            ..Settings::default()
+        };
+        newer.migrate();
+        assert_eq!(newer.shortcut, "ControlRight");
+
+        let mut older = Settings {
+            version: 1,
+            shortcut: "ControlRight".to_string(),
+            ..Settings::default()
+        };
+        older.migrate();
+        assert_eq!(older.shortcut, DEFAULT_SHORTCUT);
     }
 
     #[test]

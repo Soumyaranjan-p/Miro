@@ -476,8 +476,8 @@ mod tests {
 
     #[test]
     fn a_lone_real_key_is_a_single_key_hotkey() {
-        // A bare key with no modifiers is deliberately legal now - the
-        // default dictation key is the right Ctrl key, held.
+        // A bare key with no modifiers is deliberately legal now - the old
+        // default dictation key was the right Ctrl key, held.
         assert!(matches!(
             Hotkey::parse("KeyA").unwrap(),
             Hotkey::SingleKey { .. }

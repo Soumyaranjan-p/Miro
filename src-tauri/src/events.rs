@@ -25,6 +25,14 @@ pub const MIC_LEVEL_EVENT: &str = "miro://mic-level";
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OverlayState {
     Hidden,
+    /// A short-lived acknowledgment for a mode hotkey. Shown even when the
+    /// mode did not change, so pressing Ctrl+Alt while already in Normal
+    /// mode answers "Miro is calm" instead of silence.
+    Mode {
+        /// "home" (Miro calm) or "intent" (Miro on guard).
+        #[serde(rename = "homeMode")]
+        home_mode: &'static str,
+    },
     Recording {
         #[serde(rename = "deviceLabel")]
         device_label: String,

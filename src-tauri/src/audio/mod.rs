@@ -721,17 +721,35 @@ fn run_capture(
     );
 
     if has_no_speech(&resampled, duration_ms) {
-        eprintln!(
-            "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud windows {} of {} \
-             (need {}, speech rms cutoff {}) - nothing over the speech floor",
-            resampled.len(),
-            loud_windows(&resampled),
-            resampled.len() / (TARGET_SAMPLE_RATE as usize / 50).max(1),
-            MIN_LOUD_WINDOWS,
-            SILENCE_RMS
-        );
+        let loud = loud_windows(&resampled);
+        // A clip with loud windows but too few of them means speech was
+        // captured but the gesture was cut short. A clip with no loud
+        // window at all means the device gave near-zero audio - the wrong
+        // mic, a disabled device or a denied Windows microphone - and no
+        // amount of talking helps until that is fixed.
+        if loud > 0 {
+            eprintln!(
+                "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud windows {} of {} \
+                 (need {}, speech rms cutoff {}) - captured audio was too brief",
+                resampled.len(),
+                loud,
+                resampled.len() / (TARGET_SAMPLE_RATE as usize / 50).max(1),
+                MIN_LOUD_WINDOWS,
+                SILENCE_RMS
+            );
+        } else {
+            eprintln!(
+                "[miro-audio] audio_silent: {} samples, {duration_ms} ms, loud windows 0 - \
+                 the device fed silence; check mic selection and Windows microphone privacy",
+                resampled.len()
+            );
+        }
         discard(resampled);
-        return CaptureOutcome::Failed(Failure::AudioEmpty);
+        return CaptureOutcome::Failed(if loud == 0 {
+            Failure::AudioSilent
+        } else {
+            Failure::AudioEmpty
+        });
     }
 
     CaptureOutcome::Recorded {

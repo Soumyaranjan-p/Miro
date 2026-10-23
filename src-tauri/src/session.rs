@@ -83,7 +83,7 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn emit_overlay(app: &AppHandle, overlay: OverlayState) {
+pub(crate) fn emit_overlay(app: &AppHandle, overlay: OverlayState) {
     // The window's visibility follows the state machine, not the webview:
     // an event alone can never make a hidden window appear.
     match &overlay {
