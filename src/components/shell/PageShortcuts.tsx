@@ -47,11 +47,11 @@ export function PageShortcuts() {
           settings={settings}
           update={update}
           fieldName="shortcut"
-          defaultShortcut="ControlRight"
+          defaultShortcut="Ctrl+M"
           label="Dictation key"
           hint={
             <>
-              Default is the right <Mono>Ctrl</Mono> key. This one starts and stops recordings.
+              Default is <Mono>Ctrl + M</Mono>, held. This one starts and stops recordings.
             </>
           }
           mode={settings.mode}

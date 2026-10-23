@@ -94,7 +94,11 @@ const COPY: Record<ErrorCode, ErrorCopy> = {
   },
   audio_empty: {
     title: "No speech detected",
-    hint: "Check the input device level and try again.",
+    hint: "The words were too brief or quiet - hold the hotkey through the sentence and try again.",
+  },
+  audio_silent: {
+    title: "The microphone gave no audio",
+    hint: "Check the mic selected in Settings > Audio, and Windows > Privacy > Microphone access.",
   },
   transcript_empty: {
     title: "Nothing was recognized",

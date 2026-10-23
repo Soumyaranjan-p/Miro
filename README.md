@@ -12,12 +12,13 @@ in memory and are never written to disk.
 
 ## What it does
 
-- **Three global shortcuts.** Hold-to-talk dictation (default: the right `Ctrl`
-  key — a lone key that most apps leave free, caught by its own keyboard hook),
-  plus one-press mode keys: Normal (default `Ctrl+Alt`) and Incident (default
-  `Ctrl+Alt+Space`). All rebindable from the Shortcuts page, with real conflict
-  detection that refuses a combination instead of failing silently. The page
-  also shows how each key reached Miro: an OS registration or the keyboard hook.
+- **Three global shortcuts.** Hold-to-talk dictation (default: hold `Ctrl + M` —
+  watched by a keyboard hook that catches both the press and the release while
+  leaving the keys free for the focused app), plus one-press mode keys: Normal
+  (default `Ctrl+Alt`) and Incident (default `Ctrl+Alt+Space`). All rebindable
+  from the Shortcuts page, with real conflict detection that refuses a
+  combination instead of failing silently. The page also shows how each key
+  reached Miro: an OS registration or the keyboard hook.
 - **Local transcription.** whisper.cpp with a quantised `small.en` model by
   default; smaller, larger and multilingual models are opt-in downloads you
   confirm.

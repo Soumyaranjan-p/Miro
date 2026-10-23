@@ -152,7 +152,25 @@ export function OverlayApp() {
         <div className="mt-2 flex h-8 items-center justify-between gap-3">
           <span className="truncate text-[11.5px] text-faint">{footerHint(state)}</span>
           <div className="flex shrink-0 items-center gap-1">
-            {state.kind === "recording" && (
+          {state.kind === "mode" && (
+            <>
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                  state.homeMode === "intent" ? "bg-danger-soft text-danger" : "bg-success-soft text-success"
+                }`}
+              >
+                {state.homeMode === "intent" ? <IconAlert size={14} /> : <IconCheck size={14} />}
+              </span>
+              <span className="text-[13px] font-semibold text-ink">
+                {state.homeMode === "intent" ? "Incident mode" : "Normal mode"}
+              </span>
+              <span className="truncate text-[12.5px] text-muted">
+                {state.homeMode === "intent" ? "Miro on guard" : "Miro calm"}
+              </span>
+            </>
+          )}
+
+          {state.kind === "recording" && (
               <>
                 <OverlayButton variant="primary" onClick={() => void ipc.stopRecording()} title="Stop and insert (Enter)">
                   <IconStop size={13} />
@@ -259,6 +277,10 @@ function footerHint(state: OverlayState): string {
       return "The text is on your clipboard";
     case "error":
       return describeError(state.code).hint ?? "";
+    case "mode":
+      return state.homeMode === "intent"
+        ? "Hold Ctrl + M to dictate when back to normal"
+        : "Hold Ctrl + M to dictate";
     case "hidden":
       return "";
   }

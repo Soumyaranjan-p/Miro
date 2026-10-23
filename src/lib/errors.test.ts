@@ -20,6 +20,7 @@ const ALL_CODES: ErrorCode[] = [
   "engine_timeout",
   "engine_unavailable",
   "audio_empty",
+  "audio_silent",
   "transcript_empty",
   "audio_too_long",
   "shortcut_conflict",

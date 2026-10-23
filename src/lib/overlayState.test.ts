@@ -106,6 +106,8 @@ describe("overlay state machine", () => {
       autoHideDelayMs({ kind: "error", code: "focus_changed", detail: null, retryable: true, retryId: 1 }),
     ).toBeNull();
     expect(autoHideDelayMs({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60 })).toBeNull();
+    expect(autoHideDelayMs({ kind: "mode", homeMode: "home" })).toBe(2200);
+    expect(autoHideDelayMs({ kind: "mode", homeMode: "intent" })).toBe(2200);
     expect(autoHideDelayMs(initialOverlayState)).toBeNull();
   });
 
