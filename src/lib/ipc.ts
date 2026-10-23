@@ -71,10 +71,6 @@ export interface MiroBridge {
   openModelsFolder(): Promise<void>;
   openAppDataFolder(): Promise<void>;
   openExternal(url: string): Promise<void>;
-  /** The splash panel has rendered; Rust may reveal the splash window now. */
-  notifySplashReady(): Promise<void>;
-  /** The splash sequence finished; Rust should hide the splash window. */
-  splashFinished(): Promise<void>;
   /** The Windows user's display name for the Home greeting. */
   getUserName(): Promise<string>;
   on<T>(event: MiroEventName, handler: (payload: T) => void): () => void;
@@ -82,8 +78,8 @@ export interface MiroBridge {
 
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** True when the UI runs in a plain browser through the dev-only preview harness. */
-export const isPreview = !inTauri && import.meta.env.DEV;
+/** True when the UI runs in a plain browser (no Tauri) and should use the preview harness. */
+export const isPreview = !inTauri;
 
 function subscribe<T>(event: MiroEventName, handler: (payload: T) => void): () => void {
   let unlisten: UnlistenFn | undefined;
@@ -122,15 +118,13 @@ const tauriBridge: MiroBridge = {
   retryInsertion: (retryId) => invoke("retry_insertion", { retryId }),
   copyPendingTranscript: (retryId) => invoke("copy_pending_transcript", { retryId }),
   toggleDictation: () => invoke("toggle_dictation"),
-  switchMode: (mode) => invoke("switch_home_mode", { mode }),
+  switchMode: (mode) => invoke("switch_home_mode_command", { mode }),
   getPendingTranscript: (retryId) => invoke("get_pending_transcript", { retryId }),
   pastePending: (retryId) => invoke("paste_pending", { retryId }),
   getStats: () => invoke("get_stats"),
   openModelsFolder: () => invoke("open_models_folder"),
   openAppDataFolder: () => invoke("open_app_data_folder"),
   openExternal: (url) => invoke("open_external", { url }),
-  notifySplashReady: () => invoke("notify_splash_ready"),
-  splashFinished: () => invoke("splash_finished"),
   getUserName: () => invoke("get_user_display_name"),
   on: subscribe,
 };
@@ -138,14 +132,13 @@ const tauriBridge: MiroBridge = {
 let resolved: Promise<MiroBridge> | null = null;
 
 /**
- * Resolves the bridge once. In a browser dev session this loads the preview
- * harness; that module is never bundled into a release build because the
- * `import.meta.env.DEV` branch is folded away by Vite.
+ * Resolves the bridge once. Outside Tauri (plain-browser preview harness) the
+ * preview bridge is loaded; inside the Tauri webview the tauri bridge is used.
  */
 function bridge(): Promise<MiroBridge> {
   if (!resolved) {
     resolved =
-      inTauri || !import.meta.env.DEV
+      inTauri
         ? Promise.resolve(tauriBridge)
         : import("./previewBridge").then((m) => m.previewBridge);
   }
@@ -179,8 +172,6 @@ export const ipc: MiroBridge = {
   openModelsFolder: async () => (await bridge()).openModelsFolder(),
   openAppDataFolder: async () => (await bridge()).openAppDataFolder(),
   openExternal: async (url) => (await bridge()).openExternal(url),
-  notifySplashReady: async () => (await bridge()).notifySplashReady(),
-  splashFinished: async () => (await bridge()).splashFinished(),
   getUserName: async () => (await bridge()).getUserName(),
   on: <T,>(event: MiroEventName, handler: (payload: T) => void) => subscribe<T>(event, handler),
 };

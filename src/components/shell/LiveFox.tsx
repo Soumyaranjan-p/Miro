@@ -21,7 +21,7 @@ export function LiveFox({
   trackMouse = false,
   reducedMotion = false,
   className,
-  label = "Miro the fox",
+  label = "Miro",
 }: {
   /** CSS width/height in px. */
   size: number;
@@ -46,6 +46,13 @@ export function LiveFox({
     // re-subscribes.
     let gazeTarget = { x: 0, y: 0 };
     let running = true;
+
+    const onPoke = () => {
+      // A click squishes the whole body for POKE_SECONDS; anything in flight
+      // just resets the clock.
+      rendererRef.current.poke = 0.65;
+    };
+    canvas.addEventListener("pointerdown", onPoke);
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -105,6 +112,7 @@ export function LiveFox({
       return () => {
         running = false;
         window.cancelAnimationFrame(raf);
+        canvas.removeEventListener("pointerdown", onPoke);
         document.removeEventListener("visibilitychange", onVisibility);
         observer.disconnect();
         if (trackMouse) window.removeEventListener("pointermove", onMove);

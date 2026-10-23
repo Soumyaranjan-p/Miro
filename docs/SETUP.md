@@ -29,7 +29,7 @@ npm install
 npm run app:dev          # launches the app with frontend hot reload
 ```
 
-`npm run app:dev` is the development loop: Vite serves the two webviews with
+`npm run app:dev` is the development loop: Vite serves the webviews with
 hot module replacement, and Rust changes trigger a recompile and restart. You
 never rebuild an installer to see a frontend change.
 

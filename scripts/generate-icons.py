@@ -1,8 +1,8 @@
 """Generate Miro's application icons.
 
-The identity is Miro's mascot avatar: a cap, a gold chain and a round black
-gloss orb. The source artwork lives in the repo (scripts/icon-source.webp) so
-regeneration is deterministic on any machine - no network fetch involved.
+The identity is Miro's mascot avatar: a soft round gradient creature with big
+glossy eyes, drawn by src/icon-harness.ts and captured headlessly into
+scripts/icon-source.png so regeneration is deterministic on any machine.
 
 Usage:  python scripts/generate-icons.py
 Requires Pillow (pip install pillow).

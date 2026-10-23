@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText } from "../../lib/errors";
 import { formatShortcut } from "../../lib/format";
-import { useLevelHistory, useMicLevel, useModelProgress, useRuntimeStatus, useSettings, useStats } from "../../lib/hooks";
+import { useLevelHistory, useModelProgress, useRuntimeStatus, useSettings, useStats } from "../../lib/hooks";
 import { EVENTS, asOverlayState, ipc } from "../../lib/ipc";
 import type { OverlayState } from "../../lib/types";
-import { LiveFox, type FoxState } from "./LiveFox";
 import { IconCheck, IconHome, IconIncident } from "./Icons";
 import { Button, Mono, Pill } from "../settings/Controls";
 
+/** The live mascot page's `window.Miro` bridge. */
+interface MascotApi {
+  setMode(mode: string): void;
+}
+
 /**
- * The Home page: greeting + the fox, mode selection, the transcript panel
+ * The Home page: greeting + Miro live, mode selection, the transcript panel
  * (the one place words are allowed to appear, by deliberate design decision),
  * the model card so downloads never need digging through settings, and the
  * numbers that make the streak visible.
@@ -32,26 +36,12 @@ export function PageHome({
   }, []);
 
   const incidentMode = settings?.homeMode === "intent";
-  const recording = overlay.kind === "recording";
   const dictation = status?.hotkeys.find((entry) => entry.role === "dictation");
-
-  const foxState: FoxState = incidentMode
-    ? "incident"
-    : recording
-      ? "listening"
-      : overlay.kind === "processing"
-        ? "processing"
-        : overlay.kind === "error"
-          ? "error"
-          : "normal";
-  const level = useMicLevel(recording && !incidentMode);
 
   return (
     <div className="msh-page">
       <Hero
         greeting={greeting}
-        foxState={foxState}
-        level={level}
         incidentMode={incidentMode}
         shortcut={settings?.shortcut}
         registered={dictation?.registered ?? false}
@@ -90,31 +80,27 @@ export function PageHome({
 
 function Hero({
   greeting,
-  foxState,
-  level,
   incidentMode,
   shortcut,
   registered,
 }: {
   greeting: string;
-  foxState: FoxState;
-  level: number;
   incidentMode: boolean;
   shortcut: string | undefined;
   registered: boolean;
 }) {
   return (
     <section className="msh-hero">
-      <HeroFox foxState={foxState} level={level} />
+      <HeroMascot incidentMode={incidentMode} />
       <div className="msh-hero__body">
         <h1>{greeting}</h1>
         <p>
           {incidentMode ? (
-            <>Incident mode is on: dictation is paused and the fox is on guard.</>
+            <>Incident mode is on: dictation is paused, Miro is on guard.</>
           ) : registered ? (
             <>
-              Hold <Mono>{shortcut ? formatShortcut(shortcut) : "the dictation key"}</Mono> in any app, speak, release —
-              Miro types for you.
+              Hold <Mono>{shortcut ? formatShortcut(shortcut) : "the dictation key"}</Mono>, speak, release —
+              Miro types.
             </>
           ) : (
             <>The dictation key could not be registered. Open Shortcuts to pick another one.</>
@@ -125,10 +111,41 @@ function Hero({
   );
 }
 
-function HeroFox({ foxState, level }: { foxState: FoxState; level: number }) {
+/**
+ * The live mascot, embedded exactly as designed: the untouched mascot page
+ * (public/miro-mascot.html) in a cropped frame. The app's mode is piped into
+ * its `window.Miro.setMode` bridge, which reacts with the page's own motion.
+ */
+function HeroMascot({ incidentMode }: { incidentMode: boolean }) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  const applyMode = useCallback(() => {
+    const win = frameRef.current?.contentWindow as (Window & { Miro?: MascotApi }) | null | undefined;
+    try {
+      // The app is dark; keep the mascot's stage in its dark palette even on
+      // a light-scheme system.
+      win?.document?.documentElement?.setAttribute("data-theme", "dark");
+      win?.Miro?.setMode(incidentMode ? "incident" : "normal");
+    } catch {
+      // The frame is same-origin in Tauri and in the preview server; any other
+      // origin simply keeps its own theme and mode.
+    }
+  }, [incidentMode]);
+
+  // Apply at load, and again whenever the mode changes (UI button or hotkey).
+  useEffect(() => {
+    applyMode();
+  }, [applyMode]);
   return (
-    <div style={{ flex: "none", width: 116, height: 116 }}>
-      <LiveFox size={116} state={foxState} level={level} trackMouse />
+    <div className="msh-mascot">
+      <iframe
+        ref={frameRef}
+        className="msh-mascot__frame"
+        src="./miro-mascot.html"
+        title="Miro, a round orange mascot with big glossy eyes"
+        scrolling="no"
+        onLoad={applyMode}
+      />
     </div>
   );
 }

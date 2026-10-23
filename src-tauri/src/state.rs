@@ -198,53 +198,6 @@ pub fn state(app: &AppHandle) -> tauri::State<'_, AppState> {
     app.state::<AppState>()
 }
 
-/// Bookkeeping for the once-per-launch splash sequence.
-///
-/// Both the webview and the bootstrap fallback timer ask to reveal and to
-/// finish the splash; these flags make every request idempotent, so a late
-/// report can never replay the motion or hide the window twice.
-#[derive(Default, Clone)]
-pub struct SplashFlow {
-    inner: std::sync::Arc<Mutex<SplashInner>>,
-}
-
-#[derive(Default)]
-struct SplashInner {
-    revealed: bool,
-    finished: bool,
-}
-
-impl SplashFlow {
-    /// Arms the reveal. True only for the first caller after startup; the
-    /// webview's ready report and the fallback timer race for it, and the
-    /// loser silently skips.
-    pub fn begin_reveal(&self) -> bool {
-        let mut guard = self.lock();
-        if guard.revealed || guard.finished {
-            return false;
-        }
-        guard.revealed = true;
-        true
-    }
-
-    /// Arms the end of the sequence. True only for the first caller.
-    pub fn begin_finish(&self) -> bool {
-        let mut guard = self.lock();
-        if guard.finished {
-            return false;
-        }
-        guard.finished = true;
-        true
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, SplashInner> {
-        match self.inner.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        }
-    }
-}
-
 /// Microphone availability for the status strip, without opening a stream.
 pub fn microphone_state() -> (MicrophoneState, Option<String>) {
     crate::audio::microphone_state()

@@ -113,6 +113,16 @@ impl Session {
         }
 
         let settings = state::state(app).settings();
+        // Cheap pre-flight so a blocked or missing microphone answers with a
+        // clear, explicit failure before any capture machinery spins up.
+        if let Some(failure) = mic_preflight(&settings) {
+            logging::event(Event::Failure {
+                code: failure.code().as_str(),
+                detail: "no usable microphone at dictation start".into(),
+            });
+            self.fail(app, failure, None);
+            return Ok(());
+        }
         logging::event(Event::DictationStarted { mode: "toggle" });
 
         {
@@ -790,6 +800,43 @@ impl Session {
     }
 }
 
+/// Verifies, before recording, that the microphone the settings name actually
+/// exists (or that a default one is usable when none is named). Returns the
+/// failure to report, or `None` when a device looks reachable.
+fn mic_preflight(settings: &Settings) -> Option<Failure> {
+    let devices = audio::list_input_devices();
+    if devices.is_empty() {
+        return Some(Failure::MicMissing);
+    }
+    if let Some(wanted) = settings
+        .microphone
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        // A named device that has disappeared (unplugged, renamed) fails
+        // right here with a clear code instead of deep inside cpal.
+        return if device_list_contains(&devices, wanted) {
+            None
+        } else {
+            Some(Failure::MicMissing)
+        };
+    }
+    let (default_state, _) = audio::microphone_state();
+    match default_state {
+        audio::MicrophoneState::PermissionDenied => Some(Failure::MicPermissionDenied),
+        audio::MicrophoneState::Missing => Some(Failure::MicMissing),
+        _ => None,
+    }
+}
+
+/// True when `wanted` names one of the enumerated devices, by id or label.
+fn device_list_contains(devices: &[audio::DeviceInfo], wanted: &str) -> bool {
+    devices
+        .iter()
+        .any(|info| info.id == wanted || info.label == wanted)
+}
+
 /// The overlay only needs a recognisable device name, not the full description.
 fn short_device_label(settings: &Settings) -> String {
     match settings.microphone.as_deref() {
@@ -928,5 +975,31 @@ mod tests {
         assert_eq!(short_device_label(&settings), "System default");
         settings.microphone = Some("Microphone Array".into());
         assert_eq!(short_device_label(&settings), "Microphone Array");
+    }
+
+    #[test]
+    fn the_mic_preflight_names_a_device_by_id_or_label() {
+        let devices = vec![
+            audio::DeviceInfo {
+                id: "device-id-a".into(),
+                label: "Studio Microphone".into(),
+                is_default: false,
+                sample_rate: Some(48_000),
+                channels: Some(2),
+            },
+            audio::DeviceInfo {
+                id: "device-id-b".into(),
+                label: "Headset".into(),
+                is_default: true,
+                sample_rate: Some(44_100),
+                channels: Some(1),
+            },
+        ];
+        assert!(device_list_contains(&devices, "device-id-b"));
+        assert!(device_list_contains(&devices, "Headset"));
+        assert!(!device_list_contains(&devices, "device-id-c"));
+        assert!(!device_list_contains(&devices, "Speakers"));
+        // Empty list: nothing can be reached.
+        assert!(!device_list_contains(&[], "device-id-a"));
     }
 }

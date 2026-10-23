@@ -140,8 +140,7 @@ pub fn set_settings(
 }
 
 /// The single source of truth for the application mode visible everywhere.
-/// Used by the plugin-hotkey dispatcher and by nothing else lazily: the UI
-/// goes through `set_settings`, which mirrors the same side effects.
+/// Used by the plugin-hotkey dispatcher, the mode pill and shortcuts.
 pub fn switch_home_mode(app: &AppHandle, mode: HomeMode) -> CmdResult<()> {
     let app_state = app.state::<AppState>();
     let before = app_state.settings();
@@ -159,6 +158,13 @@ pub fn switch_home_mode(app: &AppHandle, mode: HomeMode) -> CmdResult<()> {
     session.refresh_runtime(app);
     let _ = app.emit(events::SETTINGS_EVENT, after.clone());
     Ok(())
+}
+
+/// The command mirror of [`switch_home_mode`], exposed so the UI's mode pill
+/// and shortcut cards can flip the mode through IPC.
+#[tauri::command]
+pub fn switch_home_mode_command(app: AppHandle, mode: HomeMode) -> CmdResult<()> {
+    switch_home_mode(&app, mode)
 }
 
 /// Plans and applies all three global hotkeys.
@@ -435,33 +441,24 @@ pub fn resume_shortcut(app: AppHandle, app_state: State<'_, AppState>) -> CmdRes
     apply_global_hotkeys(&app, &app_state.settings())
 }
 
-// ------------------------------------------------------------------ splash --
-
-/// The splash webview has painted its panel; reveal the window unless the
-/// fallback timer already did. Idempotent by design.
-#[tauri::command]
-pub async fn notify_splash_ready(
-    app: AppHandle,
-    splash: tauri::State<'_, crate::state::SplashFlow>,
-) -> CmdResult<()> {
-    crate::windows::show_splash(&app, &splash);
-    Ok(())
-}
-
-/// The splash motion finished; hide the window. Idempotent by design.
-#[tauri::command]
-pub async fn splash_finished(
-    app: AppHandle,
-    splash: tauri::State<'_, crate::state::SplashFlow>,
-) -> CmdResult<()> {
-    crate::windows::finish_splash(&app, &splash);
-    Ok(())
-}
-
-/// The Windows account name, for the Home greeting card. Display only.
+/// The Windows account name (the machine-user name, like `os.userInfo().username`),
+/// for the Home greeting card. Capitalised for display. Display only.
 #[tauri::command]
 pub async fn get_user_display_name() -> CmdResult<String> {
-    let mut name = std::env::var("USERNAME").unwrap_or_default();
+    // USERNAME and the user-info username are the same value on Windows; the
+    // env var is the cheap read, with the profile folder as a fallback.
+    let mut name = std::env::var("USERNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.trim().to_string())
+        .or_else(|| {
+            std::env::var("USERPROFILE").ok().and_then(|path| {
+                std::path::Path::new(&path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+        })
+        .unwrap_or_default();
     if let Some(first) = name.get(0..1) {
         name = first.to_uppercase() + name[1..].as_ref();
     }

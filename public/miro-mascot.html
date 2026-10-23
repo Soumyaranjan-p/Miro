@@ -1,0 +1,100 @@
+<!doctype html><html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Miro mascot</title>
+<style>
+:root{--bg:#f4f2ef;--panel:#fff;--line:#e3dfd9;--text:#17171c;--mute:#666672;--acc:#f27d2c;--st1:#fff4e8;--st2:#ffdcb8;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d0d10;--panel:#15151a;--line:#26262e;--text:#f3f3f6;--mute:#a0a0ac;--st1:#1c1713;--st2:#2e1d0e;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d0d10;--panel:#15151a;--line:#26262e;--text:#f3f3f6;--mute:#a0a0ac;--st1:#1c1713;--st2:#2e1d0e;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;min-height:100vh}
+main{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px;max-width:1040px;margin:0 auto;padding:24px}
+.stage{position:relative;border:1px solid var(--line);border-radius:28px;min-height:460px;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 42%,var(--st2),var(--st1) 70%);transition:background .6s,border-color .6s}
+.stage.alert{background:radial-gradient(ellipse at 50% 42%,#5c1218,#1b0a0c 72%);border-color:#6a1f26}
+svg{width:min(100%,470px);height:auto;display:block;touch-action:manipulation}
+svg text{font-family:Inter,system-ui,sans-serif;font-weight:700;pointer-events:none}
+#rig{cursor:pointer}
+.cap{position:absolute;left:0;right:0;bottom:18px;text-align:center;font-size:14px;color:var(--mute);transition:color .4s}
+.alert .cap{color:#ffb7ae}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:28px;align-self:start}
+h1{margin:0 0 8px;font-size:36px;font-weight:700;letter-spacing:-.025em}
+h2{margin:28px 0 10px;font-size:15px;font-weight:600}
+p{margin:0;color:var(--mute);line-height:1.55;font-size:15px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:22px;padding:5px;border:1px solid var(--line);border-radius:14px}
+button{font:inherit;font-weight:600;font-size:14px;padding:11px 10px;border:0;border-radius:10px;background:transparent;color:var(--mute);cursor:pointer;transition:background .25s,color .25s}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+#bN[aria-pressed="true"]{background:var(--acc);color:#1d0e03}
+#bI[aria-pressed="true"]{background:#e23d36;color:#fff}
+ul{margin:0;padding:0;list-style:none;display:grid;gap:9px}
+li{font-size:14.5px;color:var(--mute);line-height:1.45}
+li b{color:var(--text);font-weight:600}
+.hint{margin-top:22px;font-size:13px}
+@media(max-width:780px){main{grid-template-columns:1fr;padding:16px}.stage{min-height:380px}}
+</style>
+</head>
+<body>
+<main>
+<section class="stage" id="stage">
+<svg id="miro" viewBox="0 0 400 400" role="img" aria-label="Miro, a round orange mascot with big glossy eyes">
+<defs>
+<radialGradient id="gBody" cx=".36" cy=".26" r=".85"><stop id="s0" offset="0" stop-color="#ffc98f"/><stop id="s1" offset=".5" stop-color="#ff9a3c"/><stop id="s2" offset="1" stop-color="#e8691c"/></radialGradient>
+<radialGradient id="gBelly" cx=".5" cy=".3" r=".8"><stop id="b0" offset="0" stop-color="#fffaf0"/><stop id="b1" offset="1" stop-color="#ffe3bf"/></radialGradient>
+<radialGradient id="gEye" cx=".5" cy=".4" r=".75"><stop offset="0" stop-color="#2b160c"/><stop offset="1" stop-color="#0f0603"/></radialGradient>
+<radialGradient id="gIris" cx=".5" cy=".45" r=".6"><stop id="i0" offset="0" stop-color="#b86f33"/><stop id="i1" offset="1" stop-color="#4a2412"/></radialGradient>
+<radialGradient id="gGlow"><stop offset="0" stop-color="#ff3b30" stop-opacity=".6"/><stop offset="1" stop-color="#ff3b30" stop-opacity="0"/></radialGradient>
+<clipPath id="cL"><ellipse cx="150" cy="212" rx="27" ry="31"/></clipPath>
+<clipPath id="cR"><ellipse cx="250" cy="212" rx="27" ry="31"/></clipPath>
+<g id="ear"><path d="M104 172C90 122 98 82 124 62c9-2 17 4 27 14 18 22 25 48 25 72z" fill="url(#gBody)"/><path d="M119 152c-6-30 0-54 12-68 14 16 22 36 24 58z" style="fill:var(--ear,#ffc2a0)"/></g>
+</defs>
+<ellipse id="glow" cx="200" cy="230" rx="200" ry="180" fill="url(#gGlow)" opacity="0"/>
+<ellipse id="ring" cx="200" cy="235" rx="150" ry="140" fill="none" stroke="#ff4a3f" stroke-width="3" opacity="0"/>
+<ellipse id="shadow" cx="200" cy="352" rx="100" ry="13" fill="#000" opacity=".25"/>
+<g id="rig">
+<g id="tail"><path d="M278 304C352 312 388 240 348 184c-2 44-30 74-84 80z" fill="url(#gBody)"/></g>
+<g id="eL"><use href="#ear"/></g>
+<g id="eR"><g transform="translate(400 0) scale(-1 1)"><use href="#ear"/></g></g>
+<path d="M200 118C288 118 334 188 334 262c0 58-44 86-134 86S66 320 66 262C66 188 112 118 200 118z" fill="url(#gBody)"/>
+<path d="M108 192c14-40 50-58 92-60" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="6" stroke-linecap="round"/>
+<ellipse cx="200" cy="304" rx="84" ry="42" fill="url(#gBelly)"/>
+<ellipse cx="146" cy="345" rx="31" ry="13" fill="url(#gBody)"/><ellipse cx="254" cy="345" rx="31" ry="13" fill="url(#gBody)"/>
+<g id="armL"><ellipse cx="74" cy="292" rx="15" ry="28" fill="url(#gBody)" transform="rotate(14 74 292)"/></g>
+<g id="armR"><ellipse cx="326" cy="292" rx="15" ry="28" fill="url(#gBody)" transform="rotate(-14 326 292)"/></g>
+<g id="face">
+<ellipse class="ch" cx="106" cy="250" rx="21" ry="12" fill="#ff6f8a" opacity=".35"/><ellipse class="ch" cx="294" cy="250" rx="21" ry="12" fill="#ff6f8a" opacity=".35"/>
+<g clip-path="url(#cL)"><ellipse cx="150" cy="212" rx="27" ry="31" fill="url(#gEye)"/>
+<g id="irL"><ellipse cx="150" cy="214" rx="20" ry="23" fill="url(#gIris)"/><ellipse class="pu" cx="150" cy="214" rx="10" ry="11" fill="#120805"/></g>
+<g id="hlL"><circle class="hl" cx="141" cy="202" r="8" fill="#fff"/><circle class="hl" cx="159" cy="226" r="3.6" fill="#fff"/></g>
+<rect class="lid" id="lidL" x="90" y="60" width="120" height="200" stroke-width="3"/></g>
+<g clip-path="url(#cR)"><ellipse cx="250" cy="212" rx="27" ry="31" fill="url(#gEye)"/>
+<g id="irR"><ellipse cx="250" cy="214" rx="20" ry="23" fill="url(#gIris)"/><ellipse class="pu" cx="250" cy="214" rx="10" ry="11" fill="#120805"/></g>
+<g id="hlR"><circle class="hl" cx="241" cy="202" r="8" fill="#fff"/><circle class="hl" cx="259" cy="226" r="3.6" fill="#fff"/></g>
+<rect class="lid" id="lidR" x="190" y="60" width="120" height="200" stroke-width="3"/></g>
+<ellipse cx="200" cy="245" rx="8" ry="5.5" fill="#3a1a10"/><ellipse cx="198" cy="243" rx="2.6" ry="1.6" fill="#fff" opacity=".55"/>
+<path id="mouth" d="" stroke="#3a1a10" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</g>
+</g>
+<g id="fx"></g>
+</svg>
+<div class="cap" id="cap"></div>
+</section>
+<section class="panel">
+<h1>Meet Miro</h1>
+<p>A small companion that reacts to you. One mood for calm work, another for when something breaks.</p>
+<div class="seg" role="group" aria-label="Mode"><button id="bN" aria-pressed="true">Normal mode</button><button id="bI" aria-pressed="false">Incident mode</button></div>
+<h2>Things to try</h2>
+<ul>
+<li><b>Move your cursor.</b> Miroâ€™s eyes follow it, and its head tilts along.</li>
+<li><b>Click.</b> A squish and a surprised â€œohâ€.</li>
+<li><b>Double-click.</b> A flip.</li>
+<li><b>Click three times fast.</b> Miro gets dizzy.</li>
+<li><b>Rest on it for two seconds.</b> Hearts, in normal mode.</li>
+<li><b>Leave it alone.</b> It falls asleep, in normal mode.</li>
+</ul>
+<p class="hint">Press N for normal mode or I for incident mode.</p>
+</section>
+</main>
+<script src="./miro-mascot.js"></script>
+</body>
+</html>

@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Inter is bundled locally (woff2 in node_modules), so every window, chart,
+   tooltip and control uses it offline; the system stack is the fallback. */
+@import "@fontsource-variable/inter";
 
 /* Miro's design tokens.
    One dark ink, one ember signal, everything else neutral. Dark follows the
@@ -73,8 +76,8 @@
   --color-warn-soft: var(--miro-warn-soft);
   --color-track: var(--miro-track);
 
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
-  --font-mono: "Cascadia Mono", "Consolas", ui-monospace, "SF Mono", monospace;
+  --font-sans: "Inter Variable", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
 
   --radius-card: 14px;
   --radius-control: 10px;

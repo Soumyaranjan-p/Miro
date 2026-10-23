@@ -34,14 +34,24 @@ use resample::{downmix_to_mono, peak, rms, Resampler, TARGET_SAMPLE_RATE};
 /// Level frames per second sent to the overlay (spec asks for 30-60 Hz).
 const LEVEL_HZ: u64 = 50;
 /// Below this windowed RMS a window counts as silence rather than speech.
-const SILENCE_RMS: f32 = 0.002;
+///
+/// Deliberately low: a laptop mic with a quiet Windows input level puts soft
+/// speech around 0.0015 RMS, and dictation must never refuse a real voice for
+/// being quiet. None of the gates after this one relies on the clip being
+/// loud - the level is recovered later by peak normalization.
+const SILENCE_RMS: f32 = 0.001;
 /// Clips shorter than this can never be speech, however loud.
-const MIN_SPEECH_MS: u128 = 250;
+const MIN_SPEECH_MS: u128 = 300;
 /// Fewer audible 20 ms windows than this, and the audio is a stray click or
-/// background hum rather than a voice: real speech needs at least ~60 ms of
-/// sound. Judged as an absolute count, not a share of the clip, so a short
-/// utterance followed by a pause still passes.
-const MIN_LOUD_WINDOWS: usize = 3;
+/// background hum rather than a voice. Judged as an absolute count, not a
+/// share of the clip, so a short utterance followed by a pause still passes.
+/// Two: one window is ~60 ms, which a click can sound like; two consecutive
+/// audible windows is already a syllable.
+const MIN_LOUD_WINDOWS: usize = 2;
+/// After the hold-to-talk key goes up, the recorder keeps rolling for this
+/// long so trailing syllables ("...spea-k") are never clipped off. The
+/// samplerate conversion flush keeps its own tail; this is the extra room.
+const RELEASE_TAIL_MS: u128 = 300;
 /// How long the audio thread may take to wrap up (downmix, resample, checks)
 /// once a stop was asked for, before the supervisor declares it hung.
 const STOP_GRACE: Duration = Duration::from_secs(30);
@@ -573,6 +583,11 @@ fn run_capture(
                                 // and the error callback, and publishes levels while it does.
     let frame_interval = Duration::from_millis(1000 / LEVEL_HZ);
     let mut failure: Option<Failure> = None;
+    // When a stop was first seen. A hold-to-talk release must not cut the
+    // audio at the key-up edge: keep rolling for RELEASE_TAIL_MS and let the
+    // trailing syllable land in the buffer. The max-seconds limit ends the
+    // recording immediately (there is nothing being cut mid-word there).
+    let mut stop_requested: Option<Instant> = None;
     loop {
         thread::sleep(frame_interval);
 
@@ -581,14 +596,27 @@ fn run_capture(
                 failure = Some(clone_failure(stored));
             }
         }
-        if failure.is_some() || stop.load(std::sync::atomic::Ordering::SeqCst) {
+        if failure.is_some() {
             break;
         }
 
-        if mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms {
+        let limit_reached =
+            mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms;
+        if limit_reached {
             shared
                 .limit_reached
                 .store(true, std::sync::atomic::Ordering::SeqCst);
+            break;
+        }
+
+        if stop.load(std::sync::atomic::Ordering::SeqCst) {
+            let began = stop_requested.get_or_insert_with(Instant::now);
+            if began.elapsed().as_millis() < RELEASE_TAIL_MS {
+                if let Some(callback) = on_level.as_ref() {
+                    callback(levels.frame());
+                }
+                continue;
+            }
             break;
         }
 
@@ -609,9 +637,11 @@ fn run_capture(
     // Diagnostics: compare what the callbacks delivered with what ended up in
     // the recording buffer, then what survives downmix and resampling.
     let expected = sample_rate as u128 * channels as u128 * duration_ms / 1000;
+    let raw_peak = peak(&raw);
     eprintln!(
         "[miro-audio] stop after {duration_ms} ms: {packets} callbacks, \
-         {callback_samples} raw samples delivered, buffer holds {} (expected ~{expected})",
+         {callback_samples} raw samples delivered, buffer holds {} (expected ~{expected}), \
+         peak {raw_peak:.4}",
         raw.len()
     );
 
@@ -684,9 +714,10 @@ fn run_capture(
     normalize_peak(&mut resampled);
     let expected_16k = TARGET_SAMPLE_RATE as u128 * duration_ms / 1000;
     eprintln!(
-        "[miro-audio] resampled: {} samples at {} Hz (expected ~{expected_16k})",
+        "[miro-audio] resampled: {} samples at {} Hz (expected ~{expected_16k}), peak {:.4}",
         resampled.len(),
-        TARGET_SAMPLE_RATE
+        TARGET_SAMPLE_RATE,
+        peak(&resampled)
     );
 
     if has_no_speech(&resampled, duration_ms) {

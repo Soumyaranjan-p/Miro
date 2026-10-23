@@ -242,6 +242,31 @@
   box-shadow: var(--shadow-soft);
 }
 
+/* The live mascot: the untouched mascot page in a cropped frame. At 780px
+   internal width the page stacks stage-over-panel, so a 502px-tall window
+   shows only the creature, its stage and the caption underneath. */
+.msh-mascot {
+  flex: none;
+  width: 390px;
+  height: 251px;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.msh-mascot__frame {
+  width: 780px;
+  height: 502px;
+  border: 0;
+  transform: scale(0.5);
+  transform-origin: 0 0;
+}
+
+.msh-sidebar__avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+
 .msh-hero__body {
   min-width: 0;
 }

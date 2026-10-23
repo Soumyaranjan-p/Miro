@@ -92,7 +92,7 @@ export function PageStatistics() {
         <div className="msh-chart">
           {barData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 6, right: 8, left: -22, bottom: 0 }}>
+              <BarChart data={barData} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="msh-bar" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#f28c3b" />
@@ -103,7 +103,7 @@ export function PageStatistics() {
                 <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={34} allowDecimals={false} />
                 <Tooltip content={DictationTooltip} cursor={{ fill: "var(--miro-line)", opacity: 0.35 }} />
-                <Bar dataKey="dictations" fill="url(#msh-bar)" radius={[6, 6, 2, 2]} maxBarSize={26} />
+                <Bar dataKey="dictations" fill="url(#msh-bar)" radius={[6, 6, 2, 2]} maxBarSize={26} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -118,7 +118,7 @@ export function PageStatistics() {
           <div className="msh-chart">
             {barData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={barData} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
+                <AreaChart data={barData} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="msh-words" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#f28c3b" stopOpacity={0.45} />
@@ -137,6 +137,7 @@ export function PageStatistics() {
                     fill="url(#msh-words)"
                     dot={false}
                     activeDot={{ r: 3.5, fill: "#f28c3b", stroke: "var(--miro-bg)" }}
+                    isAnimationActive={false}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -151,7 +152,7 @@ export function PageStatistics() {
           <div className="msh-chart">
             {barData.some((day) => day.wpm > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={barData} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
+                <AreaChart data={barData} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="var(--miro-line)" strokeDasharray="3 6" vertical={false} />
                   <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={38} />
@@ -164,6 +165,7 @@ export function PageStatistics() {
                     strokeDasharray="4 3"
                     fill="transparent"
                     dot={{ r: 2, fill: "#8f9d8f", strokeWidth: 0 }}
+                    isAnimationActive={false}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -193,6 +195,7 @@ export function PageStatistics() {
                     outerRadius="92%"
                     strokeWidth={2}
                     stroke="var(--miro-bg)"
+                    isAnimationActive={false}
                   >
                     {modeData.map((entry) => (
                       <Cell key={entry.name} fill={entry.color} />

@@ -1,0 +1,11 @@
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:31] "GET / HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:31] "GET /assets/theme-NJUtOvoI.css HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:31] "GET /assets/settings-DmYs3OsL.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:31] "GET /assets/theme-CFqp7q_K.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:31] "GET /assets/modulepreload-polyfill-P2Xu9kJm.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:31] "GET /assets/settings-Dn3NzU18.css HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:31] "GET /miro-avatar.svg HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:32] "GET /miro-mascot.html HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:32] "GET /assets/inter-latin-wght-normal-Dx4kXJAl.woff2 HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:32] "GET /assets/previewBridge-aA5RqpL8.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [22/Oct/2026 21:20:32] "GET /favicon.png HTTP/1.1" 200 -

@@ -93,6 +93,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::set_settings,
+            commands::switch_home_mode_command,
             commands::get_runtime_status,
             commands::get_startup_info,
             commands::check_shortcut,
@@ -117,8 +118,6 @@ pub fn run() {
             commands::open_models_folder,
             commands::open_app_data_folder,
             commands::open_external,
-            commands::notify_splash_ready,
-            commands::splash_finished,
             commands::get_user_display_name,
         ])
         .on_window_event(|window, event| {
@@ -179,12 +178,10 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     handle.manage(ShortcutRegistry::new());
     handle.manage(commands::Downloads::default());
     handle.manage(HttpClient::new()?);
-    handle.manage(state::SplashFlow::default());
 
     // --- windows and tray ------------------------------------------------------
     windows::create_overlay(handle)?;
     windows::create_settings(handle)?;
-    windows::create_or_take_splash(handle)?;
     windows::create_tray(handle)?;
 
     // --- shortcuts -------------------------------------------------------------
@@ -226,10 +223,6 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // The home window is the app's face: show it at startup. The tray keeps
     // it available afterwards; on first run it is simply empty until shown.
     windows::show_settings(handle);
-
-    // The splash popup plays the hello greeting while (and before) the home
-    // window settles, then slides away and stays hidden.
-    windows::run_splash_sequence(handle, &handle.state::<state::SplashFlow>());
 
     Ok(())
 }

@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ipc } from "../../lib/ipc";
-import { useReducedMotion, useRuntimeStatus, useSettings } from "../../lib/hooks";
-import { LiveFox, type FoxState } from "./LiveFox";
+import { useReducedMotion, useSettings } from "../../lib/hooks";
 import { PageHome } from "./PageHome";
 import { PageShortcuts } from "./PageShortcuts";
 import { PageSettings } from "./PageSettings";
@@ -64,27 +63,30 @@ function Sidebar({
 }
 
 /**
- * The sidebar avatar mirrors the engine, not the page: incident mode shows on
- * every page so the state is never missed.
+ * The sidebar profile picture: the mascot as a small, static image (the same
+ * artwork as the live one, frozen in its calm pose). Live reaction lives on
+ * the Home page; the avatar just says who owns the app.
  */
 function SidebarFox(): ReactNode {
-  const { settings } = useSettings();
-  const { status } = useRuntimeStatus(8_000);
-  const incident = settings?.homeMode === "intent";
-  const state: FoxState = incident ? "incident" : status?.engine.state === "failed" ? "error" : "normal";
-  return <LiveFox size={34} state={state} reducedMotion label="Miro the fox" />;
+  return <img className="msh-sidebar__avatar" src="./miro-avatar.svg" alt="Miro" width={34} height={34} />;
 }
 
 function greeting(userName: string): string {
   const hour = new Date().getHours();
-  const partOfDay =
-    hour < 5 ? "Late night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const tagline = "ready when you are";
-  return userName ? `${partOfDay}, ${userName} — ${tagline}` : `${partOfDay} — ${tagline}`;
+  const partOfDay = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  // The Windows account name, already capitalised on the Rust side; when it
+  // cannot be read the greeting simply stands on its own.
+  return userName ? `${partOfDay}, ${userName}` : partOfDay;
 }
 
 export function MiroApp() {
-  const [page, setPage] = useState<PageId>("home");
+  // A ?page= query is a dev/preview convenience; the app always opens on Home.
+  const initialPage = new URLSearchParams(window.location.search).get("page");
+  const [page, setPage] = useState<PageId>(
+    initialPage === "statistics" || initialPage === "shortcuts" || initialPage === "settings"
+      ? initialPage
+      : "home",
+  );
   const [userName, setUserName] = useState("");
   const { settings } = useSettings();
   const reducedMotion = useReducedMotion();

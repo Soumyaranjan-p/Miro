@@ -383,12 +383,10 @@ export const previewBridge: MiroBridge = {
   async openExternal(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
   },
-  // The preview harness has no windows to reveal or hide; the splash plays out
-  // purely in CSS when its page is opened directly in a browser.
-  async notifySplashReady() {},
-  async splashFinished() {},
   async getUserName() {
-    return "friend";
+    // Fixtures never pretend to be an account; the greeting stands on its own
+    // in the browser preview.
+    return "";
   },
   on,
 };

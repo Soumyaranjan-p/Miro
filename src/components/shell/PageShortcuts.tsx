@@ -62,7 +62,7 @@ export function PageShortcuts() {
       <Section
         title="Normal mode"
         icon={<IconKeyboard />}
-        description="Flips the whole app back to Normal mode: dictation live, fox calm."
+        description="Flips the whole app back to Normal mode: dictation live, Miro calm."
       >
         <HotkeyRow
           settings={settings}
@@ -83,7 +83,7 @@ export function PageShortcuts() {
       <Section
         title="Incident mode"
         icon={<IconIncident />}
-        description="Flips the app into Incident mode: dictation paused, fox on guard."
+        description="Flips the app into Incident mode: dictation paused, Miro on guard."
       >
         <HotkeyRow
           settings={settings}

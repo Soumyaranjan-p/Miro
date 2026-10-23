@@ -1,6 +1,5 @@
 import { useRuntimeStatus, useSettings } from "../../lib/hooks";
 import { isPreview } from "../../lib/ipc";
-import { Logo } from "../Logo";
 import { Banner } from "../settings/Controls";
 import { AppearanceSection, SystemSection, TextSection } from "../settings/Preferences";
 import { DictationSection, MicrophoneSection, ModelSection, PrivacySection } from "../settings/Sections";
@@ -18,12 +17,9 @@ export function PageSettings() {
   return (
     <div className="msh-page" style={{ maxWidth: 780 }}>
       <header className="msh-page__head">
-        <div className="flex items-center gap-3">
-          <Logo size={34} />
-          <div>
-            <h1>Settings</h1>
-            <p>Settings save as you change them. Audio and transcripts stay in memory.</p>
-          </div>
+        <div>
+          <h1>Settings</h1>
+          <p>Settings save as you change them. Audio and transcripts stay in memory.</p>
         </div>
       </header>
 
