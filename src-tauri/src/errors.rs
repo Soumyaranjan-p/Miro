@@ -106,7 +106,7 @@ pub enum Failure {
     #[error("recording captured no usable audio")]
     AudioEmpty,
     #[error("the microphone gave no audio at all - check the mic device and Windows' microphone privacy setting")]
-    AudioSilent,
+    AudioSilent { device: String },
     #[error("the engine transcribed no words from the recording")]
     TranscriptEmpty,
     #[error("recording reached the maximum length")]
@@ -148,7 +148,7 @@ impl Failure {
             Failure::MicDisconnected => ErrorCode::MicDisconnected,
             Failure::MicUnsupportedFormat(_) => ErrorCode::MicUnsupportedFormat,
             Failure::AudioEmpty => ErrorCode::AudioEmpty,
-            Failure::AudioSilent => ErrorCode::AudioSilent,
+            Failure::AudioSilent { .. } => ErrorCode::AudioSilent,
             Failure::TranscriptEmpty => ErrorCode::TranscriptEmpty,
             Failure::AudioTooLong => ErrorCode::AudioTooLong,
             Failure::ShortcutConflict { .. } => ErrorCode::ShortcutConflict,
@@ -174,12 +174,13 @@ impl Failure {
             | Failure::MicMissing
             | Failure::MicDisconnected
             | Failure::AudioEmpty
-            | Failure::AudioSilent
             | Failure::TranscriptEmpty
             | Failure::AudioTooLong
             | Failure::FocusChanged
             | Failure::InsertionBlocked
             | Failure::Cancelled(_) => None,
+
+            Failure::AudioSilent { device } => Some(format!("device: {}", clip_detail(device))),
 
             Failure::ModelFileMissing(model) | Failure::ModelCorrupt { model } => {
                 Some(format!("model: {model}"))

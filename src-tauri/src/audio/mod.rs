@@ -726,7 +726,8 @@ fn run_capture(
         // captured but the gesture was cut short. A clip with no loud
         // window at all means the device gave near-zero audio - the wrong
         // mic, a disabled device or a denied Windows microphone - and no
-        // amount of talking helps until that is fixed.
+        // amount of talking helps until that is fixed. The device name is
+        // surfaced so the user can see what was actually listened to.
         if loud > 0 {
             eprintln!(
                 "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud windows {} of {} \
@@ -740,13 +741,14 @@ fn run_capture(
         } else {
             eprintln!(
                 "[miro-audio] audio_silent: {} samples, {duration_ms} ms, loud windows 0 - \
-                 the device fed silence; check mic selection and Windows microphone privacy",
-                resampled.len()
+                 the device `{}` fed silence; check mic selection and Windows microphone privacy",
+                resampled.len(),
+                label
             );
         }
         discard(resampled);
         return CaptureOutcome::Failed(if loud == 0 {
-            Failure::AudioSilent
+            Failure::AudioSilent { device: label }
         } else {
             Failure::AudioEmpty
         });
@@ -916,6 +918,10 @@ fn clone_failure(failure: &Failure) -> Failure {
         Failure::MicMissing => Failure::MicMissing,
         Failure::MicDisconnected => Failure::MicDisconnected,
         Failure::MicUnsupportedFormat(detail) => Failure::MicUnsupportedFormat(detail.clone()),
+        Failure::AudioSilent { device } => Failure::AudioSilent {
+            device: device.clone(),
+        },
+        Failure::AudioEmpty => Failure::AudioEmpty,
         Failure::Internal(detail) => Failure::Internal(detail.clone()),
         other => Failure::Internal(other.to_string()),
     }
