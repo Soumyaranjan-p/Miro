@@ -106,7 +106,7 @@ impl WhisperEngine {
             // whisper.cpp's no_speech_thold is not actually implemented, so
             // whisper happily transcribes pure noise ("Thanks for watching!").
             // Reject segments whose no-speech probability is high.
-            if segment.no_speech_probability() > 0.3 {
+            if segment.no_speech_probability() > NO_SPEECH_THRESHOLD {
                 continue;
             }
             let segment = segment

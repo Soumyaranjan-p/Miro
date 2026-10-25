@@ -55,6 +55,13 @@ impl Target {
     /// refuses to type into whatever is in front now.
     pub fn is_still_foreground(&self) -> bool {
         let current = unsafe { GetForegroundWindow() };
+        if current.0 as isize == self.hwnd {
+            return true;
+        }
+        // Try to restore focus to the original target before giving up.
+        let handle = HWND(self.hwnd as *mut c_void);
+        let _ = unsafe { SetForegroundWindow(handle) };
+        let current = unsafe { GetForegroundWindow() };
         current.0 as isize == self.hwnd
     }
 

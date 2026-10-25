@@ -19,7 +19,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio::{self, Capture, CaptureControl, CaptureMode, CaptureOutcome, LevelFrame};
-use crate::config::{HomeMode, Settings};
+use crate::config::{HomeMode, Mode, Settings};
 use crate::engine::{self, Engine, EngineOptions};
 use crate::errors::{Failure, Result};
 use crate::events::{self, OverlayState, RuntimeStatus};
@@ -413,12 +413,10 @@ impl Session {
                     inner.recording = None;
                 }
                 let _ = device_label;
-                emit_overlay(
-                    app,
-                    OverlayState::Processing {
-                        started_at_ms: now_ms(),
-                    },
-                );
+                // Hide the Recording overlay immediately to allow focus to return to target
+                emit_overlay(app, OverlayState::Hidden);
+                // Give Windows time to stabilize focus to the target window
+                std::thread::sleep(std::time::Duration::from_millis(100));
                 self.transcribe_and_insert(app, samples, duration_ms, limit_reached, target);
             }
             CaptureOutcome::Cancelled | CaptureOutcome::Probed => {
@@ -449,6 +447,7 @@ impl Session {
             Ok(engine) => engine,
             Err(failure) => {
                 audio::discard(samples);
+                emit_overlay(app, OverlayState::Hidden);
                 self.reset(app);
                 self.fail(app, failure, None);
                 return;
@@ -897,9 +896,16 @@ impl HookBinding {
             .spawn(move || {
                 while let Ok(signal) = rx.recv() {
                     let session = app_handle.state::<Session>();
+                    let settings = state::state(&app_handle).settings();
                     match signal.role {
                         "dictation" => {
-                            session.on_push_to_talk(&app_handle, signal.event == PressEvent::Down)
+                            // Only use push-to-talk behavior when actually in push-to-talk mode
+                            if settings.mode == Mode::PushToTalk {
+                                session.on_push_to_talk(&app_handle, signal.event == PressEvent::Down)
+                            } else if signal.event == PressEvent::Down && session.phase() == Phase::Idle {
+                                // In toggle mode, only handle press events to start recording
+                                session.toggle(&app_handle);
+                            }
                         }
                         "normal" if signal.event == PressEvent::Down => {
                             let _ = crate::commands::switch_home_mode(&app_handle, HomeMode::Home);
