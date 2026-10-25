@@ -270,7 +270,7 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
                 // Both edges of a hold mean something; repeats are harmless
                 // because the phase machine ignores stale presses.
                 session.on_push_to_talk(app, pressed);
-            } else if pressed {
+            } else if pressed && session.phase() == crate::session::Phase::Idle {
                 // Toggle mode on Windows repeats while a key is held. The
                 // phase machine tolerates it, but the toggle would flicker;
                 // a short debounce keeps one press one toggle.

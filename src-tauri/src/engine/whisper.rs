@@ -98,10 +98,17 @@ impl WhisperEngine {
         let segments = state.full_n_segments().max(0);
 
         let mut text = String::new();
+        let mut segments_used = 0usize;
         for index in 0..segments {
             let Some(segment) = state.get_segment(index) else {
                 continue;
             };
+            // whisper.cpp's no_speech_thold is not actually implemented, so
+            // whisper happily transcribes pure noise ("Thanks for watching!").
+            // Reject segments whose no-speech probability is high.
+            if segment.no_speech_probability() > 0.3 {
+                continue;
+            }
             let segment = segment
                 .to_str()
                 .map_err(|error| Failure::Transcription(describe(error)))?;
@@ -109,10 +116,41 @@ impl WhisperEngine {
             if trimmed.is_empty() {
                 continue;
             }
+            // Whisper hallucinates these common phrases on noise even when
+            // no_speech_probability is low. Treat them as silence.
+            let lowered = trimmed.to_lowercase();
+            let hallucinations = [
+                "thanks for watching",
+                "thank you",
+                "subscribe",
+                "blank_audio",
+                "you",
+                "thank you for watching",
+                "thanks for listening",
+                "see you next time",
+                "bye",
+            ];
+            let is_hallucination = hallucinations
+                .iter()
+                .any(|phrase| {
+                    lowered == *phrase
+                        || lowered == format!("{phrase}.")
+                        || lowered == format!("{phrase}!")
+                        || lowered == format!("{phrase},")
+                        || lowered == format!("{phrase}?")
+                });
+            if is_hallucination {
+                continue;
+            }
             if !text.is_empty() {
                 text.push(' ');
             }
             text.push_str(trimmed);
+            segments_used += 1;
+        }
+
+        if segments_used == 0 || text.trim().is_empty() {
+            return Err(Failure::TranscriptEmpty);
         }
 
         Ok((text, segments as usize))

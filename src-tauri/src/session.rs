@@ -51,6 +51,7 @@ pub enum Phase {
 
 struct ActiveRecording {
     control: CaptureControl,
+    started_at_ms: u64,
 }
 
 #[derive(Default)]
@@ -170,7 +171,7 @@ impl Session {
         {
             let mut inner = lock(&self.inner);
             inner.target = Some(target);
-            inner.recording = Some(ActiveRecording { control });
+            inner.recording = Some(ActiveRecording { control, started_at_ms });
         }
 
         if let Err(failure) = shortcut_registry(app).register_cancel(app) {
@@ -279,7 +280,18 @@ impl Session {
                 }
             }
         } else if self.phase() == Phase::Recording {
-            let _ = self.stop();
+            let started = lock(&self.inner)
+                .recording
+                .as_ref()
+                .map(|r| r.started_at_ms)
+                .unwrap_or(0);
+            if started > 0 && now_ms().saturating_sub(started) < 400 {
+                // Accidental instant release: cancel instead of transcribing
+                // empty audio.
+                let _ = self.cancel(app);
+            } else {
+                let _ = self.stop();
+            }
         }
     }
 

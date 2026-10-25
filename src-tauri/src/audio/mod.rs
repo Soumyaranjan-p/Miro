@@ -38,10 +38,11 @@ const LEVEL_HZ: u64 = 50;
 /// Deliberately low: a laptop mic with a quiet Windows input level puts soft
 /// speech around 0.0015 RMS, and dictation must never refuse a real voice for
 /// being quiet. None of the gates after this one relies on the clip being
-/// loud - the level is recovered later by peak normalization.
+/// loud - the level is recovered later by peak normalization, which now has
+/// its own floor so noise-only clips are never boosted into fake speech.
 const SILENCE_RMS: f32 = 0.001;
 /// Clips shorter than this can never be speech, however loud.
-const MIN_SPEECH_MS: u128 = 300;
+const MIN_SPEECH_MS: u128 = 500;
 /// Fewer audible 20 ms windows than this, and the audio is a stray click or
 /// background hum rather than a voice. Judged as an absolute count, not a
 /// share of the clip, so a short utterance followed by a pause still passes.
@@ -711,15 +712,9 @@ fn run_capture(
     let mut resampled = resampler.process(&mono, false);
     resampled.extend(resampler.process(&[], true)); // flush the tail
     discard(mono);
-    normalize_peak(&mut resampled);
-    let expected_16k = TARGET_SAMPLE_RATE as u128 * duration_ms / 1000;
-    eprintln!(
-        "[miro-audio] resampled: {} samples at {} Hz (expected ~{expected_16k}), peak {:.4}",
-        resampled.len(),
-        TARGET_SAMPLE_RATE,
-        peak(&resampled)
-    );
-
+    // Gate on speech before amplifying: background noise from a quiet earphone
+    // mic must not be boosted into something whisper will hallucinate words
+    // from. The raw (resampled, un-normalized) level is the honest measure.
     if has_no_speech(&resampled, duration_ms) {
         let loud = loud_windows(&resampled);
         // A clip with loud windows but too few of them means speech was
@@ -730,9 +725,10 @@ fn run_capture(
         // surfaced so the user can see what was actually listened to.
         if loud > 0 {
             eprintln!(
-                "[miro-audio] audio_empty: {} samples, {duration_ms} ms, loud windows {} of {} \
+                "[miro-audio] audio_empty: {} samples, {duration_ms} ms, peak {:.4}, loud windows {} of {} \
                  (need {}, speech rms cutoff {}) - captured audio was too brief",
                 resampled.len(),
+                peak(&resampled),
                 loud,
                 resampled.len() / (TARGET_SAMPLE_RATE as usize / 50).max(1),
                 MIN_LOUD_WINDOWS,
@@ -753,6 +749,15 @@ fn run_capture(
             Failure::AudioEmpty
         });
     }
+
+    normalize_peak(&mut resampled);
+    let expected_16k = TARGET_SAMPLE_RATE as u128 * duration_ms / 1000;
+    eprintln!(
+        "[miro-audio] resampled: {} samples at {} Hz (expected ~{expected_16k}), peak {:.4}",
+        resampled.len(),
+        TARGET_SAMPLE_RATE,
+        peak(&resampled)
+    );
 
     CaptureOutcome::Recorded {
         samples: resampled,
@@ -785,6 +790,15 @@ pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
     loud_windows(samples) < MIN_LOUD_WINDOWS
 }
 
+/// Peak below this is treated as silence/noise and never amplified.
+///
+/// Without a floor, `normalize_peak` boosts a quiet earphone mic's idle noise
+/// (peak ~0.016) up to ~0.5, which whisper then transcribes as phrases like
+/// "Thanks for watching!". Refusing to amplify below this floor leaves noise
+/// quiet enough that whisper's own silence guards reject it, while real speech
+/// (which sits far above this level) still gets normalized to a usable level.
+const MIN_NORMALIZE_PEAK: f32 = 0.02;
+
 /// Brings a quietly recorded clip up to a level the engine can use.
 ///
 /// A laptop mic at a low Windows input level records speech around -50 dBFS;
@@ -792,18 +806,20 @@ pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
 /// clip - with a gain ceiling so a noise-only recording is never inflated
 /// into something that looks like speech - puts a quiet voice back inside
 /// the engine's comfort zone. A clip that is already loud enough is left
-/// exactly as recorded.
+/// exactly as recorded. Clips below [`MIN_NORMALIZE_PEAK`] are treated as
+/// silence and left alone.
 fn normalize_peak(samples: &mut [f32]) {
     let measured = peak(samples);
-    if measured > 1e-6 && measured < TARGET_PEAK {
-        let gain = (TARGET_PEAK / measured).min(MAX_GAIN);
-        eprintln!(
-            "[miro-audio] normalize: peak {measured:.4} x{gain:.1} -> peak {:.4}",
-            (measured * gain).min(TARGET_PEAK)
-        );
-        for sample in samples.iter_mut() {
-            *sample = (*sample * gain).clamp(-1.0, 1.0);
-        }
+    if measured < MIN_NORMALIZE_PEAK || measured >= TARGET_PEAK {
+        return;
+    }
+    let gain = (TARGET_PEAK / measured).min(MAX_GAIN);
+    eprintln!(
+        "[miro-audio] normalize: peak {measured:.4} x{gain:.1} -> peak {:.4}",
+        (measured * gain).min(TARGET_PEAK)
+    );
+    for sample in samples.iter_mut() {
+        *sample = (*sample * gain).clamp(-1.0, 1.0);
     }
 }
 
@@ -991,6 +1007,20 @@ mod tests {
     fn a_short_clip_is_not_speech() {
         let loud = vec![0.4f32; (TARGET_SAMPLE_RATE as usize) / 10];
         assert!(has_no_speech(&loud, 50));
+    }
+
+    #[test]
+    fn a_clip_shorter_than_min_speech_ms_is_not_speech() {
+        // 400 ms of loud audio: below the 500 ms floor, so never speech.
+        let loud = vec![0.4f32; (TARGET_SAMPLE_RATE as usize * 400) / 1000];
+        assert!(has_no_speech(&loud, 400));
+    }
+
+    #[test]
+    fn a_clip_at_min_speech_ms_with_enough_loud_windows_is_speech() {
+        // 500 ms floor met, and well over 2 loud 20 ms windows: speech.
+        let loud = vec![0.4f32; (TARGET_SAMPLE_RATE as usize * 500) / 1000];
+        assert!(!has_no_speech(&loud, 500));
     }
 
     #[test]

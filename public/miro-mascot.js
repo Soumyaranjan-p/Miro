@@ -16,7 +16,7 @@ rig.addEventListener('click',()=>{const n=performance.now();clicks=clicks.filter
 rig.addEventListener('dblclick',()=>{if(!air){jv=-780*A;air=true}sq=.15;burst(target?'!':'✦',6)});
 rig.addEventListener('pointerenter',()=>hover=t);rig.addEventListener('pointerleave',()=>hover=-1);
 const cap=$('cap'),bN=$('bN'),bI=$('bI');
-function setMode(v,quiet){target=v?1:0;stage.classList.toggle('alert',!!v);bN.setAttribute('aria-pressed',!v);bI.setAttribute('aria-pressed',!!v);cap.textContent=v?'On alert. Watching closely.':'Calm. Following your cursor.';if(!quiet){sq=-.2;asleep=false;lastMove=t;burst(v?'!':'✦',4)}}
+function setMode(v,quiet){target=v?1:0;stage.classList.toggle('alert',!!v);bN.setAttribute('aria-pressed',!v);bI.setAttribute('aria-pressed',!!v);cap.textContent=v?'':'.';if(!quiet){sq=-.2;asleep=false;lastMove=t;burst(v?'!':'✦',4)}}
 bN.onclick=()=>setMode(0);bI.onclick=()=>setMode(1);
 addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;const k=e.key.toLowerCase();if(k==='n')setMode(0);if(k==='i')setMode(1)});
 window.Miro={setMode:n=>setMode(n==='incident'||n===1||n===true),get mode(){return target?'incident':'normal'}};

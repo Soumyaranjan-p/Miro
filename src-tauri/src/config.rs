@@ -148,7 +148,7 @@ impl Default for Settings {
             incident_shortcut: DEFAULT_INCIDENT_SHORTCUT.to_string(),
             // The dictation hotkey (Ctrl+M by default) carries both edges of a
             // hold, so push-to-talk works with a combo as well as a key.
-            mode: Mode::PushToTalk,
+            mode: Mode::Toggle,
             home_mode: HomeMode::Home,
             sound_on: true,
             microphone: None,
