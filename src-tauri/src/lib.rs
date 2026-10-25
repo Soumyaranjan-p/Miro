@@ -269,11 +269,14 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
             if settings.mode == config::Mode::PushToTalk {
                 // Both edges of a hold mean something; repeats are harmless
                 // because the phase machine ignores stale presses.
+                eprintln!("[DEBUG] Plugin: on_push_to_talk pressed={}", pressed);
                 session.on_push_to_talk(app, pressed);
-            } else if pressed && session.phase() == crate::session::Phase::Idle {
+            } else if pressed {
+                // Toggle mode: only respond to press events, ignore release
                 // Toggle mode on Windows repeats while a key is held. The
                 // phase machine tolerates it, but the toggle would flicker;
                 // a short debounce keeps one press one toggle.
+                eprintln!("[DEBUG] Plugin: toggle pressed={}", pressed);
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|duration| duration.as_millis() as u64)
@@ -282,7 +285,10 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
                     app_state.last_toggle_ms.store(now, Ordering::Relaxed);
                     session.toggle(app);
                 }
+            } else {
+                eprintln!("[DEBUG] Plugin: toggle ignoring release event");
             }
+            // In toggle mode, completely ignore release events
         }
         _ => {
             // Escape, registered only while a recording is in flight.

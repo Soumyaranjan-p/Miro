@@ -209,6 +209,7 @@ impl Session {
 
     /// Asks the running capture to stop; the supervisor does the rest.
     pub fn stop(&self) -> Result<()> {
+        eprintln!("[DEBUG] Session::stop() called");
         let inner = lock(&self.inner);
         match inner.recording.as_ref() {
             Some(recording) if !recording.control.is_stopping() => {
@@ -899,13 +900,18 @@ impl HookBinding {
                     let settings = state::state(&app_handle).settings();
                     match signal.role {
                         "dictation" => {
+                            eprintln!("[DEBUG] Hook: dictation event={:?} mode={:?}", signal.event, settings.mode);
                             // Only use push-to-talk behavior when actually in push-to-talk mode
                             if settings.mode == Mode::PushToTalk {
                                 session.on_push_to_talk(&app_handle, signal.event == PressEvent::Down)
-                            } else if signal.event == PressEvent::Down && session.phase() == Phase::Idle {
-                                // In toggle mode, only handle press events to start recording
+                            } else if signal.event == PressEvent::Down {
+                                // In toggle mode, press toggles (start or stop)
+                                eprintln!("[DEBUG] Hook: calling toggle");
                                 session.toggle(&app_handle);
+                            } else {
+                                eprintln!("[DEBUG] Hook: ignoring release event in toggle mode");
                             }
+                            // In toggle mode, ignore release events completely
                         }
                         "normal" if signal.event == PressEvent::Down => {
                             let _ = crate::commands::switch_home_mode(&app_handle, HomeMode::Home);
