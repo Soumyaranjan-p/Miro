@@ -146,14 +146,12 @@ pub struct CaptureControl {
 
 impl CaptureControl {
     pub fn stop(&self) {
-        eprintln!("[DEBUG] CaptureControl::stop() called from:");
-        eprintln!("{:?}", std::backtrace::Backtrace::new());
+        eprintln!("[DEBUG] CaptureControl::stop() called");
         self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn cancel(&self) {
-        eprintln!("[DEBUG] CaptureControl::cancel() called from:");
-        eprintln!("{:?}", std::backtrace::Backtrace::new());
+        eprintln!("[DEBUG] CaptureControl::cancel() called");
         self.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
         self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
     }

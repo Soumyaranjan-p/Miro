@@ -205,6 +205,7 @@ impl Engine {
                             segments,
                             ms: compute_ms,
                             chars: text.chars().count(),
+                            words: text.split_whitespace().count(),
                         });
                         drop(guard);
                         Ok(Transcript {

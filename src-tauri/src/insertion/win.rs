@@ -262,6 +262,16 @@ fn virtual_key_input(key: VIRTUAL_KEY, scan: u16, key_up: bool) -> INPUT {
 
 const SCAN_RETURN: u16 = 0x1C;
 
+/// Units sent in one `SendInput` call. Kept small so a slow or controlled
+/// editor can consume one batch before the next arrives.
+const BATCH_UNITS: usize = 24;
+
+/// Gap between batches. Simple native controls keep up with 2 ms, but browser
+/// and Electron editors process injected input asynchronously and can drop
+/// characters when a long transcript arrives faster than their state updates.
+/// 6 ms per 24 characters is still far quicker than typing.
+const BATCH_SETTLE_MS: u64 = 6;
+
 /// Types text with `SendInput` using Unicode events.
 ///
 /// Newlines become real Enter presses (chat apps and editors treat a bare CR
@@ -271,7 +281,7 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
     let units: Vec<u16> = text.encode_utf16().collect();
     let mut typed = 0usize;
 
-    for (start, end) in plan_batches(&units, 32) {
+    for (start, end) in plan_batches(&units, BATCH_UNITS) {
         let mut events: Vec<INPUT> = Vec::with_capacity((end - start) * 2 + 2);
         for (offset, unit) in units[start..end].iter().enumerate() {
             let previous = if offset > 0 {
@@ -325,7 +335,7 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
         }
 
         // Give the target a chance to process the batch before the next one.
-        std::thread::sleep(std::time::Duration::from_millis(2));
+        std::thread::sleep(std::time::Duration::from_millis(BATCH_SETTLE_MS));
     }
 
     Ok(typed)

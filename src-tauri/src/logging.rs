@@ -88,12 +88,14 @@ pub enum Event {
         segments: usize,
         ms: u128,
         chars: usize,
+        words: usize,
     },
     TranscriptionFailed {
         code: &'static str,
     },
     TranscriptProcessed {
         characters: usize,
+        words: usize,
     },
     InsertionAttempt {
         target: &'static str,
@@ -169,12 +171,20 @@ impl fmt::Display for Event {
             Event::TranscriptionStarted { samples } => {
                 write!(f, "engine.transcribe.started samples={samples}")
             }
-            Event::TranscriptionFinished { segments, ms, chars } => {
-                write!(f, "engine.transcribe.finished segments={segments} ms={ms} chars={chars}")
+            Event::TranscriptionFinished {
+                segments,
+                ms,
+                chars,
+                words,
+            } => {
+                write!(
+                    f,
+                    "engine.transcribe.finished segments={segments} ms={ms} chars={chars} words={words}"
+                )
             }
             Event::TranscriptionFailed { code } => write!(f, "engine.transcribe.failed code={code}"),
-            Event::TranscriptProcessed { characters } => {
-                write!(f, "transcript.processed characters={characters}")
+            Event::TranscriptProcessed { characters, words } => {
+                write!(f, "transcript.processed characters={characters} words={words}")
             }
             Event::InsertionAttempt { target, mode } => {
                 write!(f, "insertion.attempt target={target} mode={mode}")

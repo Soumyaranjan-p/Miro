@@ -469,6 +469,7 @@ impl Session {
                 let processed = textproc::process(&transcript.text, &settings.cleanup);
                 logging::event(Event::TranscriptProcessed {
                     characters: processed.chars().count(),
+                    words: processed.split_whitespace().count(),
                 });
                 // Dropping the transcript zeroizes the raw engine output.
                 drop(transcript);
