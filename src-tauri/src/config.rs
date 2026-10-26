@@ -16,14 +16,14 @@ use serde::{Deserialize, Serialize};
 use crate::errors::{Failure, Result};
 use crate::logging::{self, Event};
 
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
 pub const CONFIG_FILE: &str = "config.json";
 /// Default dictation hotkey: hold to record, release to stop and type. Ctrl+M
 /// is a real key under Ctrl, which the keyboard hook can watch through both
 /// edges - the release edge is what push-to-talk needs to stop by itself.
 pub const DEFAULT_SHORTCUT: &str = "Ctrl+M";
 pub const DEFAULT_NORMAL_SHORTCUT: &str = "Ctrl+Alt";
-pub const DEFAULT_INCIDENT_SHORTCUT: &str = "Ctrl+Alt+Space";
+pub const DEFAULT_INTENT_SHORTCUT: &str = "Ctrl+Alt+Space";
 pub const MIN_RECORDING_SECONDS: u32 = 30;
 pub const MAX_RECORDING_SECONDS: u32 = 600;
 pub const MAX_FILLER_WORDS: usize = 64;
@@ -43,7 +43,8 @@ pub enum HomeMode {
     /// Normal Mode: dictation as it works today.
     #[default]
     Home,
-    /// Intent Mode: rendered as a "coming soon" placeholder for now.
+    /// Intent Mode: spoken intent is restructured into a prompt before it is
+    /// inserted.
     Intent,
 }
 
@@ -120,8 +121,12 @@ pub struct Settings {
     pub shortcut: String,
     /// Hotkey that switches back to Normal mode (`home`).
     pub normal_shortcut: String,
-    /// Hotkey that switches to Incident mode (`intent`), the alert visual state.
-    pub incident_shortcut: String,
+    /// Hotkey that switches to Intent Mode (`intent`).
+    ///
+    /// The alias is a one-time migration shim: a config written before the mode
+    /// was renamed stores this under its old key, and still has to load.
+    #[serde(alias = "incidentShortcut")]
+    pub intent_shortcut: String,
     pub mode: Mode,
     /// Which screen the home window opens on: dictation home or Intent Mode.
     pub home_mode: HomeMode,
@@ -145,7 +150,7 @@ impl Default for Settings {
             version: CONFIG_VERSION,
             shortcut: DEFAULT_SHORTCUT.to_string(),
             normal_shortcut: DEFAULT_NORMAL_SHORTCUT.to_string(),
-            incident_shortcut: DEFAULT_INCIDENT_SHORTCUT.to_string(),
+            intent_shortcut: DEFAULT_INTENT_SHORTCUT.to_string(),
             // The dictation hotkey (Ctrl+M by default) carries both edges of a
             // hold, so push-to-talk works with a combo as well as a key.
             mode: Mode::Toggle,
@@ -171,7 +176,10 @@ impl Default for Settings {
 pub struct SettingsPatch {
     pub shortcut: Option<String>,
     pub normal_shortcut: Option<String>,
-    pub incident_shortcut: Option<String>,
+    /// Accepts the pre-rename key too, so an old interface build cannot
+    /// silently drop the hotkey while keeping the rest of a patch.
+    #[serde(alias = "incidentShortcut")]
+    pub intent_shortcut: Option<String>,
     pub mode: Option<Mode>,
     pub home_mode: Option<HomeMode>,
     pub sound_on: Option<bool>,
@@ -207,15 +215,17 @@ where
 }
 
 impl Settings {
-    /// Carries a config written by an older build forward. Version 1 stored
-    /// the dictation default as the right Ctrl key; Ctrl+M is the default
-    /// now, so a file that still holds that literal moves with the default,
-    /// while any deliberately chosen key stays untouched.
+    /// Carries a config written by an older build forward.
+    ///
+    /// Version 1 stored the dictation default as the right Ctrl key; Ctrl+M is
+    /// the default now, so a file that still holds that literal moves with the
+    /// default, while any deliberately chosen key stays untouched. Version 3
+    /// renamed the mode from Incident to Intent: the old JSON key is accepted
+    /// by the serde alias on [`Settings::intent_shortcut`], so the value is
+    /// already in place by the time this runs and is rewritten on the next
+    /// save.
     pub fn migrate(&mut self) {
-        if self.version >= 2 {
-            return;
-        }
-        if self.shortcut.eq_ignore_ascii_case("controlright") {
+        if self.version < 2 && self.shortcut.eq_ignore_ascii_case("controlright") {
             self.shortcut = DEFAULT_SHORTCUT.to_string();
         }
         self.version = CONFIG_VERSION;
@@ -226,15 +236,15 @@ impl Settings {
         self.version = CONFIG_VERSION;
         self.shortcut = self.shortcut.trim().to_string();
         self.normal_shortcut = self.normal_shortcut.trim().to_string();
-        self.incident_shortcut = self.incident_shortcut.trim().to_string();
+        self.intent_shortcut = self.intent_shortcut.trim().to_string();
         if self.shortcut.is_empty() {
             self.shortcut = DEFAULT_SHORTCUT.to_string();
         }
         if self.normal_shortcut.is_empty() {
             self.normal_shortcut = DEFAULT_NORMAL_SHORTCUT.to_string();
         }
-        if self.incident_shortcut.is_empty() {
-            self.incident_shortcut = DEFAULT_INCIDENT_SHORTCUT.to_string();
+        if self.intent_shortcut.is_empty() {
+            self.intent_shortcut = DEFAULT_INTENT_SHORTCUT.to_string();
         }
         self.max_recording_seconds = self
             .max_recording_seconds
@@ -268,8 +278,8 @@ impl Settings {
         if let Some(shortcut) = patch.normal_shortcut {
             self.normal_shortcut = shortcut;
         }
-        if let Some(shortcut) = patch.incident_shortcut {
-            self.incident_shortcut = shortcut;
+        if let Some(shortcut) = patch.intent_shortcut {
+            self.intent_shortcut = shortcut;
         }
         if let Some(mode) = patch.mode {
             self.mode = mode;
@@ -590,16 +600,44 @@ mod tests {
         let mut settings = Settings::default();
         settings.apply(
             serde_json::from_str(
-                r#"{"normalShortcut":"Ctrl+Shift+N","incidentShortcut":"Ctrl+Shift+I"}"#,
+                r#"{"normalShortcut":"Ctrl+Shift+N","intentShortcut":"Ctrl+Shift+I"}"#,
             )
             .unwrap(),
         );
         assert_eq!(settings.normal_shortcut, "Ctrl+Shift+N");
-        assert_eq!(settings.incident_shortcut, "Ctrl+Shift+I");
+        assert_eq!(settings.intent_shortcut, "Ctrl+Shift+I");
 
         settings.normal_shortcut = "   ".into();
         settings.normalize();
         assert_eq!(settings.normal_shortcut, DEFAULT_NORMAL_SHORTCUT);
+    }
+
+    #[test]
+    fn a_pre_rename_config_keeps_the_intent_hotkey() {
+        // The one place the old key name survives, on purpose: a config written
+        // before the rename must still load, and must be rewritten under the
+        // new key the next time settings are saved.
+        let dir = temp_dir("legacy-intent-key");
+        fs::create_dir_all(&dir).unwrap();
+        let raw = r#"{
+            "version": 2,
+            "shortcut": "Ctrl+M",
+            "normalShortcut": "Ctrl+Alt",
+            "incidentShortcut": "Ctrl+Shift+I",
+            "homeMode": "intent",
+            "modelId": "small.en"
+        }"#;
+        fs::write(dir.join(CONFIG_FILE), raw).unwrap();
+
+        let store = ConfigStore::new(&dir);
+        let loaded = store.load();
+        assert_eq!(loaded.intent_shortcut, "Ctrl+Shift+I");
+        assert_eq!(loaded.version, CONFIG_VERSION);
+
+        let json = serde_json::to_string(&loaded).unwrap();
+        assert!(json.contains("\"intentShortcut\""));
+        assert!(!json.contains("Incident"));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

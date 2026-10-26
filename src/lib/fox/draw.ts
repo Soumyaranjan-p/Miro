@@ -13,7 +13,7 @@
  * load:
  *
  *   normal     breathing, warm, slow blink, gentle tail sway
- *   incident   alert wide eyes, a soft red glow, ears folded back, tail tucked
+ *   intent   alert wide eyes, a soft red glow, ears folded back, tail tucked
  *   listening  eyes wide and bright, mouth follows the mic level, blush rises
  *   processing eyes rest on a calm line, tail pauses
  *   error      alert palette, wincing squint
@@ -27,7 +27,7 @@
 export type FoxState =
   | "neutral"
   | "normal"
-  | "incident"
+  | "intent"
   | "listening"
   | "processing"
   | "error";
@@ -106,7 +106,7 @@ interface Pose {
 
 function poseFor(state: FoxState): Pose {
   switch (state) {
-    case "incident":
+    case "intent":
     case "error":
       return { earBack: 0.7, tailTuck: 0.9, tense: 1.4, blush: 0.35 };
     case "listening":
@@ -132,7 +132,7 @@ function eyeShape(state: FoxState, level: number): EyeSpec {
   switch (state) {
     case "listening":
       return { openness: 0.92, wide: 0.35 + level * 0.25 };
-    case "incident":
+    case "intent":
       return { openness: 1, wide: 0.6 };
     case "error":
       return { openness: 0.42, wide: 0.3 };
@@ -516,8 +516,8 @@ export function drawFox(
   // The click reaction runs down on its own clock.
   render.poke = Math.max(0, render.poke - dt);
 
-  const colors = params.state === "incident" || params.state === "error" ? ALERT : CALM;
-  const incident = colors === ALERT;
+  const colors = params.state === "intent" || params.state === "error" ? ALERT : CALM;
+  const intent = colors === ALERT;
   const pose = mixPose(poseFor("normal"), poseFor(params.state), render.blend);
 
   // Static pose: no blink, no breathing, no tail sway. Still fully shaded.
@@ -531,8 +531,8 @@ export function drawFox(
   const center = { x: 64, y: 72 };
   const radius = 33;
 
-  // --- incident glow (behind everything) ---
-  if (incident && render.blend > 0.02) {
+  // --- intent glow (behind everything) ---
+  if (intent && render.blend > 0.02) {
     const glow = ctx.createRadialGradient(center.x, center.y, radius * 0.6, center.x, center.y, radius * 1.75);
     glow.addColorStop(0, "rgba(255, 94, 68, 0.34)");
     glow.addColorStop(1, "rgba(255, 94, 68, 0)");
@@ -563,7 +563,7 @@ export function drawFox(
   const scanning = params.state === "processing";
   const tailSway = idle
     ? 0
-    : damp(motion, incident ? 3 : scanning ? 1.5 : 4.2) * wave(t, scanning ? 5 : 3.1);
+    : damp(motion, intent ? 3 : scanning ? 1.5 : 4.2) * wave(t, scanning ? 5 : 3.1);
   drawTail(ctx, {
     root: { x: center.x + radius * 0.62, y: center.y + radius * 0.82 },
     tuck: pose.tailTuck,
@@ -634,7 +634,7 @@ export function drawFox(
   } else {
     // Alertness suppresses the blink so an emergency never half-lids.
     const blink =
-      idle || incident || params.state === "error" ? 0 : blinkEnvelope(t, 4.6, 2.6, 0.22);
+      idle || intent || params.state === "error" ? 0 : blinkEnvelope(t, 4.6, 2.6, 0.22);
     const blinkSpec: EyeSpec = {
       openness: spec.openness * (1 - blink),
       wide: spec.wide * (1 - blink * 0.7),

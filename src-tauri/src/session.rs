@@ -101,13 +101,13 @@ impl Session {
 
     /// Starts recording. Refuses if a dictation is already in flight.
     pub fn start(&self, app: &AppHandle) -> Result<()> {
-        // Incident mode is a visual state for now: dictation does not run in
+        // Intent mode is a visual state for now: dictation does not run in
         // it. The refusal is silent-but-logged - the mode was chosen on
         // purpose, so a hotkey in a game or another app must not yank the app
         // into recording.
         if state::state(app).settings().home_mode != HomeMode::Home {
             logging::event(Event::Failure {
-                code: "incident_mode",
+                code: "intent_mode",
                 detail: "dictation is only available in Normal mode".to_string(),
             });
             return Ok(());
@@ -917,7 +917,7 @@ impl HookBinding {
                         "normal" if signal.event == PressEvent::Down => {
                             let _ = crate::commands::switch_home_mode(&app_handle, HomeMode::Home);
                         }
-                        "incident" if signal.event == PressEvent::Down => {
+                        "intent" if signal.event == PressEvent::Down => {
                             let _ =
                                 crate::commands::switch_home_mode(&app_handle, HomeMode::Intent);
                         }

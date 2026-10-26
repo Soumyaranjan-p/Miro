@@ -247,7 +247,7 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     let role = [
         ("dictation", &settings.shortcut),
         ("normal", &settings.normal_shortcut),
-        ("incident", &settings.incident_shortcut),
+        ("intent", &settings.intent_shortcut),
     ]
     .into_iter()
     .find_map(|(role, text)| {
@@ -262,7 +262,7 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
         Some("normal") if pressed => {
             let _ = commands::switch_home_mode(app, config::HomeMode::Home);
         }
-        Some("incident") if pressed => {
+        Some("intent") if pressed => {
             let _ = commands::switch_home_mode(app, config::HomeMode::Intent);
         }
         Some("dictation") => {

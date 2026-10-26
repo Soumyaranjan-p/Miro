@@ -162,7 +162,7 @@ export function OverlayApp() {
                 {state.homeMode === "intent" ? <IconAlert size={14} /> : <IconCheck size={14} />}
               </span>
               <span className="text-[13px] font-semibold text-ink">
-                {state.homeMode === "intent" ? "Incident mode" : "Normal mode"}
+                {state.homeMode === "intent" ? "Intent mode" : "Normal mode"}
               </span>
               <span className="truncate text-[12.5px] text-muted">
                 {state.homeMode === "intent" ? "Miro on guard" : "Miro calm"}

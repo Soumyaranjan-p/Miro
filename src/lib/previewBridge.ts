@@ -26,7 +26,7 @@ const settings: Settings = {
   version: 1,
   shortcut: "Ctrl+M",
   normalShortcut: "Ctrl+Alt",
-  incidentShortcut: "Ctrl+Alt+Space",
+  intentShortcut: "Ctrl+Alt+Space",
   mode: "push_to_talk",
   homeMode: "home",
   soundOn: true,
@@ -136,7 +136,7 @@ function previewStats(): StatsSummary {
       words,
       speechMs,
       normalMs: speechMs * 9,
-      incidentMs: offset % 3 === 0 ? speechMs * 4 : 0,
+      intentMs: offset % 3 === 0 ? speechMs * 4 : 0,
     });
     totalWords += words;
     totalDictations += dictations;
@@ -147,7 +147,7 @@ function previewStats(): StatsSummary {
     totalWords,
     totalSpeechMs,
     normalMs: totalSpeechMs * 9,
-    incidentMs: totalSpeechMs * 2,
+    intentMs: totalSpeechMs * 2,
     wordsPerMinute: totalSpeechMs > 0 ? totalWords / (totalSpeechMs / 60_000) : null,
     streakDays: 5,
     days,
@@ -257,9 +257,9 @@ export const previewBridge: MiroBridge = {
           detail: null,
         },
         {
-          role: "incident",
+          role: "intent",
           registered: true,
-          shortcut: settings.incidentShortcut,
+          shortcut: settings.intentShortcut,
           mechanism: "plugin",
           detail: null,
         },

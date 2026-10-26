@@ -19,7 +19,7 @@ const cap=$('cap'),bN=$('bN'),bI=$('bI');
 function setMode(v,quiet){target=v?1:0;stage.classList.toggle('alert',!!v);bN.setAttribute('aria-pressed',!v);bI.setAttribute('aria-pressed',!!v);cap.textContent=v?'':'.';if(!quiet){sq=-.2;asleep=false;lastMove=t;burst(v?'!':'✦',4)}}
 bN.onclick=()=>setMode(0);bI.onclick=()=>setMode(1);
 addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;const k=e.key.toLowerCase();if(k==='n')setMode(0);if(k==='i')setMode(1)});
-window.Miro={setMode:n=>setMode(n==='incident'||n===1||n===true),get mode(){return target?'incident':'normal'}};
+window.Miro={setMode:n=>setMode(n==='intent'||n===1||n===true),get mode(){return target?'intent':'normal'}};
 function paint(){for(const k in P)$(k).setAttribute('stop-color',mix(P[k][0],P[k][1],m));const lc=mix('#f58d36','#d8403a',m),ls=mix('#c8641c','#8e1219',m);document.querySelectorAll('.lid').forEach(l=>{l.setAttribute('fill',lc);l.setAttribute('stroke',ls)});document.querySelectorAll('.hl').forEach(h=>h.setAttribute('fill',mix('#ffffff','#ffd2cb',m)));svg.style.setProperty('--ear',mix('#ffc2a0','#7a1a22',m));document.querySelectorAll('.ch').forEach(c=>c.setAttribute('opacity',lerp(.35,.1,m)+happy*.3))}
 function frame(now){
 const dt=Math.min(.05,(now-last)/1000);last=now;t+=dt;

@@ -28,9 +28,9 @@ export interface Settings {
   mode: DictationMode;
   /** Normal-mode hotkey: switches the home window to Normal mode. */
   normalShortcut: string;
-  /** Incident-mode hotkey: switches the home window to Incident mode. */
-  incidentShortcut: string;
-  /** Home window: last selected mode - Normal ("home") or Incident ("intent"). */
+  /** Intent-mode hotkey: switches the home window to Intent mode. */
+  intentShortcut: string;
+  /** Home window: last selected mode - Normal ("home") or Intent ("intent"). */
   homeMode: HomeMode;
   /** Home window sound toggle. */
   soundOn: boolean;
@@ -136,7 +136,7 @@ export interface ModelInfo {
 
 /**
  * One configured global hotkey and how it ended up registered. `role` is the
- * stable label the dispatcher uses: "dictation", "normal", "incident".
+ * stable label the dispatcher uses: "dictation", "normal", "intent".
  */
 export interface HotkeyStatus {
   role: string;
@@ -202,8 +202,8 @@ export interface StatsDay {
   speechMs: number;
   /** Time spent in Normal mode, beginning on that local day. */
   normalMs: number;
-  /** Time spent in Incident mode, beginning on that local day. */
-  incidentMs: number;
+  /** Time spent in Intent mode, beginning on that local day. */
+  intentMs: number;
 }
 
 /** Aggregated numbers for the Statistics page. Read-only, from `stats.json`. */
@@ -212,7 +212,7 @@ export interface StatsSummary {
   totalWords: number;
   totalSpeechMs: number;
   normalMs: number;
-  incidentMs: number;
+  intentMs: number;
   /** Average words per minute over all recorded speech, or null without data. */
   wordsPerMinute: number | null;
   /** Consecutive days ending today (or yesterday) with at least one dictation. */

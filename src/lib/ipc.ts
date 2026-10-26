@@ -60,7 +60,7 @@ export interface MiroBridge {
   retryInsertion(retryId: number): Promise<void>;
   copyPendingTranscript(retryId: number): Promise<void>;
   toggleDictation(): Promise<void>;
-  /** Switch the whole app between Normal ("home") and Incident ("intent"). */
+  /** Switch the whole app between Normal ("home") and Intent ("intent"). */
   switchMode(mode: "home" | "intent"): Promise<void>;
   /** Reads the in-memory transcript the events referenced. Rust-only state. */
   getPendingTranscript(retryId: number): Promise<string>;

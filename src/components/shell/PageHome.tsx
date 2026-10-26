@@ -4,7 +4,7 @@ import { formatShortcut } from "../../lib/format";
 import { useLevelHistory, useModelProgress, useRuntimeStatus, useSettings, useStats } from "../../lib/hooks";
 import { EVENTS, asOverlayState, ipc } from "../../lib/ipc";
 import type { OverlayState } from "../../lib/types";
-import { IconCheck, IconHome, IconIncident } from "./Icons";
+import { IconCheck, IconHome, IconIntent } from "./Icons";
 import { Button, Mono, Pill } from "../settings/Controls";
 
 /** The live mascot page's `window.Miro` bridge. */
@@ -35,19 +35,19 @@ export function PageHome({
     return off;
   }, []);
 
-  const incidentMode = settings?.homeMode === "intent";
+  const intentMode = settings?.homeMode === "intent";
   const dictation = status?.hotkeys.find((entry) => entry.role === "dictation");
 
   return (
     <div className="msh-page">
       <Hero
         greeting={greeting}
-        incidentMode={incidentMode}
+        intentMode={intentMode}
         shortcut={settings?.shortcut}
         registered={dictation?.registered ?? false}
       />
 
-      <ModeCard incidentActive={incidentMode} />
+      <ModeCard intentActive={intentMode} />
 
       <section className="miro-card px-4 py-3.5">
         <header className="mb-3 flex items-start justify-between gap-3">
@@ -80,23 +80,23 @@ export function PageHome({
 
 function Hero({
   greeting,
-  incidentMode,
+  intentMode,
   shortcut,
   registered,
 }: {
   greeting: string;
-  incidentMode: boolean;
+  intentMode: boolean;
   shortcut: string | undefined;
   registered: boolean;
 }) {
   return (
     <section className="msh-hero">
-      <HeroMascot incidentMode={incidentMode} />
+      <HeroMascot intentMode={intentMode} />
       <div className="msh-hero__body">
         <h1>{greeting}</h1>
         <p>
-          {incidentMode ? (
-            <>Incident mode is on: dictation is paused, Miro is on guard.</>
+          {intentMode ? (
+            <>Intent mode is on: dictation is paused, Miro is on guard.</>
           ) : registered ? (
             <>
               Hold <Mono>{shortcut ? formatShortcut(shortcut) : "the dictation key"}</Mono>, speak, release —
@@ -116,7 +116,7 @@ function Hero({
  * (public/miro-mascot.html) in a cropped frame. The app's mode is piped into
  * its `window.Miro.setMode` bridge, which reacts with the page's own motion.
  */
-function HeroMascot({ incidentMode }: { incidentMode: boolean }) {
+function HeroMascot({ intentMode }: { intentMode: boolean }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
 
   const applyMode = useCallback(() => {
@@ -125,12 +125,12 @@ function HeroMascot({ incidentMode }: { incidentMode: boolean }) {
       // The app is dark; keep the mascot's stage in its dark palette even on
       // a light-scheme system.
       win?.document?.documentElement?.setAttribute("data-theme", "dark");
-      win?.Miro?.setMode(incidentMode ? "incident" : "normal");
+      win?.Miro?.setMode(intentMode ? "intent" : "normal");
     } catch {
       // The frame is same-origin in Tauri and in the preview server; any other
       // origin simply keeps its own theme and mode.
     }
-  }, [incidentMode]);
+  }, [intentMode]);
 
   // Apply at load, and again whenever the mode changes (UI button or hotkey).
   useEffect(() => {
@@ -152,7 +152,7 @@ function HeroMascot({ incidentMode }: { incidentMode: boolean }) {
 
 /* ------------------------------------------------------------------ modes */
 
-function ModeCard({ incidentActive }: { incidentActive: boolean }) {
+function ModeCard({ intentActive }: { intentActive: boolean }) {
   const [pending, setPending] = useState(false);
 
   const switchTo = useCallback(async (mode: "home" | "intent") => {
@@ -175,10 +175,10 @@ function ModeCard({ incidentActive }: { incidentActive: boolean }) {
       <div className="msh-modes">
         <button
           type="button"
-          className={`msh-mode${incidentActive ? "" : " is-active"}`}
-          disabled={pending || !incidentActive || undefined}
+          className={`msh-mode${intentActive ? "" : " is-active"}`}
+          disabled={pending || !intentActive || undefined}
           onClick={() => void switchTo("home")}
-          aria-pressed={!incidentActive}
+          aria-pressed={!intentActive}
         >
           <span className="msh-mode__name">
             <IconHome /> Normal mode
@@ -189,14 +189,14 @@ function ModeCard({ incidentActive }: { incidentActive: boolean }) {
         </button>
         <button
           type="button"
-          className={`msh-mode${incidentActive ? " is-active is-incident" : ""}`}
-          disabled={pending || incidentActive || undefined}
+          className={`msh-mode${intentActive ? " is-active is-intent" : ""}`}
+          disabled={pending || intentActive || undefined}
           onClick={() => void switchTo("intent")}
-          aria-pressed={incidentActive}
+          aria-pressed={intentActive}
         >
-          {incidentActive && <span className="msh-mode__check"><IconCheck /></span>}
+          {intentActive && <span className="msh-mode__check"><IconCheck /></span>}
           <span className="msh-mode__name">
-            <IconIncident /> Incident mode
+            <IconIntent /> Intent mode
           </span>
           <span className="msh-mode__desc">
             For on-call focus: dictation paused so nothing interrupts you, statistics keep running, switch back with one

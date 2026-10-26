@@ -19,12 +19,12 @@ const PAGES: Array<{ id: PageId; label: string; icon: ReactNode }> = [
 function Sidebar({
   page,
   onNavigate,
-  incidentActive,
+  intentActive,
   onToggleMode,
 }: {
   page: PageId;
   onNavigate: (next: PageId) => void;
-  incidentActive: boolean;
+  intentActive: boolean;
   onToggleMode: () => void;
 }) {
   return (
@@ -50,13 +50,13 @@ function Sidebar({
 
       <button
         type="button"
-        className={`msh-modepill${incidentActive ? " is-incident" : ""}`}
+        className={`msh-modepill${intentActive ? " is-intent" : ""}`}
         onClick={onToggleMode}
-        title={incidentActive ? "Back to Normal mode" : "Switch to Incident mode"}
+        title={intentActive ? "Back to Normal mode" : "Switch to Intent mode"}
       >
         <span className="msh-modepill__dot" aria-hidden />
-        <span>{incidentActive ? "Incident mode" : "Normal mode"}</span>
-        <span className="msh-modepill__hint">{incidentActive ? "on" : "on"}</span>
+        <span>{intentActive ? "Intent mode" : "Normal mode"}</span>
+        <span className="msh-modepill__hint">{intentActive ? "on" : "on"}</span>
       </button>
     </aside>
   );
@@ -90,7 +90,7 @@ export function MiroApp() {
   const [userName, setUserName] = useState("");
   const { settings } = useSettings();
   const reducedMotion = useReducedMotion();
-  const incidentActive = settings?.homeMode === "intent";
+  const intentActive = settings?.homeMode === "intent";
 
   useEffect(() => {
     let cancelled = false;
@@ -108,12 +108,12 @@ export function MiroApp() {
   }, []);
 
   const toggleMode = () => {
-    void ipc.switchMode(incidentActive ? "home" : "intent").catch(() => undefined);
+    void ipc.switchMode(intentActive ? "home" : "intent").catch(() => undefined);
   };
 
   return (
     <div className="msh-app" data-motion={reducedMotion ? "reduced" : "full"}>
-      <Sidebar page={page} onNavigate={setPage} incidentActive={incidentActive} onToggleMode={toggleMode} />
+      <Sidebar page={page} onNavigate={setPage} intentActive={intentActive} onToggleMode={toggleMode} />
       <main className="msh-main">
         {page === "home" ? (
           <PageHome greeting={greeting(userName)} onNavigateToStatistics={() => setPage("statistics")} />

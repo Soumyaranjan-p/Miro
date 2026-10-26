@@ -15,7 +15,7 @@ in memory and are never written to disk.
 - **Three global shortcuts.** Hold-to-talk dictation (default: hold `Ctrl + M` —
   watched by a keyboard hook that catches both the press and the release while
   leaving the keys free for the focused app), plus one-press mode keys: Normal
-  (default `Ctrl+Alt`) and Incident (default `Ctrl+Alt+Space`). All rebindable
+  (default `Ctrl+Alt`) and Intent (default `Ctrl+Alt+Space`). All rebindable
   from the Shortcuts page, with real conflict detection that refuses a
   combination instead of failing silently. The page also shows how each key
   reached Miro: an OS registration or the keyboard hook.
@@ -27,13 +27,13 @@ in memory and are never written to disk.
   fails to insert stays reachable: copy it, or paste it later yourself.
 - **A floating overlay** that shows recording, processing and errors, sits above
   other windows, and never steals focus from the app you are typing into.
-- **Two modes.** Normal is everything working; Incident pauses dictation and
+- **Two modes.** Normal is everything working; Intent pauses dictation and
   puts Miro on guard. Your mode, shortcut and preferences persist.
 - **A Miro that reacts.** The Home page shows the live companion: eyes that
   follow your cursor, a squish when clicked (twice fast and it flips, three
   times fast and it gets dizzy), hearts when hovered, sleep when ignored. It
   reacts to the app's mode from either direction — mode buttons or the
-  `Ctrl+Alt` / `Ctrl+Alt+Space` hotkeys — and glows alert red in Incident
+  `Ctrl+Alt` / `Ctrl+Alt+Space` hotkeys — and glows alert red in Intent
   mode. The interface is set in Inter, bundled locally
   (`@fontsource-variable/inter`). A small, static drawing of the same artwork
   is the sidebar profile picture, and the icons a headless browser captures

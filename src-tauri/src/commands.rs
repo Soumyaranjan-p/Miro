@@ -114,13 +114,13 @@ pub fn set_settings(
 
     if after.shortcut != before.shortcut
         || after.normal_shortcut != before.normal_shortcut
-        || after.incident_shortcut != before.incident_shortcut
+        || after.intent_shortcut != before.intent_shortcut
         || after.mode != before.mode
     {
         apply_global_hotkeys(&app, &after)?;
     }
     if after.home_mode != before.home_mode {
-        // Leaving a mode abandons whatever was in flight: Incident mode is a
+        // Leaving a mode abandons whatever was in flight: Intent mode is a
         // visual state, so a recording migrating between modes would be
         // surprising.
         session.cancel(&app);
@@ -215,7 +215,7 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
     let roles = [
         ("dictation", &settings.shortcut, settings.mode),
         ("normal", &settings.normal_shortcut, Mode::PushToTalk),
-        ("incident", &settings.incident_shortcut, Mode::PushToTalk),
+        ("intent", &settings.intent_shortcut, Mode::PushToTalk),
     ];
 
     let mut parsed: Vec<(&str, Hotkey, Mode)> = Vec::new();
@@ -338,7 +338,7 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
             role: match role {
                 "dictation" => "dictation",
                 "normal" => "normal",
-                _ => "incident",
+                _ => "intent",
             },
             registered,
             shortcut: canonical,
@@ -388,7 +388,7 @@ pub fn check_shortcut(
     for (other, label) in [
         (&settings.shortcut, "the dictation hotkey"),
         (&settings.normal_shortcut, "the Normal mode hotkey"),
-        (&settings.incident_shortcut, "the Incident mode hotkey"),
+        (&settings.intent_shortcut, "the Intent mode hotkey"),
     ] {
         if let Ok(other_hotkey) = Hotkey::parse(other) {
             if other_hotkey.same_target(&parsed) {

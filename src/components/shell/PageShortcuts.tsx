@@ -3,14 +3,14 @@ import { formatShortcut } from "../../lib/format";
 import { useRuntimeStatus, useSettings } from "../../lib/hooks";
 import { ipc, type SettingsPatch } from "../../lib/ipc";
 import type { HotkeyStatus } from "../../lib/types";
-import { IconKeyboard, IconIncident } from "./Icons";
+import { IconKeyboard, IconIntent } from "./Icons";
 import { IconMic } from "../icons";
 import { Banner, Mono, Pill, Section } from "../settings/Controls";
 import { ShortcutField, type ShortcutCommitResult } from "../settings/ShortcutField";
 
 /**
  * All three rebindable hotkeys on one page: the dictation hold, the Normal
- * mode switch and the Incident mode switch. The registry is suspended while a
+ * mode switch and the Intent mode switch. The registry is suspended while a
  * field captures, so the very keys being recorded arrive as keystrokes.
  */
 export function PageShortcuts() {
@@ -81,23 +81,23 @@ export function PageShortcuts() {
       </Section>
 
       <Section
-        title="Incident mode"
-        icon={<IconIncident />}
-        description="Flips the app into Incident mode: dictation paused, Miro on guard."
+        title="Intent mode"
+        icon={<IconIntent />}
+        description="Flips the app into Intent mode: dictation paused, Miro on guard."
       >
         <HotkeyRow
           settings={settings}
           update={update}
-          fieldName="incidentShortcut"
+          fieldName="intentShortcut"
           defaultShortcut="Ctrl+Alt+Space"
-          label="Incident mode hotkey"
+          label="Intent mode hotkey"
           hint={
             <>
               Default is <Mono>Ctrl+Alt+Space</Mono>. Keep the mode keys one press apart so they are hard to confuse.
             </>
           }
           mode="push_to_talk"
-          runtime={status?.hotkeys.find((entry) => entry.role === "incident")}
+          runtime={status?.hotkeys.find((entry) => entry.role === "intent")}
         />
       </Section>
 
@@ -110,7 +110,7 @@ export function PageShortcuts() {
   );
 }
 
-type HotkeyFieldName = "shortcut" | "normalShortcut" | "incidentShortcut";
+type HotkeyFieldName = "shortcut" | "normalShortcut" | "intentShortcut";
 
 function HotkeyRow({
   settings,
@@ -122,7 +122,7 @@ function HotkeyRow({
   mode,
   runtime,
 }: {
-  settings: { shortcut: string; normalShortcut: string; incidentShortcut: string; mode: "toggle" | "push_to_talk" };
+  settings: { shortcut: string; normalShortcut: string; intentShortcut: string; mode: "toggle" | "push_to_talk" };
   update: (patch: SettingsPatch) => Promise<unknown>;
   fieldName: HotkeyFieldName;
   defaultShortcut: string;

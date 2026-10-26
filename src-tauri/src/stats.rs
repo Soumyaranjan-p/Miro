@@ -23,7 +23,7 @@ use crate::errors::{Failure, Result};
 use crate::logging::{self, Event};
 
 const STATS_FILE: &str = "stats.json";
-const STATS_VERSION: u32 = 1;
+const STATS_VERSION: u32 = 2;
 /// How many recent days the summary returns for the charts.
 const SUMMARY_DAYS: usize = 30;
 
@@ -34,7 +34,10 @@ pub struct DayEntry {
     pub words: u32,
     pub speech_ms: u64,
     pub normal_ms: u64,
-    pub incident_ms: u64,
+    /// Time spent in Intent Mode. The alias is the one-time rename shim for a
+    /// stats file written before the mode was renamed.
+    #[serde(alias = "incidentMs")]
+    pub intent_ms: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
@@ -52,7 +55,7 @@ pub struct StatsDay {
     pub words: u32,
     pub speech_ms: u64,
     pub normal_ms: u64,
-    pub incident_ms: u64,
+    pub intent_ms: u64,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -62,7 +65,7 @@ pub struct StatsSummary {
     pub total_words: u32,
     pub total_speech_ms: u64,
     pub normal_ms: u64,
-    pub incident_ms: u64,
+    pub intent_ms: u64,
     /// Average words per minute over all recorded speech, or None without data.
     pub words_per_minute: Option<f64>,
     /// Consecutive days ending today (or yesterday) with at least one dictation.
@@ -89,7 +92,12 @@ fn file_path(app: &AppHandle) -> Result<std::path::PathBuf> {
 fn load(path: &std::path::Path) -> StatsFile {
     match std::fs::read_to_string(path) {
         Ok(raw) => match serde_json::from_str::<StatsFile>(&raw) {
-            Ok(stats) => stats,
+            Ok(mut stats) => {
+                // Reading a file from an older build carries it forward; the
+                // serde alias on `intent_ms` has already renamed that field.
+                stats.version = STATS_VERSION;
+                stats
+            }
             // A hand-corrupted stats file is replaced rather than quarantined:
             // unlike settings, losing usage counters is never a loss of data.
             Err(_) => StatsFile {
@@ -155,7 +163,7 @@ pub fn on_mode_changed(app: &AppHandle) {
             let entry = stats.days.entry(local_date_key(since_ms)).or_default();
             match mode {
                 HomeMode::Home => entry.normal_ms = entry.normal_ms.saturating_add(span),
-                HomeMode::Intent => entry.incident_ms = entry.incident_ms.saturating_add(span),
+                HomeMode::Intent => entry.intent_ms = entry.intent_ms.saturating_add(span),
             }
             if let Err(failure) = save(&path, &stats) {
                 logging::event(Event::Failure {
@@ -185,13 +193,13 @@ pub fn summary(app: &AppHandle) -> Result<StatsSummary> {
     let mut total_words = 0u32;
     let mut total_speech_ms = 0u64;
     let mut normal_ms = 0u64;
-    let mut incident_ms = 0u64;
+    let mut intent_ms = 0u64;
     for entry in stats.days.values() {
         total_dictations = total_dictations.saturating_add(entry.dictations);
         total_words = total_words.saturating_add(entry.words);
         total_speech_ms = total_speech_ms.saturating_add(entry.speech_ms);
         normal_ms = normal_ms.saturating_add(entry.normal_ms);
-        incident_ms = incident_ms.saturating_add(entry.incident_ms);
+        intent_ms = intent_ms.saturating_add(entry.intent_ms);
     }
 
     let words_per_minute = if total_speech_ms > 0 && total_words > 0 {
@@ -218,7 +226,7 @@ pub fn summary(app: &AppHandle) -> Result<StatsSummary> {
             words: entry.words,
             speech_ms: entry.speech_ms,
             normal_ms: entry.normal_ms,
-            incident_ms: entry.incident_ms,
+            intent_ms: entry.intent_ms,
         })
         .collect();
 
@@ -227,7 +235,7 @@ pub fn summary(app: &AppHandle) -> Result<StatsSummary> {
         total_words,
         total_speech_ms,
         normal_ms,
-        incident_ms,
+        intent_ms,
         words_per_minute,
         streak_days: streak(&stats),
         days,
@@ -270,6 +278,7 @@ fn streak(stats: &StatsFile) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use chrono::NaiveDate;
 
     fn file() -> StatsFile {
@@ -290,7 +299,7 @@ mod tests {
         let entry = stats.days.entry(date.to_string()).or_default();
         match mode {
             HomeMode::Home => entry.normal_ms = entry.normal_ms.saturating_add(ms),
-            HomeMode::Intent => entry.incident_ms = entry.incident_ms.saturating_add(ms),
+            HomeMode::Intent => entry.intent_ms = entry.intent_ms.saturating_add(ms),
         }
     }
 
@@ -315,7 +324,7 @@ mod tests {
 
         let day = &stats.days["2026-10-20"];
         assert_eq!(day.normal_ms, 1_000_000);
-        assert_eq!(day.incident_ms, 500_000);
+        assert_eq!(day.intent_ms, 500_000);
         assert_eq!(day.dictations, 0, "time in a mode is not a dictation");
     }
 
@@ -373,5 +382,25 @@ mod tests {
     fn naive_date_stringifies_as_iso() {
         let date = NaiveDate::from_ymd_opt(2026, 10, 22).unwrap();
         assert_eq!(date.to_string(), "2026-10-22");
+    }
+
+    #[test]
+    fn a_pre_rename_stats_file_keeps_its_intent_seconds() {
+        // The one place the old key name survives, on purpose: a stats file
+        // written before the rename must still be readable.
+        let dir = std::env::temp_dir().join(format!("miro-stats-legacy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("stats.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"days":{"2026-10-20":{"dictations":1,"words":9,"speechMs":10000,"normalMs":1000,"incidentMs":500}}}"#,
+        )
+        .unwrap();
+
+        let stats = load(&path);
+        assert_eq!(stats.days["2026-10-20"].intent_ms, 500);
+        assert_eq!(stats.version, STATS_VERSION);
+        let _ = fs::remove_dir_all(&dir);
     }
 }
