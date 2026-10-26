@@ -796,10 +796,7 @@ mod tests {
         assert_eq!(settings.intent.endpoint, "http://127.0.0.1:11434");
         assert_eq!(settings.intent.model, "llama3.2");
         assert_eq!(settings.intent.timeout_ms, MIN_INTENT_TIMEOUT_MS);
-        assert_eq!(
-            settings.intent.max_output_chars,
-            MIN_INTENT_OUTPUT_CHARS
-        );
+        assert_eq!(settings.intent.max_output_chars, MIN_INTENT_OUTPUT_CHARS);
 
         settings.intent.timeout_ms = 100_000;
         settings.intent.max_output_chars = 100_000;
@@ -807,10 +804,7 @@ mod tests {
         settings.intent.model.clear();
         settings.normalize();
         assert_eq!(settings.intent.timeout_ms, MAX_INTENT_TIMEOUT_MS);
-        assert_eq!(
-            settings.intent.max_output_chars,
-            MAX_INTENT_OUTPUT_CHARS
-        );
+        assert_eq!(settings.intent.max_output_chars, MAX_INTENT_OUTPUT_CHARS);
         assert_eq!(settings.intent.endpoint, DEFAULT_INTENT_ENDPOINT);
         assert_eq!(settings.intent.model, DEFAULT_INTENT_MODEL);
     }
@@ -855,7 +849,10 @@ mod tests {
         assert!(intent.cloud_consent_matches());
 
         intent.endpoint = "https://two.example/v1/chat/completions".into();
-        assert!(!intent.cloud_consent_matches(), "new endpoint needs consent");
+        assert!(
+            !intent.cloud_consent_matches(),
+            "new endpoint needs consent"
+        );
     }
 
     #[test]

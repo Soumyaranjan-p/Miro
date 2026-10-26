@@ -171,7 +171,10 @@ impl Session {
         {
             let mut inner = lock(&self.inner);
             inner.target = Some(target);
-            inner.recording = Some(ActiveRecording { control, started_at_ms });
+            inner.recording = Some(ActiveRecording {
+                control,
+                started_at_ms,
+            });
         }
 
         if let Err(failure) = shortcut_registry(app).register_cancel(app) {
@@ -901,10 +904,14 @@ impl HookBinding {
                     let settings = state::state(&app_handle).settings();
                     match signal.role {
                         "dictation" => {
-                            eprintln!("[DEBUG] Hook: dictation event={:?} mode={:?}", signal.event, settings.mode);
+                            eprintln!(
+                                "[DEBUG] Hook: dictation event={:?} mode={:?}",
+                                signal.event, settings.mode
+                            );
                             // Only use push-to-talk behavior when actually in push-to-talk mode
                             if settings.mode == Mode::PushToTalk {
-                                session.on_push_to_talk(&app_handle, signal.event == PressEvent::Down)
+                                session
+                                    .on_push_to_talk(&app_handle, signal.event == PressEvent::Down)
                             } else if signal.event == PressEvent::Down {
                                 // In toggle mode, press toggles (start or stop)
                                 eprintln!("[DEBUG] Hook: calling toggle");

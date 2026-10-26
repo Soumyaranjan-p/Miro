@@ -22,6 +22,7 @@ pub mod keyboard_hook;
 pub mod logging;
 pub mod models;
 pub mod privacy;
+pub mod restructure;
 pub mod session;
 pub mod state;
 pub mod stats;

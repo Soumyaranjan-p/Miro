@@ -278,8 +278,8 @@ fn streak(stats: &StatsFile) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use chrono::NaiveDate;
+    use std::fs;
 
     fn file() -> StatsFile {
         StatsFile {

@@ -37,7 +37,7 @@ whisper-rs = { version = "0.16", optional = true, default-features = false }
 # model downloads only (user-confirmed). ureq is blocking, which matches what
 # this actually is - one file, one thread - and `native-tls` means Windows'
 # own TLS stack: no OpenSSL, no rustls, no aws-lc C library to build or trust.
-ureq = { version = "3", default-features = false, features = ["native-tls", "gzip"] }
+ureq = { version = "3", default-features = false, features = ["native-tls", "gzip", "json"] }
 
 thiserror = "2"
 zeroize = "1"
