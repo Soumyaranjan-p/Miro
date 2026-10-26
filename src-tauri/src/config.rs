@@ -260,7 +260,7 @@ impl Default for Settings {
 
 /// A partial update from the settings window. `double_option` tells a missing
 /// microphone apart from an explicit `null` (which means "system default").
-#[derive(Deserialize, Default, Debug)]
+#[derive(Deserialize, Default, Debug, Clone)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingsPatch {
     pub shortcut: Option<String>,
@@ -285,7 +285,7 @@ pub struct SettingsPatch {
     pub start_on_login: Option<bool>,
 }
 
-#[derive(Deserialize, Default, Debug)]
+#[derive(Deserialize, Default, Debug, Clone)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct CleanupPatch {
     pub enabled: Option<bool>,
@@ -298,7 +298,7 @@ pub struct CleanupPatch {
 /// A partial update of the Intent Mode settings. Consent is normally written
 /// by the dedicated command, but it is patchable so the setting can be reset
 /// without a second schema.
-#[derive(Deserialize, Default, Debug)]
+#[derive(Deserialize, Default, Debug, Clone)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct IntentSettingsPatch {
     pub enabled: Option<bool>,
@@ -308,6 +308,8 @@ pub struct IntentSettingsPatch {
     pub timeout_ms: Option<u32>,
     pub max_output_chars: Option<usize>,
     pub cloud_consent_endpoint: Option<String>,
+    /// Explicitly withdraw cloud consent. The API key is removed separately.
+    pub clear_cloud_consent: Option<bool>,
 }
 
 fn double_option<'de, D, T>(deserializer: D) -> std::result::Result<Option<Option<T>>, D::Error>
@@ -460,6 +462,9 @@ impl Settings {
             }
             if let Some(consent) = intent.cloud_consent_endpoint {
                 self.intent.cloud_consent_endpoint = Some(consent);
+            }
+            if intent.clear_cloud_consent == Some(true) {
+                self.intent.cloud_consent_endpoint = None;
             }
         }
         self.normalize();

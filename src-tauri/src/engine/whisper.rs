@@ -40,7 +40,7 @@ const NO_SPEECH_THRESHOLD: f32 = 0.6;
 
 /// Mean per-word token probability below this means the decoder was guessing.
 /// Used together with [`NO_SPEECH_THRESHOLD`], never on its own.
-const LOW_CONFIDENCE: f32 = 0.45;
+const LOW_CONFIDENCE: f32 = 0.55;
 
 pub struct WhisperEngine {
     context: WhisperContext,
@@ -73,7 +73,7 @@ impl WhisperEngine {
             .map_err(|error| Failure::ModelLoad(describe(error)))?;
 
         let mut params = FullParams::new(SamplingStrategy::BeamSearch {
-            beam_size: 5,
+            beam_size: 1, // Greedy decoding reduces hallucinations
             patience: -1.0,
         });
         params.set_n_threads(options.threads as i32);
@@ -190,6 +190,22 @@ impl WhisperEngine {
 
         if segments_used == 0 || text.trim().is_empty() {
             return Err(Failure::TranscriptEmpty);
+        }
+
+        // Reject transcripts that are suspiciously long for the audio duration.
+        // Normal speech is ~150-200 chars per 10 seconds. If we get much more,
+        // the engine is likely hallucinating or repeating.
+        let audio_seconds = samples.len() as f64 / 16000.0;
+        let expected_max_chars = (audio_seconds * 25.0) as usize; // ~25 chars per second max
+        let actual_chars = text.chars().count();
+        if actual_chars > expected_max_chars.max(100) {
+            eprintln!(
+                "[miro-engine] transcript too long: {} chars for {:.1}s audio (expected ~{})",
+                actual_chars, audio_seconds, expected_max_chars
+            );
+            return Err(Failure::Transcription(
+                "transcript is suspiciously long, likely hallucinated".into()
+            ));
         }
 
         Ok((text, segments as usize))

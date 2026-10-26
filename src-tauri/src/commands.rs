@@ -13,7 +13,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-use crate::config::{HomeMode, Mode, Settings, SettingsPatch};
+use crate::config::{
+    HomeMode, Mode, Settings, SettingsPatch,
+};
 use crate::errors::{ErrorCode, Failure};
 use crate::events::{self, ModelProgress, RuntimeStatus};
 use crate::hotkeys::{Hotkey, Mechanism};

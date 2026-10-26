@@ -38,6 +38,9 @@ pub enum ErrorCode {
     ClipboardFailed,
     TempCleanupFailed,
     ConfigWriteFailed,
+    CloudConsentRequired,
+    CloudKeyMissing,
+    KeychainFailed,
     Cancelled,
     InternalError,
 }
@@ -69,6 +72,9 @@ impl ErrorCode {
             ErrorCode::ClipboardFailed => "clipboard_failed",
             ErrorCode::TempCleanupFailed => "temp_cleanup_failed",
             ErrorCode::ConfigWriteFailed => "config_write_failed",
+            ErrorCode::CloudConsentRequired => "cloud_consent_required",
+            ErrorCode::CloudKeyMissing => "cloud_key_missing",
+            ErrorCode::KeychainFailed => "keychain_failed",
             ErrorCode::Cancelled => "cancelled",
             ErrorCode::InternalError => "internal_error",
         }
@@ -127,6 +133,12 @@ pub enum Failure {
     TempCleanup(String),
     #[error("settings could not be saved: {0}")]
     ConfigWrite(String),
+    #[error("cloud Intent Mode needs consent for the configured endpoint")]
+    CloudConsentRequired,
+    #[error("no cloud API key is stored")]
+    CloudKeyMissing,
+    #[error("the credential store failed: {0}")]
+    Keychain(String),
     #[error("cancelled during {0}")]
     Cancelled(&'static str),
     #[error("{0}")]
@@ -159,6 +171,9 @@ impl Failure {
             Failure::Clipboard(_) => ErrorCode::ClipboardFailed,
             Failure::TempCleanup(_) => ErrorCode::TempCleanupFailed,
             Failure::ConfigWrite(_) => ErrorCode::ConfigWriteFailed,
+            Failure::CloudConsentRequired => ErrorCode::CloudConsentRequired,
+            Failure::CloudKeyMissing => ErrorCode::CloudKeyMissing,
+            Failure::Keychain(_) => ErrorCode::KeychainFailed,
             Failure::Cancelled(_) => ErrorCode::Cancelled,
             Failure::Internal(_) => ErrorCode::InternalError,
         }
@@ -178,6 +193,8 @@ impl Failure {
             | Failure::AudioTooLong
             | Failure::FocusChanged
             | Failure::InsertionBlocked
+            | Failure::CloudConsentRequired
+            | Failure::CloudKeyMissing
             | Failure::Cancelled(_) => None,
 
             Failure::AudioSilent { device } => Some(format!("device: {}", clip_detail(device))),
@@ -193,6 +210,7 @@ impl Failure {
             | Failure::Clipboard(detail)
             | Failure::TempCleanup(detail)
             | Failure::ConfigWrite(detail)
+            | Failure::Keychain(detail)
             | Failure::Internal(detail) => Some(clip_detail(detail)),
             Failure::ShortcutConflict { shortcut, reason } => {
                 Some(format!("{shortcut}: {}", clip_detail(reason)))

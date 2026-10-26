@@ -23,6 +23,7 @@ pub mod logging;
 pub mod models;
 pub mod privacy;
 pub mod restructure;
+pub mod secrets;
 pub mod session;
 pub mod state;
 pub mod stats;
@@ -179,6 +180,7 @@ fn bootstrap(handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     handle.manage(ShortcutRegistry::new());
     handle.manage(commands::Downloads::default());
     handle.manage(HttpClient::new()?);
+    handle.manage(secrets::Secrets::new());
 
     // --- windows and tray ------------------------------------------------------
     windows::create_overlay(handle)?;
