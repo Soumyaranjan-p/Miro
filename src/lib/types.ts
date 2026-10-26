@@ -12,6 +12,23 @@ export type OverlayPosition = "bottom-center" | "bottom-right" | "center";
 /** Which screen the home window opens on: the dictation home or Intent Mode. */
 export type HomeMode = "home" | "intent";
 
+export type RestructureBackend = "local" | "cloud";
+
+/**
+ * Intent Mode settings. Off by default; when off, dictation is unchanged.
+ * `cloudConsentEndpoint` is the exact endpoint the user consented to send
+ * transcripts to, or null when consent has not been given.
+ */
+export interface IntentSettings {
+  enabled: boolean;
+  backend: RestructureBackend;
+  endpoint: string;
+  model: string;
+  timeoutMs: number;
+  maxOutputChars: number;
+  cloudConsentEndpoint: string | null;
+}
+
 /** Deterministic, LLM-free text cleanup. `enabled: false` means raw engine text. */
 export interface CleanupOptions {
   enabled: boolean;
@@ -41,6 +58,7 @@ export interface Settings {
   language: string;
   maxRecordingSeconds: number;
   cleanup: CleanupOptions;
+  intent: IntentSettings;
   theme: ThemePreference;
   overlayPosition: OverlayPosition;
   showTranscriptPreview: boolean;

@@ -29,8 +29,9 @@ export interface ModelProgress {
   detail: string | null;
 }
 
-export type SettingsPatch = Partial<Omit<Settings, "cleanup">> & {
+export type SettingsPatch = Partial<Omit<Settings, "cleanup" | "intent">> & {
   cleanup?: Partial<Settings["cleanup"]>;
+  intent?: Partial<Settings["intent"]>;
 };
 
 /**

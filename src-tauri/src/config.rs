@@ -113,6 +113,93 @@ impl Default for Cleanup {
     }
 }
 
+/// Which backend turns spoken intent into a prompt.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum RestructureBackend {
+    /// A model served by Ollama on this machine.
+    #[default]
+    Local,
+    /// An OpenAI-compatible chat-completions endpoint.
+    Cloud,
+}
+
+pub const DEFAULT_INTENT_ENDPOINT: &str = "http://127.0.0.1:11434";
+pub const DEFAULT_INTENT_MODEL: &str = "llama3.2";
+pub const MIN_INTENT_TIMEOUT_MS: u32 = 500;
+pub const MAX_INTENT_TIMEOUT_MS: u32 = 15_000;
+pub const MIN_INTENT_OUTPUT_CHARS: usize = 200;
+pub const MAX_INTENT_OUTPUT_CHARS: usize = 8_000;
+
+/// Intent Mode: spoken intent is restructured into a prompt before insertion.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct IntentSettings {
+    /// Off by default; off means dictation behaves exactly as it does today.
+    pub enabled: bool,
+    pub backend: RestructureBackend,
+    /// Ollama base URL for the local backend, or the full chat-completions URL
+    /// for the cloud backend.
+    pub endpoint: String,
+    pub model: String,
+    /// Hard deadline for the restructure call. Falls back to the raw transcript.
+    pub timeout_ms: u32,
+    /// Upper bound on the prompt handed to the review overlay.
+    pub max_output_chars: usize,
+    /// The exact endpoint the user consented to send transcripts to. `None`
+    /// means no cloud consent has been given, and cloud mode stays blocked.
+    pub cloud_consent_endpoint: Option<String>,
+}
+
+impl Default for IntentSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            backend: RestructureBackend::Local,
+            endpoint: DEFAULT_INTENT_ENDPOINT.to_string(),
+            model: DEFAULT_INTENT_MODEL.to_string(),
+            timeout_ms: 4_000,
+            max_output_chars: 1_200,
+            cloud_consent_endpoint: None,
+        }
+    }
+}
+
+impl IntentSettings {
+    /// Clamps values a user or a hand-edited file could get wrong.
+    pub fn normalize(&mut self) {
+        self.endpoint = self.endpoint.trim().to_string();
+        if self.endpoint.is_empty() {
+            self.endpoint = DEFAULT_INTENT_ENDPOINT.to_string();
+        }
+        self.model = self.model.trim().to_string();
+        if self.model.is_empty() {
+            self.model = DEFAULT_INTENT_MODEL.to_string();
+        }
+        self.timeout_ms = self
+            .timeout_ms
+            .clamp(MIN_INTENT_TIMEOUT_MS, MAX_INTENT_TIMEOUT_MS);
+        self.max_output_chars = self
+            .max_output_chars
+            .clamp(MIN_INTENT_OUTPUT_CHARS, MAX_INTENT_OUTPUT_CHARS);
+        self.cloud_consent_endpoint = self
+            .cloud_consent_endpoint
+            .take()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+    }
+
+    /// True when the stored consent is for the endpoint currently configured.
+    pub fn cloud_consent_matches(&self) -> bool {
+        self.cloud_consent_endpoint.as_deref() == Some(self.endpoint.as_str())
+    }
+
+    /// True when this configuration would send dictation off the machine.
+    pub fn requires_cloud(&self) -> bool {
+        self.enabled && self.backend == RestructureBackend::Cloud
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -138,6 +225,7 @@ pub struct Settings {
     pub language: String,
     pub max_recording_seconds: u32,
     pub cleanup: Cleanup,
+    pub intent: IntentSettings,
     pub theme: Theme,
     pub overlay_position: OverlayPosition,
     pub show_transcript_preview: bool,
@@ -161,6 +249,7 @@ impl Default for Settings {
             language: "en".to_string(),
             max_recording_seconds: 300,
             cleanup: Cleanup::default(),
+            intent: IntentSettings::default(),
             theme: Theme::System,
             overlay_position: OverlayPosition::BottomCenter,
             show_transcript_preview: false,
@@ -189,6 +278,7 @@ pub struct SettingsPatch {
     pub language: Option<String>,
     pub max_recording_seconds: Option<u32>,
     pub cleanup: Option<CleanupPatch>,
+    pub intent: Option<IntentSettingsPatch>,
     pub theme: Option<Theme>,
     pub overlay_position: Option<OverlayPosition>,
     pub show_transcript_preview: Option<bool>,
@@ -203,6 +293,21 @@ pub struct CleanupPatch {
     pub capitalize_sentences: Option<bool>,
     pub remove_filler_words: Option<bool>,
     pub filler_words: Option<Vec<String>>,
+}
+
+/// A partial update of the Intent Mode settings. Consent is normally written
+/// by the dedicated command, but it is patchable so the setting can be reset
+/// without a second schema.
+#[derive(Deserialize, Default, Debug)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct IntentSettingsPatch {
+    pub enabled: Option<bool>,
+    pub backend: Option<RestructureBackend>,
+    pub endpoint: Option<String>,
+    pub model: Option<String>,
+    pub timeout_ms: Option<u32>,
+    pub max_output_chars: Option<usize>,
+    pub cloud_consent_endpoint: Option<String>,
 }
 
 fn double_option<'de, D, T>(deserializer: D) -> std::result::Result<Option<Option<T>>, D::Error>
@@ -269,6 +374,7 @@ impl Settings {
             }
         }
         self.cleanup.filler_words = seen;
+        self.intent.normalize();
     }
 
     pub fn apply(&mut self, patch: SettingsPatch) {
@@ -331,6 +437,29 @@ impl Settings {
             }
             if let Some(words) = cleanup.filler_words {
                 self.cleanup.filler_words = words;
+            }
+        }
+        if let Some(intent) = patch.intent {
+            if let Some(enabled) = intent.enabled {
+                self.intent.enabled = enabled;
+            }
+            if let Some(backend) = intent.backend {
+                self.intent.backend = backend;
+            }
+            if let Some(endpoint) = intent.endpoint {
+                self.intent.endpoint = endpoint;
+            }
+            if let Some(model) = intent.model {
+                self.intent.model = model;
+            }
+            if let Some(timeout_ms) = intent.timeout_ms {
+                self.intent.timeout_ms = timeout_ms;
+            }
+            if let Some(max_output_chars) = intent.max_output_chars {
+                self.intent.max_output_chars = max_output_chars;
+            }
+            if let Some(consent) = intent.cloud_consent_endpoint {
+                self.intent.cloud_consent_endpoint = Some(consent);
             }
         }
         self.normalize();
@@ -638,6 +767,95 @@ mod tests {
         assert!(json.contains("\"intentShortcut\""));
         assert!(!json.contains("Incident"));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn intent_mode_is_off_by_default_and_local() {
+        let intent = IntentSettings::default();
+        assert!(!intent.enabled);
+        assert_eq!(intent.backend, RestructureBackend::Local);
+        assert_eq!(intent.endpoint, DEFAULT_INTENT_ENDPOINT);
+        assert_eq!(intent.timeout_ms, 4_000);
+        assert_eq!(intent.max_output_chars, 1_200);
+        assert_eq!(intent.cloud_consent_endpoint, None);
+    }
+
+    #[test]
+    fn intent_settings_are_clamped_and_trimmed() {
+        let mut settings = Settings {
+            intent: IntentSettings {
+                endpoint: "  http://127.0.0.1:11434  ".into(),
+                model: "  llama3.2  ".into(),
+                timeout_ms: 1,
+                max_output_chars: 10,
+                ..IntentSettings::default()
+            },
+            ..Settings::default()
+        };
+        settings.normalize();
+        assert_eq!(settings.intent.endpoint, "http://127.0.0.1:11434");
+        assert_eq!(settings.intent.model, "llama3.2");
+        assert_eq!(settings.intent.timeout_ms, MIN_INTENT_TIMEOUT_MS);
+        assert_eq!(
+            settings.intent.max_output_chars,
+            MIN_INTENT_OUTPUT_CHARS
+        );
+
+        settings.intent.timeout_ms = 100_000;
+        settings.intent.max_output_chars = 100_000;
+        settings.intent.endpoint = "   ".into();
+        settings.intent.model.clear();
+        settings.normalize();
+        assert_eq!(settings.intent.timeout_ms, MAX_INTENT_TIMEOUT_MS);
+        assert_eq!(
+            settings.intent.max_output_chars,
+            MAX_INTENT_OUTPUT_CHARS
+        );
+        assert_eq!(settings.intent.endpoint, DEFAULT_INTENT_ENDPOINT);
+        assert_eq!(settings.intent.model, DEFAULT_INTENT_MODEL);
+    }
+
+    #[test]
+    fn intent_settings_apply_as_a_nested_patch() {
+        let mut settings = Settings::default();
+        let patch: SettingsPatch = serde_json::from_str(
+            r#"{"intent":{"enabled":true,"backend":"cloud","endpoint":"https://example.test/v1/chat/completions","model":"gpt-4o-mini","timeoutMs":2500,"maxOutputChars":900}}"#,
+        )
+        .unwrap();
+        settings.apply(patch);
+
+        assert!(settings.intent.enabled);
+        assert_eq!(settings.intent.backend, RestructureBackend::Cloud);
+        assert_eq!(
+            settings.intent.endpoint,
+            "https://example.test/v1/chat/completions"
+        );
+        assert_eq!(settings.intent.model, "gpt-4o-mini");
+        assert_eq!(settings.intent.timeout_ms, 2_500);
+        assert_eq!(settings.intent.max_output_chars, 900);
+
+        // A later patch that only touches one key leaves the rest alone.
+        settings.apply(
+            serde_json::from_str::<SettingsPatch>(r#"{"intent":{"enabled":false}}"#).unwrap(),
+        );
+        assert!(!settings.intent.enabled);
+        assert_eq!(settings.intent.model, "gpt-4o-mini");
+    }
+
+    #[test]
+    fn cloud_consent_is_bound_to_the_exact_endpoint() {
+        let mut intent = IntentSettings {
+            enabled: true,
+            backend: RestructureBackend::Cloud,
+            endpoint: "https://one.example/v1/chat/completions".into(),
+            cloud_consent_endpoint: Some("https://one.example/v1/chat/completions".into()),
+            ..IntentSettings::default()
+        };
+        assert!(intent.requires_cloud());
+        assert!(intent.cloud_consent_matches());
+
+        intent.endpoint = "https://two.example/v1/chat/completions".into();
+        assert!(!intent.cloud_consent_matches(), "new endpoint needs consent");
     }
 
     #[test]

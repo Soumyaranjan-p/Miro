@@ -23,7 +23,7 @@ import type {
 } from "./types";
 
 const settings: Settings = {
-  version: 1,
+  version: 3,
   shortcut: "Ctrl+M",
   normalShortcut: "Ctrl+Alt",
   intentShortcut: "Ctrl+Alt+Space",
@@ -51,6 +51,15 @@ const settings: Settings = {
       "i mean",
       "like",
     ],
+  },
+  intent: {
+    enabled: false,
+    backend: "local",
+    endpoint: "http://127.0.0.1:11434",
+    model: "llama3.2",
+    timeoutMs: 4000,
+    maxOutputChars: 1200,
+    cloudConsentEndpoint: null,
   },
   theme: "system",
   overlayPosition: "bottom-center",
