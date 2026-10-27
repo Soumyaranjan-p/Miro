@@ -55,6 +55,28 @@ function Spinner() {
   );
 }
 
+/** Committed words solid, unstable tail dimmed. Last ~2 lines visible. */
+function LiveTextLine({
+  committed,
+  unstable,
+}: {
+  committed: string;
+  unstable: string;
+}) {
+  return (
+    <div className="min-w-0 flex-1 overflow-hidden">
+      <div className="text-[13px] font-medium text-ink truncate">
+        {committed}
+      </div>
+      {unstable && (
+        <div className="text-[12.5px] text-muted truncate mt-0.5">
+          {unstable}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OverlayApp() {
   const { state } = useOverlayState();
   const recording = state.kind === "recording";
@@ -62,6 +84,7 @@ export function OverlayApp() {
   const now = useTick(recording, 100);
 
   const action = primaryAction(state);
+  const liveText = state.kind === "recording" ? state.liveText : null;
 
   // Escape and Enter live here as a safety net; the real Escape gesture is a
   // global shortcut registered by Rust, because a window that never takes
@@ -108,6 +131,10 @@ export function OverlayApp() {
                 {formatDuration(elapsedMs)}
               </span>
             </>
+          )}
+
+          {liveText && (
+            <LiveTextLine committed={liveText.committed} unstable={liveText.unstable} />
           )}
 
           {state.kind === "processing" && (
