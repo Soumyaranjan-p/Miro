@@ -76,6 +76,26 @@ pub enum OverlayPosition {
     Center,
 }
 
+/// How live dictation inserts transcribed words.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LiveMode {
+    /// Insert committed words as they are finalised, in near real time.
+    #[default]
+    Insert,
+    /// Show live text in the overlay only; insert everything on release.
+    Preview,
+    /// Current behaviour: transcribe and insert only after release.
+    Off,
+}
+
+const DEFAULT_LIVE_STEP_MS: u32 = 400;
+const DEFAULT_LIVE_WINDOW_MS: u32 = 6000;
+const MIN_LIVE_STEP_MS: u32 = 200;
+const MAX_LIVE_STEP_MS: u32 = 2000;
+const MIN_LIVE_WINDOW_MS: u32 = 2000;
+const MAX_LIVE_WINDOW_MS: u32 = 12000;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Cleanup {
@@ -230,6 +250,14 @@ pub struct Settings {
     pub overlay_position: OverlayPosition,
     pub show_transcript_preview: bool,
     pub start_on_login: bool,
+    /// Live dictation mode: insert, preview, or off.
+    pub live_mode: LiveMode,
+    /// Decode step interval in milliseconds.
+    pub live_step_ms: u32,
+    /// Audio window size in milliseconds.
+    pub live_window_ms: u32,
+    /// Optional separate model id for live decoding.
+    pub live_model_id: Option<String>,
 }
 
 impl Default for Settings {
@@ -254,6 +282,10 @@ impl Default for Settings {
             overlay_position: OverlayPosition::BottomCenter,
             show_transcript_preview: false,
             start_on_login: false,
+            live_mode: LiveMode::Insert,
+            live_step_ms: DEFAULT_LIVE_STEP_MS,
+            live_window_ms: DEFAULT_LIVE_WINDOW_MS,
+            live_model_id: None,
         }
     }
 }
@@ -283,6 +315,10 @@ pub struct SettingsPatch {
     pub overlay_position: Option<OverlayPosition>,
     pub show_transcript_preview: Option<bool>,
     pub start_on_login: Option<bool>,
+    pub live_mode: Option<LiveMode>,
+    pub live_step_ms: Option<u32>,
+    pub live_window_ms: Option<u32>,
+    pub live_model_id: Option<Option<String>>,
 }
 
 #[derive(Deserialize, Default, Debug, Clone)]
@@ -466,6 +502,20 @@ impl Settings {
             if intent.clear_cloud_consent == Some(true) {
                 self.intent.cloud_consent_endpoint = None;
             }
+        }
+        if let Some(live_mode) = patch.live_mode {
+            self.live_mode = live_mode;
+        }
+        if let Some(live_step_ms) = patch.live_step_ms {
+            self.live_step_ms = live_step_ms.clamp(MIN_LIVE_STEP_MS, MAX_LIVE_STEP_MS);
+        }
+        if let Some(live_window_ms) = patch.live_window_ms {
+            self.live_window_ms = live_window_ms.clamp(MIN_LIVE_WINDOW_MS, MAX_LIVE_WINDOW_MS);
+        }
+        if let Some(live_model_id) = patch.live_model_id {
+            self.live_model_id = live_model_id
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty());
         }
         self.normalize();
     }
