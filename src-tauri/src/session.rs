@@ -155,6 +155,7 @@ impl Session {
             settings.max_recording_seconds,
             CaptureMode::Record,
             Some(on_level),
+            None,
         ) {
             Ok(capture) => capture,
             Err(failure) => {
@@ -375,6 +376,7 @@ impl Session {
             settings.max_recording_seconds,
             CaptureMode::Probe,
             Some(on_level),
+            None,
         )?;
         let control = capture.control();
         lock(&self.inner).probe = Some(control.clone());

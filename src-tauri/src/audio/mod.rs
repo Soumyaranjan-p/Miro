@@ -460,6 +460,7 @@ pub fn start(
     max_seconds: u32,
     mode: CaptureMode,
     on_level: Option<Arc<dyn Fn(LevelFrame) + Send + Sync>>,
+    on_audio: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync>>,
 ) -> Result<Capture> {
     let stop = Arc::new(AtomicBool::new(false));
     let cancel = Arc::new(AtomicBool::new(false));
@@ -470,6 +471,7 @@ pub fn start(
     let thread_stop = Arc::clone(&stop);
     let thread_cancel = Arc::clone(&cancel);
     let thread_levels = levels.clone();
+    let thread_audio = on_audio.clone();
 
     let thread = thread::Builder::new()
         .name("miro-audio".to_string())
@@ -482,6 +484,7 @@ pub fn start(
                 thread_cancel,
                 thread_levels,
                 on_level,
+                thread_audio,
                 &ready_tx,
             );
             let _ = tx.send(outcome);
@@ -516,6 +519,7 @@ fn run_capture(
     cancel: Arc<AtomicBool>,
     levels: LevelSink,
     on_level: Option<Arc<dyn Fn(LevelFrame) + Send + Sync>>,
+    on_audio: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync>>,
     ready: &Sender<std::result::Result<(), Failure>>,
 ) -> CaptureOutcome {
     let host = cpal::default_host();
@@ -591,6 +595,10 @@ fn run_capture(
     // trailing syllable land in the buffer. The max-seconds limit ends the
     // recording immediately (there is nothing being cut mid-word there).
     let mut stop_requested: Option<Instant> = None;
+    // Streaming path: downmix + resample newly captured audio to 16 kHz mono
+    // and hand it to `on_audio` so a stream decoder can read it in real time.
+    let mut resampler = Resampler::new(sample_rate);
+    let mut processed_raw: usize = 0;
     loop {
         thread::sleep(frame_interval);
 
@@ -626,10 +634,46 @@ fn run_capture(
         if let Some(callback) = on_level.as_ref() {
             callback(levels.frame());
         }
+
+        // Hand newly captured audio to the stream decoder as 16 kHz mono.
+        if let Some(on_audio) = &on_audio {
+            let raw = shared
+                .samples
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let new_samples: Vec<f32> = raw[processed_raw..].to_vec();
+            processed_raw = raw.len();
+            drop(raw);
+            if !new_samples.is_empty() {
+                let mono = downmix_to_mono(&new_samples, channels);
+                let resampled = resampler.process(&mono, false);
+                if !resampled.is_empty() {
+                    on_audio(resampled);
+                }
+            }
+        }
     }
 
     // No callbacks run after this point, so the buffer is ours to read.
     drop(stream);
+
+    // Flush anything left in the resampler to the stream decoder.
+    if let Some(on_audio) = &on_audio {
+        let raw = take_samples(&shared);
+        let remaining = &raw[processed_raw.min(raw.len())..];
+        if !remaining.is_empty() {
+            let mono = downmix_to_mono(remaining, channels);
+            let resampled = resampler.process(&mono, false);
+            if !resampled.is_empty() {
+                on_audio(resampled);
+            }
+        }
+        let tail = resampler.process(&[], true);
+        if !tail.is_empty() {
+            on_audio(tail);
+        }
+    }
+
     let duration_ms = shared.started.elapsed().as_millis();
     let packets = shared.packets.load(std::sync::atomic::Ordering::Relaxed);
     let callback_samples = shared
@@ -680,29 +724,67 @@ fn run_capture(
         })
         .collect();
     let channel_corr = channel_cross_correlation(&raw, channels);
+
+    // Start with the average downmix, then promote a single channel when it
+    // dominates so strongly that averaging would dilute speech with a dead
+    // channel, or when the channels are anti-correlated and cancel each other.
     let mut mono = downmix_to_mono(&raw, channels);
-    if channel_corr < -0.5 {
-        // Anti-correlated channels cancel in the average, turning speech into
-        // near-silence. Prefer whichever single channel carries most energy.
-        let loudest = channel_rms
+    let mut strategy = "average";
+    if channels >= 2 {
+        let max_rms = channel_rms
             .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.total_cmp(b.1))
-            .map(|(index, _)| index)
-            .unwrap_or(0);
-        eprintln!(
-            "[miro-audio] downmix: channels are anti-correlated ({channel_corr:.3}); \
-             keeping channel {loudest} instead of averaging"
-        );
-        mono = raw
-            .iter()
-            .skip(loudest)
-            .step_by(channels as usize)
             .copied()
-            .collect();
+            .fold(0.0f32, f32::max);
+        let min_rms = channel_rms
+            .iter()
+            .copied()
+            .fold(f32::INFINITY, f32::min);
+        // One channel carries essentially all the energy: use it alone so the
+        // dead channel cannot halve the speech amplitude or add its noise.
+        if max_rms > 0.0 && min_rms / max_rms < 0.2 {
+            let loudest = channel_rms
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.total_cmp(b.1))
+                .map(|(index, _)| index)
+                .unwrap_or(0);
+            mono = raw
+                .iter()
+                .skip(loudest)
+                .step_by(channels as usize)
+                .copied()
+                .collect();
+            strategy = if loudest == 0 { "left-only" } else { "right-only" };
+            eprintln!(
+                "[miro-audio] downmix: channel {loudest} dominates (rms {:?}); \
+                 keeping only that channel",
+                channel_rms
+            );
+        } else if channel_corr < -0.5 {
+            // Anti-correlated channels cancel in the average, turning speech
+            // into near-silence. Prefer whichever single channel carries most
+            // energy.
+            let loudest = channel_rms
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.total_cmp(b.1))
+                .map(|(index, _)| index)
+                .unwrap_or(0);
+            eprintln!(
+                "[miro-audio] downmix: channels are anti-correlated ({channel_corr:.3}); \
+                 keeping channel {loudest} instead of averaging"
+            );
+            mono = raw
+                .iter()
+                .skip(loudest)
+                .step_by(channels as usize)
+                .copied()
+                .collect();
+            strategy = if loudest == 0 { "left-only" } else { "right-only" };
+        }
     }
     eprintln!(
-        "[miro-audio] downmix: {} -> {} samples ({} ch); per-channel rms {:?}; corr {:.3}",
+        "[miro-audio] downmix: {} -> {} samples ({} ch); per-channel rms {:?}; corr {:.3}; strategy={strategy}",
         raw.len(),
         mono.len(),
         channels,
@@ -965,7 +1047,7 @@ mod tests {
     #[test]
     #[ignore = "takes over the real microphone for ~2 s"]
     fn live_capture_diagnostic() {
-        let capture = start(None, 2, CaptureMode::Record, None).expect("capture start");
+        let capture = start(None, 2, CaptureMode::Record, None, None).expect("capture start");
         let began = Instant::now();
         let outcome = capture.wait();
         let waited_ms = began.elapsed().as_millis();
