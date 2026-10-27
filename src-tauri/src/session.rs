@@ -1156,16 +1156,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_overlay_only_ever_receives_state_without_text() {
-        // A regression guard with teeth: serialise every state the overlay can
-        // be sent and assert that no transcript-shaped field exists.
-        let states = [
+    fn the_overlay_only_receives_live_text_while_recording() {
+        // Live text (committed + unstable) may only appear in OverlayState::Recording,
+        // and only while a dictation is in flight. Every other state must remain
+        // transcript-free. The live text is never logged or persisted, and is
+        // cleared when recording ends.
+        let recording_with_live_text = OverlayState::Recording {
+            device_label: "Microphone".into(),
+            started_at_ms: 1,
+            max_seconds: 300,
+            live_text: Some(crate::events::LiveText::new(
+                "committed words".into(),
+                "unstable tail".into(),
+            )),
+        };
+        let recording_without_live_text = OverlayState::Recording {
+            device_label: "Microphone".into(),
+            started_at_ms: 1,
+            max_seconds: 300,
+            live_text: None,
+        };
+        let other_states = [
             OverlayState::Hidden,
-            OverlayState::Recording {
-                device_label: "Microphone".into(),
-                started_at_ms: 1,
-                max_seconds: 300,
-            },
             OverlayState::Processing { started_at_ms: 1 },
             OverlayState::Inserted {
                 characters: 42,
@@ -1180,15 +1192,32 @@ mod tests {
                 retry_id: Some(3),
             },
         ];
-        for state in states {
+
+        // Non-recording states must never carry transcript text.
+        for state in other_states {
             let json = serde_json::to_string(&state).unwrap();
-            for forbidden in ["text", "transcript", "audio\":", "words"] {
+            for forbidden in ["text", "transcript", "audio\":", "words", "live_text"] {
                 assert!(
                     !json.contains(forbidden),
-                    "overlay payload must not contain `{forbidden}`: {json}"
+                    "non-recording overlay payload must not contain `{forbidden}`: {json}"
                 );
             }
         }
+
+        // Recording without live text must not carry transcript text either.
+        let json = serde_json::to_string(&recording_without_live_text).unwrap();
+        for forbidden in ["text", "transcript", "audio\":", "words"] {
+            assert!(
+                !json.contains(forbidden),
+                "recording payload without live text must not contain `{forbidden}`: {json}"
+            );
+        }
+
+        // Recording with live text carries committed + unstable words.
+        let json = serde_json::to_string(&recording_with_live_text).unwrap();
+        assert!(json.contains("\"committed\""));
+        assert!(json.contains("\"unstable\""));
+        assert!(json.contains("live_text"));
     }
 
     #[test]
