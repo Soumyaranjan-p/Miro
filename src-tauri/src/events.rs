@@ -16,11 +16,30 @@ pub const RUNTIME_EVENT: &str = "miro://runtime-status";
 pub const MODEL_PROGRESS_EVENT: &str = "miro://model-progress";
 pub const MIC_LEVEL_EVENT: &str = "miro://mic-level";
 
+/// Live text shown in the overlay during streaming dictation.
+///
+/// Committed words are final; the unstable tail may change on the next
+/// decode step. Never logged or persisted.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct LiveText {
+    /// Words finalised by LocalAgreement-2.
+    pub committed: String,
+    /// Words from the latest hypothesis that are not yet committed.
+    pub unstable: String,
+}
+
+impl LiveText {
+    pub fn new(committed: String, unstable: String) -> Self {
+        Self { committed, unstable }
+    }
+}
+
 /// What the overlay window is showing.
 ///
-/// There is deliberately no transcript here. The retryable text stays inside
-/// the Rust process and is reached only through `retry_insertion` /
-/// `copy_pending_transcript`, so a transcript never enters a webview at all.
+/// There is deliberately no transcript here except in
+/// [`OverlayState::Recording`]'s `live_text`, which only appears while
+/// recording and is cleared when recording ends.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OverlayState {
@@ -40,6 +59,9 @@ pub enum OverlayState {
         started_at_ms: u64,
         #[serde(rename = "maxSeconds")]
         max_seconds: u32,
+        /// Live text while streaming dictation is active.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        live_text: Option<LiveText>,
     },
     Processing {
         #[serde(rename = "startedAtMs")]

@@ -130,7 +130,7 @@ pub struct StreamResult {
 /// text as the initial prompt. Applies LocalAgreement-2: a word becomes
 /// committed only when it matches in two consecutive hypotheses.
 pub struct StreamDecoder {
-    engine: Engine,
+    engine: Arc<Engine>,
     options: EngineOptions,
     window_ms: u128,
     step_ms: u128,
@@ -143,7 +143,7 @@ pub struct StreamDecoder {
 
 impl StreamDecoder {
     pub fn new(
-        engine: Engine,
+        engine: Arc<Engine>,
         options: EngineOptions,
         window_ms: u128,
         step_ms: u128,

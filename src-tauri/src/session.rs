@@ -19,16 +19,18 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio::{self, Capture, CaptureControl, CaptureMode, CaptureOutcome, LevelFrame};
-use crate::config::{HomeMode, Mode, Settings};
+use crate::config::{HomeMode, LiveMode, Mode, Settings};
 use crate::engine::{self, Engine, EngineOptions};
 use crate::errors::{Failure, Result};
-use crate::events::{self, OverlayState, RuntimeStatus};
+use crate::events::{self, LiveText, OverlayState, RuntimeStatus};
 use crate::hotkeys::registry as shortcut_registry;
 use crate::insertion::{self, Target};
 use crate::keyboard_hook::{KeySignal, KeyboardHook, PressEvent};
 use crate::logging::{self, Event};
+use crate::models;
 use crate::privacy::{self, PendingText};
 use crate::state::{self};
+use crate::stream::{StreamDecoder, StreamOrchestrator};
 use crate::textproc;
 use crate::windows;
 
@@ -52,6 +54,7 @@ pub enum Phase {
 struct ActiveRecording {
     control: CaptureControl,
     started_at_ms: u64,
+    stream_decoder: Option<Arc<StreamDecoder>>,
 }
 
 #[derive(Default)]
@@ -68,6 +71,7 @@ struct Inner {
 pub struct Session {
     inner: Mutex<Inner>,
     engine: Mutex<Option<Arc<Engine>>>,
+    stream: Mutex<Option<Arc<StreamOrchestrator>>>,
 }
 
 fn lock<'a, T>(mutex: &'a Mutex<T>) -> std::sync::MutexGuard<'a, T> {
@@ -114,6 +118,7 @@ impl Session {
         }
 
         let settings = state::state(app).settings();
+        let live_mode = settings.live_mode;
         // Cheap pre-flight so a blocked or missing microphone answers with a
         // clear, explicit failure before any capture machinery spins up.
         if let Some(failure) = mic_preflight(&settings) {
@@ -150,12 +155,26 @@ impl Session {
             let _ = level_app.emit(events::MIC_LEVEL_EVENT, frame);
         });
 
+        // --- live dictation engine ---------------------------------------
+        let stream_decoder: Option<Arc<StreamDecoder>> = if live_mode != LiveMode::Off {
+            Some(self.load_stream_engine(app, &settings)?)
+        } else {
+            None
+        };
+
+        let on_audio = stream_decoder.as_ref().map(|decoder| {
+            let decoder = Arc::clone(decoder);
+            Arc::new(move |samples: Vec<f32>| {
+                decoder.push_audio(&samples);
+            }) as Arc<dyn Fn(Vec<f32>) + Send + Sync>
+        });
+
         let capture = match audio::start(
             settings.microphone.clone(),
             settings.max_recording_seconds,
             CaptureMode::Record,
             Some(on_level),
-            None,
+            on_audio,
         ) {
             Ok(capture) => capture,
             Err(failure) => {
@@ -169,12 +188,31 @@ impl Session {
         let started_at_ms = now_ms();
         let device_label = short_device_label(&settings);
 
+        // Start the stream orchestrator so live text flows to the overlay.
+        if let Some(decoder) = &stream_decoder {
+            let app_events = app.clone();
+            let device_label_events = device_label.clone();
+            let max_seconds = settings.max_recording_seconds;
+            let orchestrator = Arc::new(StreamOrchestrator::new(Arc::clone(decoder)));
+            orchestrator.start(move |result| {
+                let overlay = OverlayState::Recording {
+                    device_label: device_label_events.clone(),
+                    started_at_ms,
+                    max_seconds,
+                    live_text: Some(LiveText::new(result.committed, result.unstable)),
+                };
+                emit_overlay(&app_events, overlay);
+            });
+            lock(&self.stream).replace(Arc::clone(&orchestrator));
+        }
+
         {
             let mut inner = lock(&self.inner);
             inner.target = Some(target);
             inner.recording = Some(ActiveRecording {
                 control,
                 started_at_ms,
+                stream_decoder,
             });
         }
 
@@ -193,6 +231,7 @@ impl Session {
                 device_label,
                 started_at_ms,
                 max_seconds: settings.max_recording_seconds,
+                live_text: None,
             },
         );
 
@@ -218,6 +257,12 @@ impl Session {
         match inner.recording.as_ref() {
             Some(recording) if !recording.control.is_stopping() => {
                 recording.control.stop();
+                drop(inner);
+                // Stop the live decode loop so the final decode runs in
+                // finish_recording without competing for the engine.
+                if let Some(orchestrator) = lock(&self.stream).take() {
+                    orchestrator.stop();
+                }
                 Ok(())
             }
             Some(_) => Ok(()),
@@ -227,13 +272,17 @@ impl Session {
 
     /// Abandons the current dictation: the audio is zeroed, nothing is inserted.
     pub fn cancel(&self, app: &AppHandle) {
-        let (had_recording, stage) = {
+        let (had_recording, stage, stream) = {
             let inner = lock(&self.inner);
-            (inner.recording.is_some(), inner.phase)
+            (inner.recording.is_some(), inner.phase, lock(&self.stream).take())
         };
 
         if let Some(recording) = lock(&self.inner).recording.as_ref() {
             recording.control.cancel();
+        }
+
+        if let Some(orchestrator) = stream {
+            orchestrator.stop();
         }
 
         if had_recording || stage != Phase::Idle {
@@ -413,17 +462,37 @@ impl Session {
                     samples: samples.len(),
                     ms: duration_ms,
                 });
-                {
+                let stream_decoder = {
                     let mut inner = lock(&self.inner);
                     inner.phase = Phase::Processing;
-                    inner.recording = None;
-                }
+                    // Stop the live decode loop and release the orchestrator.
+                    if let Some(orchestrator) = lock(&self.stream).take() {
+                        orchestrator.stop();
+                    }
+                    inner.recording.take().and_then(|r| r.stream_decoder)
+                };
                 let _ = device_label;
                 // Hide the Recording overlay immediately to allow focus to return to target
                 emit_overlay(app, OverlayState::Hidden);
                 // Give Windows time to stabilize focus to the target window
                 std::thread::sleep(std::time::Duration::from_millis(100));
-                self.transcribe_and_insert(app, samples, duration_ms, limit_reached, target);
+
+                if let Some(decoder) = stream_decoder {
+                    let settings = state::state(app).settings();
+                    if let Err(failure) = self.handle_live_finish(
+                        app,
+                        &settings,
+                        decoder,
+                        samples,
+                        duration_ms,
+                        target,
+                    ) {
+                        self.reset(app);
+                        self.fail(app, failure, None);
+                    }
+                } else {
+                    self.transcribe_and_insert(app, samples, duration_ms, limit_reached, target);
+                }
             }
             CaptureOutcome::Cancelled | CaptureOutcome::Probed => {
                 self.reset(app);
@@ -435,6 +504,95 @@ impl Session {
                 });
                 self.reset(app);
                 self.fail(app, failure, None);
+            }
+        }
+    }
+
+    /// Handles the end of a live dictation: finalize the stream decoder and
+    /// insert the committed text.
+    fn handle_live_finish(
+        &self,
+        app: &AppHandle,
+        settings: &Settings,
+        decoder: Arc<StreamDecoder>,
+        samples: Vec<f32>,
+        duration_ms: u128,
+        target: Target,
+    ) -> Result<()> {
+        // Final decode of the remaining audio to commit any trailing words.
+        let final_text = decoder.finalize()?;
+        // The recorded audio is no longer needed.
+        audio::discard(samples);
+
+        let mut processed = textproc::process(&final_text, &settings.cleanup);
+        logging::event(Event::TranscriptProcessed {
+            characters: processed.chars().count(),
+            words: processed.split_whitespace().count(),
+        });
+
+        if processed.trim().is_empty() {
+            self.reset(app);
+            self.fail(app, Failure::TranscriptEmpty, None);
+            return Ok(());
+        }
+
+        let words = processed.split_whitespace().count() as u32;
+        let characters = processed.chars().count();
+
+        let retry_id = {
+            let mut inner = lock(&self.inner);
+            inner.next_retry_id += 1;
+            let id = inner.next_retry_id;
+            inner.pending.store(processed.clone(), id);
+            id
+        };
+
+        let outcome = insertion::insert(&processed, target);
+        privacy::zeroize_string(&mut processed);
+
+        match outcome {
+            Ok(result) => {
+                let _ = result;
+                logging::event(Event::InsertionFinished {
+                    ok: true,
+                    code: "ok",
+                    characters,
+                });
+                self.reset(app);
+                emit_overlay(
+                    app,
+                    OverlayState::Inserted {
+                        characters,
+                        audio_ms: duration_ms,
+                        retry_id: Some(retry_id),
+                    },
+                );
+                self.schedule_hide(app.clone());
+                crate::stats::record_dictation(app, words, u64::try_from(duration_ms).unwrap_or(0));
+                self.schedule_retry_expiry(app.clone(), retry_id, SUCCESS_WINDOW);
+                Ok(())
+            }
+            Err(failure) => {
+                logging::event(Event::InsertionFinished {
+                    ok: false,
+                    code: failure.code().as_str(),
+                    characters: 0,
+                });
+                self.reset(app);
+                self.schedule_retry_expiry(app.clone(), retry_id, RETRY_WINDOW);
+                let code = failure.code();
+                let detail = failure.detail();
+                let retryable = failure.retryable();
+                emit_overlay(
+                    app,
+                    OverlayState::Error {
+                        code,
+                        detail,
+                        retryable,
+                        retry_id: retryable.then_some(retry_id),
+                    },
+                );
+                Ok(())
             }
         }
     }
@@ -680,6 +838,47 @@ impl Session {
         lock(&self.engine).replace(Arc::clone(&engine));
         self.publish_runtime(app);
         Ok(engine)
+    }
+
+    /// Loads the engine used for live streaming dictation. May be a different
+    /// model than the main dictation engine. Loads synchronously because the
+    /// stream must be ready before recording starts.
+    fn load_stream_engine(&self, app: &AppHandle, settings: &Settings) -> Result<Arc<StreamDecoder>> {
+        let model_id = settings
+            .live_model_id
+            .as_deref()
+            .filter(|v| !v.is_empty())
+            .unwrap_or(&settings.model_id);
+
+        let spec = models::spec(model_id).ok_or(Failure::ModelMissing)?;
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| Failure::Internal(format!("app data dir: {e}")))?;
+        let dir = models::models_dir(&data_dir);
+        let path = models::model_path(&dir, spec);
+
+        if !path.exists() {
+            return Err(Failure::ModelFileMissing(model_id.to_string()));
+        }
+        models::verify_file(&path, None, None)?;
+
+        let engine = Engine::load(&path, model_id)?;
+        let engine = Arc::new(engine);
+
+        let options = EngineOptions {
+            language: Some(settings.language.clone()),
+            threads: engine::default_threads(),
+            initial_prompt: None,
+        };
+
+        let decoder = Arc::new(StreamDecoder::new(
+            Arc::clone(&engine),
+            options,
+            settings.live_window_ms as u128,
+            settings.live_step_ms as u128,
+        ));
+        Ok(decoder)
     }
 
     /// Drops the loaded model, e.g. after the selection changed.
