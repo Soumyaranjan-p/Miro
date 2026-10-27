@@ -83,6 +83,31 @@ While a recording is in flight Miro registers `Escape` so it can cancel from any
 application. If another application already owns Escape, that registration fails;
 Miro logs it and the overlay's Cancel button still works.
 
+## Live dictation
+
+### Live text is transient
+
+While live dictation is active, the overlay shows committed words (solid) and
+the unstable tail (dimmed). The unstable tail is a hypothesis that can change on
+the next decode step: a word you see dimmed may disappear or be reworded. Only
+committed words are ever inserted, and only once they match in two consecutive
+hypotheses (LocalAgreement-2).
+
+### Live decoding is a best-effort pipeline
+
+A decode step runs every `liveStepMs` (default 400 ms) over a sliding window of
+`liveWindowMs` (default 6000 ms) of audio. If a decode takes longer than the
+step, it is skipped - words may appear later than the step interval, especially
+on slower CPUs or with larger windows. The live model (if configured) is loaded
+separately from the main dictation model.
+
+### Focus checks still apply during live insertion
+
+In `insert` mode, committed words are typed into the foreground window captured
+at record start. If focus moves to another application, live typing stops and
+the remaining words are held for insertion into the original target on release
+(or clipboard fallback). Password fields are skipped.
+
 ## Speech recognition
 
 - **CPU only in this build.** whisper.cpp supports CUDA/Vulkan; those Cargo

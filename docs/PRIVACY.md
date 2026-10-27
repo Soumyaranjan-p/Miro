@@ -32,7 +32,7 @@ download you explicitly confirm - no network access at all.
 
 | Path | Contents | Sensitive? |
 |---|---|---|
-| `%APPDATA%\app.miro.dictation\config.json` | shortcut, mode, microphone id, model id, language, clean-up options, theme, overlay position, start-on-login, maximum recording length | no |
+| `%APPDATA%\app.miro.dictation\config.json` | shortcut, mode, microphone id, model id, language, clean-up options, theme, overlay position, start-on-login, maximum recording length, live dictation mode/step/window/model | no |
 | `%APPDATA%\app.miro.dictation\config.invalid.json` | a previous settings file that failed to parse, kept aside instead of being silently replaced | no |
 | `%APPDATA%\app.miro.dictation\models\*.bin` | model files you chose to download | no - public model weights |
 | `%APPDATA%\app.miro.dictation\models\*.part` | a download you paused or cancelled, resumable | no |
@@ -55,9 +55,12 @@ they exist for the lifetime of the process and nowhere else.
   does not use `mlock`/`VirtualLock`, so the honest phrasing is
   *"minimized retention and cleaned up"* - not "securely erased".
 - Audio never leaves the process except as engine input, and the transcript
-  never leaves the Rust process at all: the overlay window receives only counts,
-  timings and error codes, never text. Copy and Retry are commands that act on
-  the text inside Rust.
+  never leaves the Rust process at all: the overlay window receives only
+  counts, timings and error codes, except while live dictation is active, when
+  it also receives the current committed and unstable text (`liveText`). That
+  text appears only in the overlay window, only while recording, is never
+  logged or persisted, and is cleared and zeroized when recording ends. Copy
+  and Retry are commands that act on the text inside Rust.
 
 ## Logging
 
