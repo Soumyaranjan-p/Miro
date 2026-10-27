@@ -14,6 +14,7 @@ const recording: OverlayAction = {
   deviceLabel: "Microphone Array",
   startedAtMs: 1_000,
   maxSeconds: 300,
+  liveText: null,
 };
 
 function apply(state: OverlayState, ...actions: OverlayAction[]): OverlayState {
@@ -105,14 +106,14 @@ describe("overlay state machine", () => {
     expect(
       autoHideDelayMs({ kind: "error", code: "focus_changed", detail: null, retryable: true, retryId: 1 }),
     ).toBeNull();
-    expect(autoHideDelayMs({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60 })).toBeNull();
+    expect(autoHideDelayMs({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60, liveText: null })).toBeNull();
     expect(autoHideDelayMs({ kind: "mode", homeMode: "home" })).toBe(2200);
     expect(autoHideDelayMs({ kind: "mode", homeMode: "intent" })).toBe(2200);
     expect(autoHideDelayMs(initialOverlayState)).toBeNull();
   });
 
   it("maps Enter to the action a user expects", () => {
-    expect(primaryAction({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60 })).toBe("stop");
+    expect(primaryAction({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60, liveText: null })).toBe("stop");
     expect(
       primaryAction({ kind: "error", code: "focus_changed", detail: null, retryable: true, retryId: 2 }),
     ).toBe("retry");
@@ -124,7 +125,7 @@ describe("overlay state machine", () => {
 
   it("treats recording and processing as busy", () => {
     expect(isBusy(initialOverlayState)).toBe(false);
-    expect(isBusy({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60 })).toBe(true);
+    expect(isBusy({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60, liveText: null })).toBe(true);
     expect(isBusy({ kind: "processing", startedAtMs: 0 })).toBe(true);
     expect(isBusy({ kind: "inserted", characters: 1, audioMs: 1, retryId: null })).toBe(false);
   });
