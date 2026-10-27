@@ -83,6 +83,8 @@ pub struct Vad {
     silence_frames: usize,
 }
 
+const PAUSE_FRAMES: usize = 15; // ~15 frames at 50 Hz = ~300 ms of silence
+
 impl Vad {
     pub fn new() -> Self {
         Self {
@@ -105,6 +107,11 @@ impl Vad {
             self.silence_frames += 1;
         }
         loud
+    }
+
+    /// True when enough consecutive frames have been silent to signal a pause.
+    pub fn is_paused(&self) -> bool {
+        self.silence_frames >= PAUSE_FRAMES
     }
 
     /// Number of consecutive silent frames.
@@ -177,6 +184,48 @@ impl StreamDecoder {
         let window_samples = (TARGET_SAMPLE_RATE as usize * self.window_ms as usize / 1000).max(1);
         let audio = ring.last(window_samples);
         drop(ring);
+
+        let duration_ms = (audio.len() as u128) * 1000 / TARGET_SAMPLE_RATE as u128;
+
+        // VAD: on a sustained pause, commit the whole current hypothesis and
+        // trim the buffer so the next decode only sees recent audio. Only
+        // evaluate VAD when there is actual audio - an empty buffer is not
+        // silence.
+        if !audio.is_empty() {
+            let mut vad = self.vad.lock().unwrap();
+            let _ = vad.has_speech(&audio, duration_ms);
+            if vad.is_paused() {
+                let mut committed_guard = self.committed.lock().unwrap();
+                let unstable = self.prev_hypothesis.lock().unwrap().clone();
+                let combined = if committed_guard.is_empty() {
+                    unstable
+                } else {
+                    format!("{} {}", committed_guard, unstable)
+                };
+                *committed_guard = combined.clone();
+                let committed_text = committed_guard.clone();
+                drop(committed_guard);
+                self.prev_hypothesis.lock().unwrap().clear();
+                vad.reset();
+
+                // Trim the ring buffer: keep only the last `window_ms` of audio
+                // so the next decode starts fresh after the pause.
+                let mut ring = self.ring.lock().unwrap();
+                let keep = (TARGET_SAMPLE_RATE as usize * self.window_ms as usize / 1000).max(1);
+                if ring.len() > keep {
+                    let tail = ring.last(keep);
+                    ring.clear();
+                    ring.push(&tail);
+                }
+                drop(ring);
+
+                return Ok(StreamResult {
+                    committed: committed_text,
+                    unstable: String::new(),
+                });
+            }
+            drop(vad);
+        }
 
         if audio.is_empty() {
             let committed = self.committed.lock().unwrap().clone();
