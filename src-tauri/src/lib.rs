@@ -25,6 +25,7 @@ pub mod privacy;
 pub mod restructure;
 pub mod secrets;
 pub mod session;
+pub mod stream;
 pub mod state;
 pub mod stats;
 pub mod textproc;

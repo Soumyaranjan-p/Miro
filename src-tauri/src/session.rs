@@ -463,6 +463,7 @@ impl Session {
         let options = EngineOptions {
             language: Some(settings.language.clone()),
             threads: engine::default_threads(),
+            initial_prompt: None,
         };
 
         let result = engine.transcribe(&samples, &options, audio_ms);

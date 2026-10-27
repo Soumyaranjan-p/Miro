@@ -100,7 +100,11 @@ impl WhisperEngine {
         }
 
         // The style prompt is English, so only use it for English dictation.
-        if matches!(options.language.as_deref(), Some("en")) {
+        // A caller-supplied initial_prompt (e.g. live-committed text during
+        // streaming) takes precedence.
+        if let Some(prompt) = options.initial_prompt.as_deref().filter(|p| !p.is_empty()) {
+            params.set_initial_prompt(prompt);
+        } else if matches!(options.language.as_deref(), Some("en")) {
             params.set_initial_prompt(STYLE_PROMPT);
         }
 

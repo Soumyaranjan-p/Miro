@@ -39,6 +39,9 @@ pub struct EngineOptions {
     /// `None` or "auto" lets the engine detect the language.
     pub language: Option<String>,
     pub threads: usize,
+    /// Override the initial prompt used to bias the decoder. When `None`,
+    /// whisper.rs falls back to its built-in style prompt for English.
+    pub initial_prompt: Option<String>,
 }
 
 impl Default for EngineOptions {
@@ -46,6 +49,7 @@ impl Default for EngineOptions {
         Self {
             language: Some("en".to_string()),
             threads: default_threads(),
+            initial_prompt: None,
         }
     }
 }
