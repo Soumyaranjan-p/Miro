@@ -750,3 +750,19 @@ pub struct StartupInfo {
     pub version: String,
     pub engine: events::EngineStatus,
 }
+
+/// Cloud API key management commands (stubs for now)
+#[tauri::command]
+pub fn cloud_key_status() -> CmdResult<bool> {
+    Ok(false)
+}
+
+#[tauri::command]
+pub fn set_cloud_api_key(_key: String) -> CmdResult<()> {
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_cloud_api_key() -> CmdResult<()> {
+    Ok(())
+}

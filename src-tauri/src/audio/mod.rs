@@ -797,9 +797,14 @@ pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
 /// Without a floor, `normalize_peak` boosts a quiet earphone mic's idle noise
 /// (peak ~0.016) up to ~0.5, which whisper then transcribes as phrases like
 /// "Thanks for watching!". Refusing to amplify below this floor leaves noise
-/// quiet enough that whisper's own silence guards reject it, while real speech
-/// (which sits far above this level) still gets normalized to a usable level.
-const MIN_NORMALIZE_PEAK: f32 = 0.02;
+/// quiet enough that whisper's own silence guards reject it.
+///
+/// `has_no_speech` runs first and already requires at least two loud 20 ms
+/// windows before normalization is reached, so a clip here contains real
+/// speech. The floor is set just below the quietest speech we expect
+/// (peak ~0.016-0.02 on a low-gain laptop mic) so quiet voices are amplified
+/// instead of handed to whisper at an unusable level.
+const MIN_NORMALIZE_PEAK: f32 = 0.01;
 
 /// Brings a quietly recorded clip up to a level the engine can use.
 ///

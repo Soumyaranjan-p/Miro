@@ -121,6 +121,9 @@ pub fn run() {
             commands::open_app_data_folder,
             commands::open_external,
             commands::get_user_display_name,
+            commands::cloud_key_status,
+            commands::set_cloud_api_key,
+            commands::clear_cloud_api_key,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
