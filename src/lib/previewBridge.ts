@@ -65,6 +65,10 @@ const settings: Settings = {
   overlayPosition: "bottom-center",
   showTranscriptPreview: false,
   startOnLogin: false,
+  liveMode: "off",
+  liveStepMs: 400,
+  liveWindowMs: 6000,
+  liveModelId: null,
 };
 
 const models: ModelInfo[] = [
@@ -220,7 +224,7 @@ function stopLevels(): void {
 
 function scriptedCycle(): void {
   const startedAtMs = Date.now();
-  overlay({ kind: "recording", deviceLabel: "Microphone Array", startedAtMs, maxSeconds: 300 });
+  overlay({ kind: "recording", deviceLabel: "Microphone Array", startedAtMs, maxSeconds: 300, liveText: null });
   startLevels();
   window.setTimeout(() => {
     stopLevels();
@@ -405,7 +409,7 @@ if (forcedState) {
   window.setTimeout(() => {
     switch (forcedState) {
       case "recording":
-        overlay({ kind: "recording", deviceLabel: "Microphone Array", startedAtMs: Date.now() - 7400, maxSeconds: 300 });
+        overlay({ kind: "recording", deviceLabel: "Microphone Array", startedAtMs: Date.now() - 7400, maxSeconds: 300, liveText: null });
         startLevels();
         break;
       case "processing":

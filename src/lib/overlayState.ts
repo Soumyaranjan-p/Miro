@@ -1,7 +1,13 @@
-import type { ErrorCode, OverlayState } from "./types";
+import type { ErrorCode, LiveText, OverlayState } from "./types";
 
 export type OverlayAction =
-  | { type: "startRecording"; deviceLabel: string; startedAtMs: number; maxSeconds: number }
+  | {
+      type: "startRecording";
+      deviceLabel: string;
+      startedAtMs: number;
+      maxSeconds: number;
+      liveText: LiveText | null;
+    }
   | { type: "startProcessing"; startedAtMs: number }
   | { type: "inserted"; characters: number; audioMs: number; retryId: number | null }
   | { type: "copied"; characters: number }
@@ -25,6 +31,7 @@ export function reduceOverlayState(state: OverlayState, action: OverlayAction): 
         deviceLabel: action.deviceLabel,
         startedAtMs: action.startedAtMs,
         maxSeconds: action.maxSeconds,
+        liveText: action.liveText,
       };
     case "startProcessing":
       if (state.kind !== "recording") return state;

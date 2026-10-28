@@ -12,6 +12,9 @@ export type OverlayPosition = "bottom-center" | "bottom-right" | "center";
 /** Which screen the home window opens on: the dictation home or Intent Mode. */
 export type HomeMode = "home" | "intent";
 
+/** How live dictation inserts transcribed words. */
+export type LiveMode = "insert" | "preview" | "off";
+
 export type RestructureBackend = "local" | "cloud";
 
 /**
@@ -27,6 +30,14 @@ export interface IntentSettings {
   timeoutMs: number;
   maxOutputChars: number;
   cloudConsentEndpoint: string | null;
+}
+
+/** Live text shown in the overlay during streaming dictation. */
+export interface LiveText {
+  /** Words finalised by LocalAgreement-2. */
+  committed: string;
+  /** Words from the latest hypothesis that are not yet committed. */
+  unstable: string;
 }
 
 /** Deterministic, LLM-free text cleanup. `enabled: false` means raw engine text. */
@@ -63,6 +74,14 @@ export interface Settings {
   overlayPosition: OverlayPosition;
   showTranscriptPreview: boolean;
   startOnLogin: boolean;
+  /** Live dictation mode: insert, preview, or off. */
+  liveMode: LiveMode;
+  /** Decode step interval in milliseconds. */
+  liveStepMs: number;
+  /** Audio window size in milliseconds. */
+  liveWindowMs: number;
+  /** Optional separate model id for live decoding. */
+  liveModelId: string | null;
 }
 
 /** Non-sensitive operator detail. Rust guarantees this never carries transcript or audio content. */
@@ -97,14 +116,23 @@ export type ErrorCode =
   | "internal_error";
 
 /**
- * The overlay's state. Transcript text is deliberately absent: the retryable
- * transcript stays inside the Rust process and is only reached through the
- * `retryInsertion` / `copyPendingTranscript` commands.
+ * The overlay's state. Transcript text is deliberately absent except in
+ * `OverlayState.recording.liveText`, which only appears while recording and
+ * is cleared when recording ends. The retryable transcript stays inside the
+ * Rust process and is only reached through the `retryInsertion` /
+ * `copyPendingTranscript` commands.
  */
 export type OverlayState =
   | { kind: "hidden" }
   | { kind: "mode"; homeMode: "home" | "intent" }
-  | { kind: "recording"; deviceLabel: string; startedAtMs: number; maxSeconds: number }
+  | {
+      kind: "recording";
+      deviceLabel: string;
+      startedAtMs: number;
+      maxSeconds: number;
+      /** Live text while streaming dictation is active. */
+      liveText: LiveText | null;
+    }
   | { kind: "processing"; startedAtMs: number }
   | { kind: "inserted"; characters: number; audioMs: number; retryId: number | null }
   | { kind: "copied"; characters: number }

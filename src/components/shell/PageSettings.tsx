@@ -1,7 +1,7 @@
 import { useRuntimeStatus, useSettings } from "../../lib/hooks";
 import { isPreview } from "../../lib/ipc";
 import { Banner } from "../settings/Controls";
-import { AppearanceSection, SystemSection, TextSection } from "../settings/Preferences";
+import { AppearanceSection, LiveDictationSection, SystemSection, TextSection } from "../settings/Preferences";
 import { DictationSection, MicrophoneSection, ModelSection, PrivacySection } from "../settings/Sections";
 import { StatusStrip } from "../settings/StatusStrip";
 
@@ -46,6 +46,7 @@ export function PageSettings() {
           <TextSection settings={settings} update={update} />
           <AppearanceSection settings={settings} update={update} />
           <SystemSection settings={settings} update={update} status={status} />
+          <LiveDictationSection settings={settings} update={update} />
           <PrivacySection />
         </>
       ) : (

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { positionLabel, themeLabel } from "../../lib/format";
 import { ipc, type SettingsPatch } from "../../lib/ipc";
 import type { RuntimeStatus, Settings } from "../../lib/types";
-import { IconFolder, IconMonitor, IconMoon, IconSparkle, IconSun } from "../icons";
+import { IconFolder, IconMonitor, IconMoon, IconSparkle, IconSun, IconWaveform } from "../icons";
 import { Banner, Button, Mono, Row, Section, Segmented, Toggle } from "./Controls";
 
 interface SectionProps {
@@ -194,6 +194,93 @@ export function SystemSection({
           </Button>
         </div>
       </Row>
+    </Section>
+  );
+}
+
+export function LiveDictationSection({ settings, update }: SectionProps) {
+  return (
+    <Section
+      title="Live dictation"
+      icon={<IconWaveform size={16} />}
+      description="While you hold the dictation key, Miro transcribes in near real time and shows words in the overlay."
+    >
+      <Row
+        label="Live mode"
+        hint="Insert types words as they are finalised. Preview shows them only in the overlay. Off disables live dictation."
+      >
+        <Segmented
+          ariaLabel="Live mode"
+          value={settings.liveMode}
+          onChange={(liveMode) => void update({ liveMode })}
+          options={[
+            { value: "insert", label: "Insert live" },
+            { value: "preview", label: "Overlay only" },
+            { value: "off", label: "Off" },
+          ]}
+        />
+      </Row>
+
+      {settings.liveMode !== "off" && (
+        <div className="ml-0 flex flex-col gap-3 border-l pl-3" style={{ borderColor: "var(--miro-line)" }}>
+          <Row
+            label="Decode step"
+            hint="How often Miro decodes audio while recording. Lower = faster updates, higher CPU."
+          >
+            <div className="flex items-center gap-2">
+              <input
+                className="miro-field miro-keys w-[76px] text-right"
+                type="number"
+                min={200}
+                max={2000}
+                step={100}
+                value={settings.liveStepMs}
+                onChange={(event) => {
+                  const next = Number.parseInt(event.target.value, 10);
+                  if (Number.isFinite(next) && next >= 200 && next <= 2000) {
+                    void update({ liveStepMs: next });
+                  }
+                }}
+              />
+              <span className="text-[11.5px] text-muted">ms</span>
+            </div>
+          </Row>
+
+          <Row
+            label="Audio window"
+            hint="How much recent audio is decoded per step. Larger = more context, slower decode."
+          >
+            <div className="flex items-center gap-2">
+              <input
+                className="miro-field miro-keys w-[76px] text-right"
+                type="number"
+                min={2000}
+                max={12000}
+                step={1000}
+                value={settings.liveWindowMs}
+                onChange={(event) => {
+                  const next = Number.parseInt(event.target.value, 10);
+                  if (Number.isFinite(next) && next >= 2000 && next <= 12000) {
+                    void update({ liveWindowMs: next });
+                  }
+                }}
+              />
+              <span className="text-[11.5px] text-muted">ms</span>
+            </div>
+          </Row>
+
+          <Row label="Live model" hint="Optional smaller model for live decoding. Leave blank to use the main dictation model.">
+            <input
+              className="miro-field miro-keys w-[240px]"
+              value={settings.liveModelId ?? ""}
+              placeholder="e.g. tiny.en"
+              onChange={(event) => {
+                void update({ liveModelId: event.target.value || null });
+              }}
+            />
+          </Row>
+        </div>
+      )}
     </Section>
   );
 }
