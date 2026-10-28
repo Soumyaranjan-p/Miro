@@ -1,6 +1,6 @@
 # Miro
 
-**Speak naturally. Type everywhere.**
+**Speak naturally. Type everywheree.**
 
 Miro is a local-first voice typing utility for Windows. Press a shortcut, speak,
 and the transcript is typed into whatever application you were already in.
