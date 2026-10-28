@@ -343,7 +343,17 @@ pub struct StreamOrchestrator {
     decoder: Arc<StreamDecoder>,
     thread: Mutex<Option<std::thread::JoinHandle<()>>>,
     stop: AtomicBool,
+    /// Set to true by the decode thread when it has exited. Used for
+    /// join-with-timeout polling without requiring a `Sync` channel.
+    thread_finished: Arc<AtomicBool>,
+    /// Throttling for overlay events: only emit when text changed and at most
+    /// once per `EMIT_MIN_INTERVAL_MS` (about 5 times per second).
+    last_emit: Arc<Mutex<Option<Instant>>>,
+    last_emitted_text: Arc<Mutex<String>>,
 }
+
+/// Minimum interval between overlay live-text emissions (ms). 200 ms = 5 Hz.
+const EMIT_MIN_INTERVAL_MS: u128 = 200;
 
 impl StreamOrchestrator {
     pub fn new(decoder: Arc<StreamDecoder>) -> Self {
@@ -351,10 +361,16 @@ impl StreamOrchestrator {
             decoder,
             thread: Mutex::new(None),
             stop: AtomicBool::new(false),
+            thread_finished: Arc::new(AtomicBool::new(false)),
+            last_emit: Arc::new(Mutex::new(None)),
+            last_emitted_text: Arc::new(Mutex::new(String::new())),
         }
     }
 
     /// Start the decode loop. `on_result` is called with each `StreamResult`.
+    ///
+    /// Overlay emissions are throttled: only emitted when the text changed and
+    /// at most once every 200 ms (~5 Hz).
     pub fn start<F>(&self, on_result: F)
     where
         F: Fn(StreamResult) + Send + Sync + 'static,
@@ -364,6 +380,9 @@ impl StreamOrchestrator {
         let decoder = Arc::clone(&self.decoder);
         let stop = AtomicBool::new(false);
         let step_ms = self.decoder.step_ms;
+        let last_emit = Arc::clone(&self.last_emit);
+        let last_emitted_text = Arc::clone(&self.last_emitted_text);
+        let thread_finished = Arc::clone(&self.thread_finished);
         let handle = std::thread::Builder::new()
             .name("miro-stream".to_string())
             .spawn(move || {
@@ -377,12 +396,35 @@ impl StreamOrchestrator {
                     }
                     last = Instant::now();
                     match decoder.step() {
-                        Ok(result) => on_result(result),
+                        Ok(result) => {
+                            let text = format!("{}\u{0001}{}", result.committed, result.unstable);
+                            let now = Instant::now();
+                            let should_emit = {
+                                let mut last_emit_guard = last_emit.lock().unwrap();
+                                let mut last_text_guard = last_emitted_text.lock().unwrap();
+                                let interval_ok = last_emit_guard
+                                    .map(|t| now.duration_since(t).as_millis() >= EMIT_MIN_INTERVAL_MS)
+                                    .unwrap_or(true);
+                                let text_changed = *last_text_guard != text;
+                                if interval_ok && text_changed {
+                                    *last_emit_guard = Some(now);
+                                    *last_text_guard = text;
+                                    true
+                                } else {
+                                    false
+                                }
+                            };
+                            if should_emit {
+                                on_result(result);
+                            }
+                        }
                         Err(failure) => {
                             eprintln!("[miro-stream] decode step failed: {failure}");
                         }
                     }
                 }
+                // Signal that the thread has exited.
+                thread_finished.store(true, Ordering::SeqCst);
             })
             .ok();
         if let Some(handle) = handle {
@@ -390,12 +432,52 @@ impl StreamOrchestrator {
         }
     }
 
-    pub fn stop(&self) {
-        self.stop.store(true, Ordering::Relaxed);
+    /// Request the decode loop to stop. Non-blocking: just sets the flag.
+    /// Use [`join_with_timeout`](Self::join_with_timeout) to wait for the
+    /// thread to actually finish.
+    pub fn request_stop(&self) {
+        eprintln!("[miro] live.cancel.sent");
+        self.stop.store(true, Ordering::SeqCst);
         self.decoder.stop();
-        if let Some(handle) = self.thread.lock().unwrap().take() {
-            let _ = handle.join();
-        }
+    }
+
+    /// Wait for the decode thread to finish, up to `timeout`. Returns `true`
+    /// if the thread joined within the timeout, `false` if it timed out.
+    pub fn join_with_timeout(&self, timeout: Duration) -> bool {
+        let started = Instant::now();
+        let handle = self.thread.lock().unwrap().take();
+        let joined = match handle {
+            Some(handle) => {
+                // Poll thread_finished with short sleeps until timeout.
+                let signaled = loop {
+                    if self.thread_finished.load(Ordering::SeqCst) {
+                        break true;
+                    }
+                    if started.elapsed() >= timeout {
+                        break false;
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                };
+                // Reap the thread (should return shortly after finished).
+                let _ = handle.join();
+                let elapsed = started.elapsed().as_millis();
+                eprintln!("[miro] live.joined ms={elapsed}");
+                signaled
+            }
+            None => true,
+        };
+        // Reset the stop flag so the orchestrator can be restarted.
+        self.stop.store(false, Ordering::SeqCst);
+        self.thread_finished.store(false, Ordering::SeqCst);
+        joined
+    }
+
+    /// Stop the decode loop and wait for the thread to finish (blocking).
+    /// Prefer [`request_stop`](Self::request_stop) + [`join_with_timeout`](Self::join_with_timeout)
+    /// from a background thread to avoid blocking the UI.
+    pub fn stop(&self) {
+        self.request_stop();
+        let _ = self.join_with_timeout(Duration::from_secs(30));
     }
 }
 

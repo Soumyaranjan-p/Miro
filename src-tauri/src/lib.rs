@@ -80,6 +80,25 @@ impl HttpClient {
 }
 
 pub fn run() {
+    // Panic hook that logs the panic location before the default hook runs.
+    std::panic::set_hook(Box::new(|info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".to_string());
+        eprintln!("[miro] panic at {location}");
+        let payload = match info.payload().downcast_ref::<&'static str>() {
+            Some(s) => *s,
+            None => info
+                .payload()
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .unwrap_or("unknown"),
+        };
+        eprintln!("[miro] panic payload: {payload}");
+        std::panic::take_hook()(info);
+    }));
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             windows::show_settings(app);

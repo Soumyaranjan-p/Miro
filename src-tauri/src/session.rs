@@ -12,6 +12,7 @@
 //! either. The webview only ever receives [`OverlayState`], which cannot carry
 //! a transcript.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -72,6 +73,8 @@ pub struct Session {
     inner: Mutex<Inner>,
     engine: Mutex<Option<Arc<Engine>>>,
     stream: Mutex<Option<Arc<StreamOrchestrator>>>,
+    /// Set when stop() has been called; makes stop idempotent.
+    stopping: AtomicBool,
 }
 
 fn lock<'a, T>(mutex: &'a Mutex<T>) -> std::sync::MutexGuard<'a, T> {
@@ -139,6 +142,9 @@ impl Session {
             // Claim the slot before doing anything slow, so a double hotkey
             // press cannot start two recordings.
             inner.phase = Phase::Recording;
+            // A new recording starts fresh: reset the stopping flag so a
+            // previous failed stop() call doesn't block this one.
+            self.stopping.store(false, Ordering::SeqCst);
         }
 
         let target = match Target::capture_foreground() {
@@ -250,19 +256,26 @@ impl Session {
             .ok();
     }
 
-    /// Asks the running capture to stop; the supervisor does the rest.
+    /// Asks the running capture to stop. Non-blocking: sets the stop flag and
+    /// returns immediately. The heavy work (joining the live decode thread,
+    /// final decode, insertion) happens on the supervisor thread in
+    /// [`finish_recording`](Self::finish_recording).
+    ///
+    /// Idempotent: a second call while stopping returns immediately.
     pub fn stop(&self) -> Result<()> {
-        eprintln!("[DEBUG] Session::stop() called");
+        eprintln!("[miro] stop.begin");
+        // Idempotent: if already stopping, return immediately.
+        if self.stopping.swap(true, Ordering::SeqCst) {
+            eprintln!("[miro] stop.already_stopping");
+            return Ok(());
+        }
         let inner = lock(&self.inner);
         match inner.recording.as_ref() {
             Some(recording) if !recording.control.is_stopping() => {
                 recording.control.stop();
                 drop(inner);
-                // Stop the live decode loop so the final decode runs in
-                // finish_recording without competing for the engine.
-                if let Some(orchestrator) = lock(&self.stream).take() {
-                    orchestrator.stop();
-                }
+                // Do NOT join the orchestrator here — that blocks the UI
+                // thread. The supervisor thread handles it in finish_recording.
                 Ok(())
             }
             Some(_) => Ok(()),
@@ -281,8 +294,10 @@ impl Session {
             recording.control.cancel();
         }
 
+        // Stop the live decode loop non-blocking; the thread will exit on its
+        // next step iteration. No join here — we don't block on background work.
         if let Some(orchestrator) = stream {
-            orchestrator.stop();
+            orchestrator.request_stop();
         }
 
         if had_recording || stage != Phase::Idle {
@@ -462,14 +477,17 @@ impl Session {
                     samples: samples.len(),
                     ms: duration_ms,
                 });
-                let stream_decoder = {
+                let (stream_decoder, orchestrator) = {
                     let mut inner = lock(&self.inner);
                     inner.phase = Phase::Processing;
-                    // Stop the live decode loop and release the orchestrator.
-                    if let Some(orchestrator) = lock(&self.stream).take() {
-                        orchestrator.stop();
+                    // Stop the live decode loop non-blocking; join with
+                    // timeout on the supervisor thread below.
+                    let orchestrator = lock(&self.stream).take();
+                    if let Some(orchestrator) = &orchestrator {
+                        orchestrator.request_stop();
                     }
-                    inner.recording.take().and_then(|r| r.stream_decoder)
+                    let decoder = inner.recording.take().and_then(|r| r.stream_decoder);
+                    (decoder, orchestrator)
                 };
                 let _ = device_label;
                 // Hide the Recording overlay immediately to allow focus to return to target
@@ -477,12 +495,13 @@ impl Session {
                 // Give Windows time to stabilize focus to the target window
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
-                if let Some(decoder) = stream_decoder {
+                if let (Some(decoder), Some(orchestrator)) = (stream_decoder, orchestrator) {
                     let settings = state::state(app).settings();
                     if let Err(failure) = self.handle_live_finish(
                         app,
                         &settings,
                         decoder,
+                        orchestrator,
                         samples,
                         duration_ms,
                         target,
@@ -508,17 +527,26 @@ impl Session {
         }
     }
 
-    /// Handles the end of a live dictation: finalize the stream decoder and
-    /// insert the committed text.
+    /// Handles the end of a live dictation: joins the live decode thread with
+    /// a timeout, runs the final decode, and inserts the committed text.
     fn handle_live_finish(
         &self,
         app: &AppHandle,
         settings: &Settings,
         decoder: Arc<StreamDecoder>,
+        orchestrator: Arc<StreamOrchestrator>,
         samples: Vec<f32>,
         duration_ms: u128,
         target: Target,
     ) -> Result<()> {
+        // Join the live decode thread with a timeout so stop() never blocks
+        // indefinitely. Runs on the supervisor thread, not the UI thread.
+        eprintln!("[miro] transcribe.begin");
+        let joined = orchestrator.join_with_timeout(Duration::from_millis(2000));
+        if !joined {
+            eprintln!("[miro] live.join.timed_out");
+        }
+
         // Final decode of the remaining audio to commit any trailing words.
         let final_text = decoder.finalize()?;
         // The recorded audio is no longer needed.
@@ -533,6 +561,7 @@ impl Session {
         if processed.trim().is_empty() {
             self.reset(app);
             self.fail(app, Failure::TranscriptEmpty, None);
+            eprintln!("[miro] stop.end");
             return Ok(());
         }
 
@@ -570,6 +599,7 @@ impl Session {
                 self.schedule_hide(app.clone());
                 crate::stats::record_dictation(app, words, u64::try_from(duration_ms).unwrap_or(0));
                 self.schedule_retry_expiry(app.clone(), retry_id, SUCCESS_WINDOW);
+                eprintln!("[miro] stop.end");
                 Ok(())
             }
             Err(failure) => {
@@ -592,6 +622,7 @@ impl Session {
                         retry_id: retryable.then_some(retry_id),
                     },
                 );
+                eprintln!("[miro] stop.end");
                 Ok(())
             }
         }
@@ -1230,6 +1261,39 @@ mod tests {
     fn stopping_without_a_recording_is_an_error_not_a_panic() {
         let session = Session::default();
         assert!(session.stop().is_err());
+    }
+
+    /// Stop must be idempotent: a second call while stopping returns
+    /// immediately without hanging. This guards against the UI freeze where
+    /// Stop button plus Ctrl+M both call stop() concurrently.
+    #[test]
+    fn stop_is_idempotent_and_returns_quickly() {
+        use std::time::Instant;
+        let session = Session::default();
+
+        // First call: no recording, returns error, sets stopping flag.
+        let t0 = Instant::now();
+        let first = session.stop();
+        let first_elapsed = t0.elapsed();
+        assert!(first.is_err());
+
+        // Second call: stopping flag is set, returns Ok immediately.
+        let t0 = Instant::now();
+        let second = session.stop();
+        let second_elapsed = t0.elapsed();
+        assert!(second.is_ok());
+
+        // Both calls must complete well within a few seconds (no hang).
+        assert!(
+            first_elapsed < Duration::from_secs(5),
+            "first stop took {:?}",
+            first_elapsed
+        );
+        assert!(
+            second_elapsed < Duration::from_secs(5),
+            "second stop took {:?}",
+            second_elapsed
+        );
     }
 
     #[test]
