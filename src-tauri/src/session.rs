@@ -544,86 +544,158 @@ impl Session {
         eprintln!("[miro] transcribe.begin");
         let joined = orchestrator.join_with_timeout(Duration::from_millis(2000));
         if !joined {
-            eprintln!("[miro] live.join.timed_out");
-        }
-
-        // Final decode of the remaining audio to commit any trailing words.
-        let final_text = decoder.finalize()?;
-        // The recorded audio is no longer needed.
-        audio::discard(samples);
-
-        let mut processed = textproc::process(&final_text, &settings.cleanup);
-        logging::event(Event::TranscriptProcessed {
-            characters: processed.chars().count(),
-            words: processed.split_whitespace().count(),
-        });
-
-        if processed.trim().is_empty() {
-            self.reset(app);
-            self.fail(app, Failure::TranscriptEmpty, None);
-            eprintln!("[miro] stop.end");
-            return Ok(());
-        }
-
-        let words = processed.split_whitespace().count() as u32;
-        let characters = processed.chars().count();
-
-        let retry_id = {
-            let mut inner = lock(&self.inner);
-            inner.next_retry_id += 1;
-            let id = inner.next_retry_id;
-            inner.pending.store(processed.clone(), id);
-            id
-        };
-
-        let outcome = insertion::insert(&processed, target);
-        privacy::zeroize_string(&mut processed);
-
-        match outcome {
-            Ok(result) => {
-                let _ = result;
-                logging::event(Event::InsertionFinished {
-                    ok: true,
-                    code: "ok",
-                    characters,
-                });
+            // The live decode thread is still running: do NOT call
+            // decoder.finalize() (it shares the Whisper context with the live
+            // thread). Commit only what we already have and drop the audio.
+            eprintln!("[miro] live.join.timed_out; committing text so far");
+            let committed = decoder.committed();
+            audio::discard(samples);
+            let mut processed = textproc::process(&committed, &settings.cleanup);
+            logging::event(Event::TranscriptProcessed {
+                characters: processed.chars().count(),
+                words: processed.split_whitespace().count(),
+            });
+            if processed.trim().is_empty() {
                 self.reset(app);
-                emit_overlay(
-                    app,
-                    OverlayState::Inserted {
-                        characters,
-                        audio_ms: duration_ms,
-                        retry_id: Some(retry_id),
-                    },
-                );
-                self.schedule_hide(app.clone());
-                crate::stats::record_dictation(app, words, u64::try_from(duration_ms).unwrap_or(0));
-                self.schedule_retry_expiry(app.clone(), retry_id, SUCCESS_WINDOW);
+                self.fail(app, Failure::TranscriptEmpty, None);
                 eprintln!("[miro] stop.end");
-                Ok(())
+                return Ok(());
             }
-            Err(failure) => {
-                logging::event(Event::InsertionFinished {
-                    ok: false,
-                    code: failure.code().as_str(),
-                    characters: 0,
-                });
+            let words = processed.split_whitespace().count() as u32;
+            let characters = processed.chars().count();
+            let retry_id = {
+                let mut inner = lock(&self.inner);
+                inner.next_retry_id += 1;
+                let id = inner.next_retry_id;
+                inner.pending.store(processed.clone(), id);
+                id
+            };
+            let outcome = insertion::insert(&processed, target);
+            privacy::zeroize_string(&mut processed);
+            match outcome {
+                Ok(_result) => {
+                    logging::event(Event::InsertionFinished {
+                        ok: true,
+                        code: "ok",
+                        characters,
+                    });
+                    self.reset(app);
+                    emit_overlay(
+                        app,
+                        OverlayState::Inserted {
+                            characters,
+                            audio_ms: duration_ms,
+                            retry_id: Some(retry_id),
+                        },
+                    );
+                    self.schedule_hide(app.clone());
+                    crate::stats::record_dictation(app, words, u64::try_from(duration_ms).unwrap_or(0));
+                    self.schedule_retry_expiry(app.clone(), retry_id, SUCCESS_WINDOW);
+                    eprintln!("[miro] stop.end");
+                    Ok(())
+                }
+                Err(failure) => {
+                    logging::event(Event::InsertionFinished {
+                        ok: false,
+                        code: failure.code().as_str(),
+                        characters: 0,
+                    });
+                    self.reset(app);
+                    self.schedule_retry_expiry(app.clone(), retry_id, RETRY_WINDOW);
+                    let code = failure.code();
+                    let detail = failure.detail();
+                    let retryable = failure.retryable();
+                    emit_overlay(
+                        app,
+                        OverlayState::Error {
+                            code,
+                            detail,
+                            retryable,
+                            retry_id: retryable.then_some(retry_id),
+                        },
+                    );
+                    eprintln!("[miro] stop.end");
+                    Ok(())
+                }
+            }
+        } else {
+            // Live thread has exited: safe to run the final decode.
+            let final_text = decoder.finalize()?;
+            // The recorded audio is no longer needed.
+            audio::discard(samples);
+
+            let mut processed = textproc::process(&final_text, &settings.cleanup);
+            logging::event(Event::TranscriptProcessed {
+                characters: processed.chars().count(),
+                words: processed.split_whitespace().count(),
+            });
+
+            if processed.trim().is_empty() {
                 self.reset(app);
-                self.schedule_retry_expiry(app.clone(), retry_id, RETRY_WINDOW);
-                let code = failure.code();
-                let detail = failure.detail();
-                let retryable = failure.retryable();
-                emit_overlay(
-                    app,
-                    OverlayState::Error {
-                        code,
-                        detail,
-                        retryable,
-                        retry_id: retryable.then_some(retry_id),
-                    },
-                );
+                self.fail(app, Failure::TranscriptEmpty, None);
                 eprintln!("[miro] stop.end");
-                Ok(())
+                return Ok(());
+            }
+
+            let words = processed.split_whitespace().count() as u32;
+            let characters = processed.chars().count();
+
+            let retry_id = {
+                let mut inner = lock(&self.inner);
+                inner.next_retry_id += 1;
+                let id = inner.next_retry_id;
+                inner.pending.store(processed.clone(), id);
+                id
+            };
+
+            let outcome = insertion::insert(&processed, target);
+            privacy::zeroize_string(&mut processed);
+
+            match outcome {
+                Ok(_result) => {
+                    logging::event(Event::InsertionFinished {
+                        ok: true,
+                        code: "ok",
+                        characters,
+                    });
+                    self.reset(app);
+                    emit_overlay(
+                        app,
+                        OverlayState::Inserted {
+                            characters,
+                            audio_ms: duration_ms,
+                            retry_id: Some(retry_id),
+                        },
+                    );
+                    self.schedule_hide(app.clone());
+                    crate::stats::record_dictation(app, words, u64::try_from(duration_ms).unwrap_or(0));
+                    self.schedule_retry_expiry(app.clone(), retry_id, SUCCESS_WINDOW);
+                    eprintln!("[miro] stop.end");
+                    Ok(())
+                }
+                Err(failure) => {
+                    logging::event(Event::InsertionFinished {
+                        ok: false,
+                        code: failure.code().as_str(),
+                        characters: 0,
+                    });
+                    self.reset(app);
+                    self.schedule_retry_expiry(app.clone(), retry_id, RETRY_WINDOW);
+                    let code = failure.code();
+                    let detail = failure.detail();
+                    let retryable = failure.retryable();
+                    emit_overlay(
+                        app,
+                        OverlayState::Error {
+                            code,
+                            detail,
+                            retryable,
+                            retry_id: retryable.then_some(retry_id),
+                        },
+                    );
+                    eprintln!("[miro] stop.end");
+                    Ok(())
+                }
             }
         }
     }
@@ -921,6 +993,8 @@ impl Session {
         let mut inner = lock(&self.inner);
         inner.phase = Phase::Idle;
         inner.recording = None;
+        // Clear the stopping flag so the next recording's stop() actually runs.
+        self.stopping.store(false, Ordering::SeqCst);
     }
 
     fn fail(&self, app: &AppHandle, failure: Failure, retry_id: Option<u64>) {

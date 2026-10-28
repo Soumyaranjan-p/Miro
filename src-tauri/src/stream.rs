@@ -443,6 +443,10 @@ impl StreamOrchestrator {
 
     /// Wait for the decode thread to finish, up to `timeout`. Returns `true`
     /// if the thread joined within the timeout, `false` if it timed out.
+    ///
+    /// On timeout the thread is left running (its JoinHandle is dropped) so
+    /// this method never blocks indefinitely. The caller must NOT use the
+    /// decoder while the thread may still be alive.
     pub fn join_with_timeout(&self, timeout: Duration) -> bool {
         let started = Instant::now();
         let handle = self.thread.lock().unwrap().take();
@@ -458,11 +462,19 @@ impl StreamOrchestrator {
                     }
                     std::thread::sleep(Duration::from_millis(50));
                 };
-                // Reap the thread (should return shortly after finished).
-                let _ = handle.join();
-                let elapsed = started.elapsed().as_millis();
-                eprintln!("[miro] live.joined ms={elapsed}");
-                signaled
+                if signaled {
+                    // Thread already exited; reap it immediately.
+                    let _ = handle.join();
+                    let elapsed = started.elapsed().as_millis();
+                    eprintln!("[miro] live.joined ms={elapsed}");
+                    true
+                } else {
+                    // Timed out: do NOT call handle.join() (that blocks).
+                    // Drop the JoinHandle to detach the thread; it will finish
+                    // on its own. The caller must not use the decoder.
+                    eprintln!("[miro] live.join.timed_out (thread detached)");
+                    false
+                }
             }
             None => true,
         };
