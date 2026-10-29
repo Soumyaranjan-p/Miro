@@ -85,6 +85,8 @@ const STOP_DRAIN_MS: u128 = 80;
 struct VoiceLevelMeter {
     floor_db: Option<f32>,
     peak_db: f32,
+    /// Last emitted level, used for attack/release smoothing across calls.
+    level: f32,
 }
 
 impl VoiceLevelMeter {
@@ -92,6 +94,7 @@ impl VoiceLevelMeter {
         Self {
             floor_db: None,
             peak_db: -60.0,
+            level: 0.0,
         }
     }
 
@@ -131,23 +134,15 @@ impl VoiceLevelMeter {
             self.floor_db = Some(floor);
         }
 
-        let rate = if target > self.level() {
+        let rate = if target > self.level {
             ATTACK
         } else {
             RELEASE
         };
-        let current = self.level();
+        let current = self.level;
         let next = current + (target - current) * (1.0 - f32::powf(1.0 - rate, ticks));
-        self.set_level(next);
+        self.level = next;
         next
-    }
-
-    fn level(&self) -> f32 {
-        0.0
-    }
-
-    fn set_level(&mut self, _v: f32) {
-        // level is returned from update(); keep the struct simple.
     }
 }
 
@@ -516,7 +511,7 @@ fn open_stream(
                     // actual audio delivery, not just stream open.
                     shared
                         .first_callback
-                        .store(true, std::sync::atomic::Ordering::Relaxed);
+                        .store(true, std::sync::atomic::Ordering::Release);
                     // One line only: what the device actually delivers first,
                     // so a broken config shows instead of silently emptying.
                     eprintln!(
@@ -701,12 +696,6 @@ fn run_capture(
         return CaptureOutcome::Failed(failure);
     }
 
-    if let Err(err) = stream.play() {
-        let failure = map_cpal_error(&err);
-        let _ = ready.send(Err(clone_failure(&failure)));
-        return CaptureOutcome::Failed(failure);
-    }
-
     // Wait for the first callback before reporting readiness. Silence counts:
     // the callback fires even when the mic is silent, so this confirms the
     // device is actually delivering audio rather than having opened silently.
@@ -714,7 +703,7 @@ fn run_capture(
     let first_callback_deadline = Instant::now() + Duration::from_secs(5);
     loop {
         thread::sleep(Duration::from_millis(20));
-        if shared.first_callback.load(std::sync::atomic::Ordering::Relaxed) {
+        if shared.first_callback.load(std::sync::atomic::Ordering::Acquire) {
             let _ = ready.send(Ok(()));
             break;
         }
@@ -883,16 +872,10 @@ fn run_capture(
     // mic must not be boosted into something whisper will hallucinate words
     // from. The raw (resampled, un-normalized) level is the honest measure.
     if has_no_speech(&resampled, duration_ms) {
-        let loud = loud_windows(&resampled);
-        // A clip with loud windows but too few of them means speech was
-        // captured but the gesture was cut short. A clip with no loud
-        // window at all means the device gave near-zero audio - the wrong
-        // mic, a disabled device or a denied Windows microphone - and no
-        // amount of talking helps until that is fixed. The device name is
-        // surfaced so the user can see what was actually listened to.
+        let nfloor = noise_floor(&resampled);
+        let gate = f32::max(SILENCE_RMS, nfloor * SPEECH_OVER_NOISE);
+        let loud = loud_windows_at(&resampled, gate);
         if loud > 0 {
-            let gate = speech_gate(&resampled);
-            let nfloor = noise_floor(&resampled);
             eprintln!(
                 "[miro-audio] audio_empty: {} samples, {duration_ms} ms, peak {:.4}, loud windows {} of {} \
                  (need {}, gate {:.5} = max(fixed {SILENCE_RMS}, noise_floor {nfloor:.5} x {SPEECH_OVER_NOISE})) \
