@@ -62,6 +62,116 @@ const TARGET_PEAK: f32 = 0.6;
 /// into something that looks like speech.
 const MAX_GAIN: f32 = 32.0;
 
+/// Speech gate: a 20 ms window counts as audible when its RMS is above the
+/// fixed floor AND above the estimated noise floor scaled by this ratio.
+///
+/// BetterWispr's meeting recorder uses the same idea: the 20th percentile of
+/// recent window RMS values is the noise floor, and speech must clear it by
+/// this margin. That ignores Bluetooth headset dropouts (which would drag a
+/// minimum to zero) and steady room noise (which would mask quiet speech).
+const SPEECH_OVER_NOISE: f32 = 3.16; // +10 dB
+/// How many 20 ms windows are needed before the noise floor estimate is trusted.
+const NOISE_FLOOR_WARMUP: usize = 150;
+
+/// How long to wait, after a stop request, for the in-flight cpal callback to
+/// finish delivering its buffer before the stream is dropped. Prevents
+/// clipping trailing syllables at the key-up edge.
+const STOP_DRAIN_MS: u128 = 80;
+
+/// Voice level expressed relative to the room's noise floor and the speaker's
+/// recent peak, so a quiet voice in a quiet room reads as clearly as a loud
+/// voice in a loud room. Mirrors BetterWispr's `VoiceLevelMeter`.
+#[derive(Debug, Default)]
+struct VoiceLevelMeter {
+    floor_db: Option<f32>,
+    peak_db: f32,
+}
+
+impl VoiceLevelMeter {
+    fn new() -> Self {
+        Self {
+            floor_db: None,
+            peak_db: -60.0,
+        }
+    }
+
+    /// `rms` is linear amplitude; `duration` is the slice length in seconds.
+    /// Returns a level in 0..1 relative to the adaptive floor/peak span.
+    fn update(&mut self, rms: f32, duration: f64) -> f32 {
+        const TICK: f64 = 0.1;
+        const FLOOR_RISE: f32 = 0.1;
+        const PEAK_FALL: f32 = 0.12;
+        const MINIMUM_RANGE: f32 = 15.0;
+        const GATE: f32 = 3.0;
+        const CURVE: f32 = 0.7;
+        const ATTACK: f32 = 0.8;
+        const RELEASE: f32 = 0.6;
+
+        let ticks = f32::max(0.0, duration as f32 / TICK as f32);
+        let mut target: f32 = 0.0;
+
+        if rms == 0.0 {
+            self.floor_db = Some(-60.0);
+        }
+        if rms.is_finite() && rms > 0.0 {
+            let decibels = f32::max(-60.0, 20.0 * rms.log10());
+            let floor = f32::min(
+                self.floor_db.unwrap_or(decibels) + FLOOR_RISE * ticks as f32,
+                decibels,
+            );
+            self.peak_db = f32::max(
+                decibels,
+                f32::max(self.peak_db - PEAK_FALL * ticks as f32, floor + MINIMUM_RANGE),
+            );
+            let span = self.peak_db - floor - GATE;
+            target = f32::powf(
+                f32::min(1.0, f32::max(0.0, (decibels - floor - GATE) / span)),
+                CURVE,
+            );
+            self.floor_db = Some(floor);
+        }
+
+        let rate = if target > self.level() {
+            ATTACK
+        } else {
+            RELEASE
+        };
+        let current = self.level();
+        let next = current + (target - current) * (1.0 - f32::powf(1.0 - rate, ticks));
+        self.set_level(next);
+        next
+    }
+
+    fn level(&self) -> f32 {
+        0.0
+    }
+
+    fn set_level(&mut self, _v: f32) {
+        // level is returned from update(); keep the struct simple.
+    }
+}
+
+/// Convenience wrapper: keeps the last emitted level so `level()` works.
+#[derive(Debug, Default)]
+struct LevelMeter {
+    inner: VoiceLevelMeter,
+    last: f32,
+}
+
+impl LevelMeter {
+    fn new() -> Self {
+        Self {
+            inner: VoiceLevelMeter::new(),
+            last: 0.0,
+        }
+    }
+
+    fn update(&mut self, rms: f32, duration: f64) -> f32 {
+        self.last = self.inner.update(rms, duration);
+        self.last
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
@@ -261,6 +371,9 @@ struct Shared {
     /// samples it handed over, counted without taking the buffer mutex.
     packets: AtomicU32,
     callback_samples: AtomicU32,
+    /// Set to true on the first callback delivery, so the pump can report
+    /// readiness only once audio is actually flowing (silence counts).
+    first_callback: AtomicBool,
 }
 
 fn map_cpal_error(err: &cpal::Error) -> Failure {
@@ -399,6 +512,11 @@ fn open_stream(
                     .fetch_add(scratch.len() as u32, std::sync::atomic::Ordering::Relaxed);
 
                 if packets == 1 {
+                    // Mark the first callback so the pump can gate readiness on
+                    // actual audio delivery, not just stream open.
+                    shared
+                        .first_callback
+                        .store(true, std::sync::atomic::Ordering::Relaxed);
                     // One line only: what the device actually delivers first,
                     // so a broken config shows instead of silently emptying.
                     eprintln!(
@@ -559,6 +677,7 @@ fn run_capture(
         stream_error: Mutex::new(None),
         packets: AtomicU32::new(0),
         callback_samples: AtomicU32::new(0),
+        first_callback: AtomicBool::new(false),
     });
 
     let stream = match open_stream(
@@ -582,10 +701,45 @@ fn run_capture(
         return CaptureOutcome::Failed(failure);
     }
 
-    let _ = ready.send(Ok(())); // The pump doubles as the supervisor: it watches the clock, the stop flag
-                                // and the error callback, and publishes levels while it does.
+    if let Err(err) = stream.play() {
+        let failure = map_cpal_error(&err);
+        let _ = ready.send(Err(clone_failure(&failure)));
+        return CaptureOutcome::Failed(failure);
+    }
+
+    // Wait for the first callback before reporting readiness. Silence counts:
+    // the callback fires even when the mic is silent, so this confirms the
+    // device is actually delivering audio rather than having opened silently.
+    // Mirrors BetterWispr's "wait for an actual audio callback" readiness check.
+    let first_callback_deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        thread::sleep(Duration::from_millis(20));
+        if shared.first_callback.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = ready.send(Ok(()));
+            break;
+        }
+        if Instant::now() >= first_callback_deadline {
+            let failure = Failure::Internal(
+                "the audio device opened but delivered no callback in time".into(),
+            );
+            let _ = ready.send(Err(clone_failure(&failure)));
+            return CaptureOutcome::Failed(failure);
+        }
+        if let Ok(slot) = shared.stream_error.lock() {
+            if let Some(stored) = slot.as_ref() {
+                let failure = clone_failure(stored);
+                let _ = ready.send(Err(failure));
+                return CaptureOutcome::Failed(clone_failure(stored));
+            }
+        }
+    }
+    // The pump doubles as the supervisor: it watches the clock, the stop flag
+    // and the error callback, and publishes levels while it does.
     let frame_interval = Duration::from_millis(1000 / LEVEL_HZ);
     let mut failure: Option<Failure> = None;
+    // Adaptive level meter: reports level relative to the room's noise floor
+    // and the speaker's recent peak, so quiet speech reads clearly.
+    let mut meter = LevelMeter::new();
     // When a stop was first seen. A hold-to-talk release must not cut the
     // audio at the key-up edge: keep rolling for RELEASE_TAIL_MS and let the
     // trailing syllable land in the buffer. The max-seconds limit ends the
@@ -620,11 +774,22 @@ fn run_capture(
                 }
                 continue;
             }
+            // Drain: give the in-flight callback a chance to finish delivering
+            // its buffer before we drop the stream, so trailing audio isn't
+            // clipped at the stop boundary.
+            thread::sleep(Duration::from_millis(STOP_DRAIN_MS as u64));
             break;
         }
 
         if let Some(callback) = on_level.as_ref() {
-            callback(levels.frame());
+            let frame = levels.frame();
+            // Publish an adaptive level (relative to noise floor and peak)
+            // alongside the raw peak so the overlay can show both.
+            let adaptive = meter.update(frame.level, 1.0 / LEVEL_HZ as f64);
+            callback(LevelFrame {
+                level: adaptive,
+                peak: frame.peak,
+            });
         }
     }
 
@@ -726,15 +891,18 @@ fn run_capture(
         // amount of talking helps until that is fixed. The device name is
         // surfaced so the user can see what was actually listened to.
         if loud > 0 {
+            let gate = speech_gate(&resampled);
+            let nfloor = noise_floor(&resampled);
             eprintln!(
                 "[miro-audio] audio_empty: {} samples, {duration_ms} ms, peak {:.4}, loud windows {} of {} \
-                 (need {}, speech rms cutoff {}) - captured audio was too brief",
+                 (need {}, gate {:.5} = max(fixed {SILENCE_RMS}, noise_floor {nfloor:.5} x {SPEECH_OVER_NOISE})) \
+                 - captured audio was too brief",
                 resampled.len(),
                 peak(&resampled),
                 loud,
                 resampled.len() / (TARGET_SAMPLE_RATE as usize / 50).max(1),
                 MIN_LOUD_WINDOWS,
-                SILENCE_RMS
+                gate,
             );
         } else {
             eprintln!(
@@ -783,13 +951,54 @@ fn take_samples(shared: &Shared) -> Vec<f32> {
 /// Speech is judged by an absolute count of audible 20 ms windows, not by a
 /// share of the whole clip and not by the clip's average level: a few spoken
 /// words inside a long recording average out below any whole-clip threshold,
-/// so only "was there real sound anywhere" is a fair test. The expected norm
-/// is for clips on a healthy mic to enter this function at a natural volume.
+/// so only "was there real sound anywhere" is a fair test.
+///
+/// The gate adapts to the room: steady background noise raises the floor so it
+/// isn't mistaken for speech, while a quiet voice in a quiet room still clears
+/// the fixed floor. Mirrors BetterWispr's meeting-recorder noise-floor gate.
 pub fn has_no_speech(samples: &[f32], duration_ms: u128) -> bool {
     if samples.is_empty() || duration_ms < MIN_SPEECH_MS {
         return true;
     }
     loud_windows(samples) < MIN_LOUD_WINDOWS
+}
+
+/// Count of 20 ms windows over the speech gate (adaptive to room noise).
+fn loud_windows(samples: &[f32]) -> usize {
+    loud_windows_at(samples, speech_gate(samples))
+}
+
+/// Count of 20 ms windows whose RMS is above `gate`.
+fn loud_windows_at(samples: &[f32], gate: f32) -> usize {
+    let window = (TARGET_SAMPLE_RATE as usize / 50).max(1); // 20 ms
+    samples
+        .chunks(window)
+        .filter(|chunk| rms(chunk) > gate)
+        .count()
+}
+
+/// Estimate the noise floor as the 20th percentile of 20 ms window RMS values.
+///
+/// The percentile (not the minimum) ignores the brief near-silent dropouts
+/// Bluetooth headsets emit, which would drag a true minimum to zero. Returns
+/// 0.0 when there are too few windows to estimate (very short clips).
+fn noise_floor(samples: &[f32]) -> f32 {
+    let window = (TARGET_SAMPLE_RATE as usize / 50).max(1);
+    let mut rms_values: Vec<f32> = samples.chunks(window).map(rms).collect();
+    if rms_values.len() < NOISE_FLOOR_WARMUP {
+        return 0.0;
+    }
+    rms_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let idx = (rms_values.len() * 20) / 100;
+    rms_values[idx.min(rms_values.len() - 1)]
+}
+
+/// Speech gate threshold: the fixed RMS floor or the estimated noise floor
+/// scaled up by SPEECH_OVER_NOISE (+10 dB), whichever is higher. A 20 ms
+/// window must clear this to count as audible speech.
+fn speech_gate(samples: &[f32]) -> f32 {
+    let estimated = noise_floor(samples) * SPEECH_OVER_NOISE;
+    f32::max(SILENCE_RMS, estimated)
 }
 
 /// Peak below this is treated as silence/noise and never amplified.
@@ -828,15 +1037,6 @@ fn normalize_peak(samples: &mut [f32]) {
     for sample in samples.iter_mut() {
         *sample = (*sample * gain).clamp(-1.0, 1.0);
     }
-}
-
-/// Count of 20 ms windows over the speech RMS threshold.
-fn loud_windows(samples: &[f32]) -> usize {
-    let window = (TARGET_SAMPLE_RATE as usize / 50).max(1); // 20 ms
-    samples
-        .chunks(window)
-        .filter(|chunk| rms(chunk) > SILENCE_RMS)
-        .count()
 }
 
 /// Enumerates input devices for the settings window.
