@@ -52,7 +52,7 @@ const MIN_LOUD_WINDOWS: usize = 2;
 /// After the hold-to-talk key goes up, the recorder keeps rolling for this
 /// long so trailing syllables ("...spea-k") are never clipped off. The
 /// samplerate conversion flush keeps its own tail; this is the extra room.
-const RELEASE_TAIL_MS: u128 = 300;
+const RELEASE_TAIL_MS: u128 = 1000;
 /// How long the audio thread may take to wrap up (downmix, resample, checks)
 /// once a stop was asked for, before the supervisor declares it hung.
 const STOP_GRACE: Duration = Duration::from_secs(30);
@@ -76,7 +76,7 @@ const NOISE_FLOOR_WARMUP: usize = 150;
 /// How long to wait, after a stop request, for the in-flight cpal callback to
 /// finish delivering its buffer before the stream is dropped. Prevents
 /// clipping trailing syllables at the key-up edge.
-const STOP_DRAIN_MS: u128 = 80;
+const STOP_DRAIN_MS: u128 = 200;
 
 /// How long to wait for a disconnected microphone to reconnect before giving up
 /// and failing the capture with `MicDisconnected`.
@@ -130,7 +130,10 @@ impl VoiceLevelMeter {
             );
             self.peak_db = f32::max(
                 decibels,
-                f32::max(self.peak_db - PEAK_FALL * ticks as f32, floor + MINIMUM_RANGE),
+                f32::max(
+                    self.peak_db - PEAK_FALL * ticks as f32,
+                    floor + MINIMUM_RANGE,
+                ),
             );
             let span = self.peak_db - floor - GATE;
             target = f32::powf(
@@ -140,11 +143,7 @@ impl VoiceLevelMeter {
             self.floor_db = Some(floor);
         }
 
-        let rate = if target > self.level {
-            ATTACK
-        } else {
-            RELEASE
-        };
+        let rate = if target > self.level { ATTACK } else { RELEASE };
         let current = self.level;
         let next = current + (target - current) * (1.0 - f32::powf(1.0 - rate, ticks));
         self.level = next;
@@ -281,6 +280,8 @@ pub struct Capture {
     stop: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
     levels: LevelSink,
+    /// Raw samples captured so far, shared with the live transcriber.
+    pub samples: Arc<Mutex<Vec<f32>>>,
     finished: Receiver<CaptureOutcome>,
     thread: Option<thread::JoinHandle<()>>,
     joined: bool,
@@ -291,7 +292,10 @@ impl Capture {
         &self.levels
     }
 
-    /// A handle that can stop this capture without taking ownership of it.
+    /// Raw samples captured so far, for the live transcriber.
+    pub fn samples(&self) -> &Arc<Mutex<Vec<f32>>> {
+        &self.samples
+    }
     pub fn control(&self) -> CaptureControl {
         CaptureControl {
             stop: Arc::clone(&self.stop),
@@ -363,7 +367,9 @@ impl Drop for Capture {
 struct Shared {
     /// Raw interleaved f32 at the device's native rate and channel count.
     /// Converted to mono 16 kHz (the engine's input contract) after stopping.
-    samples: Mutex<Vec<f32>>,
+    /// Wrapped in Arc so the live transcriber can read mid-capture samples
+    /// without taking ownership of Shared.
+    samples: Arc<Mutex<Vec<f32>>>,
     started: Instant,
     limit_ms: u128,
     limit_reached: AtomicBool,
@@ -468,10 +474,7 @@ fn append_as_f32(target: &mut Vec<f32>, format: SampleFormat, data: &Data) {
 /// default input device when `wanted` is `None`. Returns `None` when no
 /// matching device is currently available — used during recovery polling
 /// after a microphone disconnect.
-fn find_input_device(
-    host: &cpal::Host,
-    wanted: Option<&str>,
-) -> Option<(cpal::Device, String)> {
+fn find_input_device(host: &cpal::Host, wanted: Option<&str>) -> Option<(cpal::Device, String)> {
     let mut devices = host.input_devices().ok()?;
     match wanted {
         None => host.default_input_device().map(|d| {
@@ -617,6 +620,8 @@ pub fn start(
     let (tx, finished) = channel::<CaptureOutcome>();
     let (ready_tx, ready_rx) = channel::<std::result::Result<(), Failure>>();
 
+    let samples = Arc::new(Mutex::new(Vec::new()));
+    let samples_clone = Arc::clone(&samples);
     let thread_stop = Arc::clone(&stop);
     let thread_cancel = Arc::clone(&cancel);
     let thread_levels = levels.clone();
@@ -631,6 +636,7 @@ pub fn start(
                 thread_stop,
                 thread_cancel,
                 thread_levels,
+                samples_clone,
                 on_level,
                 &ready_tx,
             );
@@ -643,6 +649,7 @@ pub fn start(
             stop,
             cancel,
             levels,
+            samples,
             finished,
             thread: Some(thread),
             joined: false,
@@ -665,6 +672,7 @@ fn run_capture(
     stop: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
     levels: LevelSink,
+    samples: Arc<Mutex<Vec<f32>>>,
     on_level: Option<Arc<dyn Fn(LevelFrame) + Send + Sync>>,
     ready: &Sender<std::result::Result<(), Failure>>,
 ) -> CaptureOutcome {
@@ -708,9 +716,7 @@ fn run_capture(
         };
 
     let shared = Arc::new(Shared {
-        samples: Mutex::new(Vec::with_capacity(
-            sample_rate as usize * channels as usize * 4,
-        )),
+        samples,
         started: Instant::now(),
         limit_ms: max_seconds as u128 * 1000,
         limit_reached: AtomicBool::new(false),
@@ -734,7 +740,12 @@ fn run_capture(
             }
             match find_input_device(
                 &host,
-                device.id().ok().as_ref().map(|id| id.to_string()).as_deref(),
+                device
+                    .id()
+                    .ok()
+                    .as_ref()
+                    .map(|id| id.to_string())
+                    .as_deref(),
             ) {
                 Some((dev, lbl)) => {
                     device = dev;
@@ -746,7 +757,10 @@ fn run_capture(
                     // Publish silence while the device is gone so the overlay
                     // doesn't show a stale level.
                     if let Some(callback) = on_level.as_ref() {
-                        callback(LevelFrame { level: 0.0, peak: 0.0 });
+                        callback(LevelFrame {
+                            level: 0.0,
+                            peak: 0.0,
+                        });
                     }
                     // Honour cancellation during recovery.
                     if cancel.load(std::sync::atomic::Ordering::SeqCst) {
@@ -822,7 +836,10 @@ fn run_capture(
             let first_callback_deadline = Instant::now() + Duration::from_secs(5);
             'wait: loop {
                 thread::sleep(Duration::from_millis(20));
-                if shared.first_callback.load(std::sync::atomic::Ordering::Acquire) {
+                if shared
+                    .first_callback
+                    .load(std::sync::atomic::Ordering::Acquire)
+                {
                     let _ = ready.send(Ok(()));
                     ready_sent = true;
                     break 'wait;
@@ -840,8 +857,7 @@ fn run_capture(
                         match stored {
                             Failure::MicDisconnected => {
                                 drop(stream.take());
-                                recovery_deadline =
-                                    Some(Instant::now() + MIC_RECOVERY_TIMEOUT);
+                                recovery_deadline = Some(Instant::now() + MIC_RECOVERY_TIMEOUT);
                                 break 'wait;
                             }
                             _ => {
@@ -873,8 +889,7 @@ fn run_capture(
                     match stored {
                         Failure::MicDisconnected => {
                             drop(stream.take());
-                            recovery_deadline =
-                                Some(Instant::now() + MIC_RECOVERY_TIMEOUT);
+                            recovery_deadline = Some(Instant::now() + MIC_RECOVERY_TIMEOUT);
                             eprintln!(
                                 "[miro-audio] device disconnected, waiting for reconnection..."
                             );
@@ -892,8 +907,8 @@ fn run_capture(
                 }
             }
 
-            let limit_reached =
-                mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms;
+            let limit_reached = mode == CaptureMode::Record
+                && shared.started.elapsed().as_millis() >= shared.limit_ms;
             if limit_reached {
                 shared
                     .limit_reached
@@ -1070,6 +1085,22 @@ fn take_samples(shared: &Shared) -> Vec<f32> {
         Ok(mut buffer) => std::mem::take(&mut *buffer),
         Err(poisoned) => std::mem::take(&mut *poisoned.into_inner()),
     }
+}
+
+/// Convert raw interleaved device-format samples to 16 kHz mono f32.
+///
+/// Used by the live transcriber, which reads mid-capture samples from the
+/// shared buffer before downmixing and resampling happen. Returns an empty
+/// vector when there are no samples.
+pub fn to_mono_16k(samples: &[f32], channels: u16, sample_rate: u32) -> Vec<f32> {
+    if samples.is_empty() {
+        return Vec::new();
+    }
+    let mono = downmix_to_mono(samples, channels);
+    let mut resampler = Resampler::new(sample_rate);
+    let mut resampled = resampler.process(&mono, false);
+    resampled.extend(resampler.process(&[], true));
+    resampled
 }
 
 /// True when a clip is too short or too quiet to be speech.

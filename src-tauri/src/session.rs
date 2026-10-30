@@ -12,6 +12,7 @@
 //! either. The webview only ever receives [`OverlayState`], which cannot carry
 //! a transcript.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -22,7 +23,7 @@ use crate::audio::{self, Capture, CaptureControl, CaptureMode, CaptureOutcome, L
 use crate::config::{HomeMode, Mode, Settings};
 use crate::engine::{self, Engine, EngineOptions};
 use crate::errors::{Failure, Result};
-use crate::events::{self, OverlayState, RuntimeStatus};
+use crate::events::{self, LiveText, OverlayState, RuntimeStatus};
 use crate::hotkeys::registry as shortcut_registry;
 use crate::insertion::{self, Target};
 use crate::keyboard_hook::{KeySignal, KeyboardHook, PressEvent};
@@ -40,6 +41,10 @@ const SUCCESS_WINDOW: Duration = Duration::from_secs(120);
 const INSERTED_VISIBLE: Duration = Duration::from_millis(1100);
 /// A model load that takes longer than this is treated as stuck.
 const MODEL_LOAD_TIMEOUT: Duration = Duration::from_secs(60);
+/// How often the live transcriber re-recognises the buffer during recording.
+const LIVE_TRANSCRIBE_INTERVAL_MS: u64 = 1500;
+/// Minimum samples before a live transcription is attempted (1 second at 16 kHz).
+const MIN_LIVE_TRANSCRIBE_SAMPLES: usize = 16_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Phase {
@@ -52,6 +57,7 @@ pub enum Phase {
 struct ActiveRecording {
     control: CaptureControl,
     started_at_ms: u64,
+    live_transcriber: Option<LiveTranscriber>,
 }
 
 #[derive(Default)]
@@ -126,6 +132,10 @@ impl Session {
         }
         logging::event(Event::DictationStarted { mode: "toggle" });
 
+        // Load the engine for live transcription during recording. If it fails
+        // (model not installed, etc.), live transcription is simply skipped.
+        let engine = self.ensure_engine(app, &settings).ok();
+
         {
             let mut inner = lock(&self.inner);
             if inner.phase != Phase::Idle {
@@ -168,12 +178,43 @@ impl Session {
         let started_at_ms = now_ms();
         let device_label = short_device_label(&settings);
 
+        // Start the live transcriber if the engine is available, so the user
+        // sees partial results while speaking instead of waiting until stop.
+        let live_transcriber = engine.map(|engine| {
+            // Look up the device's sample rate and channel count so the live
+            // transcriber can downmix and resample raw capture audio to the
+            // 16 kHz mono that whisper expects.
+            let devices = audio::list_input_devices();
+            let device_info = devices
+                .iter()
+                .find(|d| d.label == device_label || d.id == device_label);
+            let sample_rate = device_info.and_then(|d| d.sample_rate).unwrap_or(48_000);
+            let channels = device_info.and_then(|d| d.channels).unwrap_or(2);
+
+            LiveTranscriber::start(
+                engine,
+                EngineOptions {
+                    language: Some(settings.language.clone()),
+                    threads: engine::default_threads(),
+                    vocabulary: settings.vocabulary.clone(),
+                },
+                Arc::clone(capture.samples()),
+                sample_rate,
+                channels,
+                app.clone(),
+                device_label.clone(),
+                started_at_ms,
+                settings.max_recording_seconds,
+            )
+        });
+
         {
             let mut inner = lock(&self.inner);
             inner.target = Some(target);
             inner.recording = Some(ActiveRecording {
                 control,
                 started_at_ms,
+                live_transcriber,
             });
         }
 
@@ -192,6 +233,7 @@ impl Session {
                 device_label,
                 started_at_ms,
                 max_seconds: settings.max_recording_seconds,
+                live_text: None,
             },
         );
 
@@ -232,13 +274,21 @@ impl Session {
             (inner.recording.is_some(), inner.phase)
         };
 
-        if let Some(recording) = lock(&self.inner).recording.as_ref() {
-            recording.control.cancel();
+        let mut live_transcriber = None;
+        {
+            let mut inner = lock(&self.inner);
+            if let Some(recording) = inner.recording.as_mut() {
+                recording.control.cancel();
+                live_transcriber = recording.live_transcriber.take();
+            }
+        }
+        if let Some(mut lt) = live_transcriber {
+            lt.stop();
         }
 
         // Cancel any in-flight transcription so chunked long recordings can be
         // stopped mid-way rather than waiting for the full clip.
-        if let Some(engine) = self.engine.lock().ok().as_ref() {
+        if let Some(engine) = lock(&self.engine).as_ref() {
             engine.cancel_transcription();
         }
 
@@ -406,6 +456,19 @@ impl Session {
 
     fn finish_recording(&self, app: &AppHandle, outcome: CaptureOutcome, target: Target) {
         shortcut_registry(app).unregister_cancel(app);
+
+        // Stop the live transcriber before clearing the recording state.
+        let mut live_transcriber = None;
+        {
+            let mut inner = lock(&self.inner);
+            if let Some(recording) = inner.recording.take() {
+                live_transcriber = recording.live_transcriber;
+            }
+            inner.phase = Phase::Processing;
+        }
+        if let Some(mut lt) = live_transcriber {
+            lt.stop();
+        }
 
         match outcome {
             CaptureOutcome::Recorded {
@@ -957,6 +1020,125 @@ impl Default for HookBinding {
     }
 }
 
+/// Transcribes the capture buffer periodically during recording, emitting
+/// partial results via overlay events so the user sees progress without
+/// waiting for the full dictation to finish.
+///
+/// Runs on its own thread and is stopped when recording ends. Each pass
+/// transcribes all samples captured so far; the text is marked as unstable
+/// since it may change as more context arrives.
+#[allow(dead_code)]
+struct LiveTranscriber {
+    engine: Arc<Engine>,
+    options: EngineOptions,
+    samples: Arc<Mutex<Vec<f32>>>,
+    app: AppHandle,
+    device_label: String,
+    started_at_ms: u64,
+    max_seconds: u32,
+    stop: Arc<AtomicBool>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl LiveTranscriber {
+    fn start(
+        engine: Arc<Engine>,
+        options: EngineOptions,
+        samples: Arc<Mutex<Vec<f32>>>,
+        sample_rate: u32,
+        channels: u16,
+        app: AppHandle,
+        device_label: String,
+        started_at_ms: u64,
+        max_seconds: u32,
+    ) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_clone = Arc::clone(&stop);
+        let app_clone = app.clone();
+        let device_label_clone = device_label.clone();
+        let engine_clone = Arc::clone(&engine);
+        let options_clone = options.clone();
+        let samples_clone = Arc::clone(&samples);
+        let channels_clone = channels;
+
+        let thread = thread::Builder::new()
+            .name("miro-live-transcribe".to_string())
+            .spawn(move || {
+                let mut last_len = 0;
+                loop {
+                    thread::sleep(Duration::from_millis(LIVE_TRANSCRIBE_INTERVAL_MS));
+                    if stop_clone.load(Ordering::SeqCst) {
+                        break;
+                    }
+
+                    let len = {
+                        let lock = samples_clone.lock().unwrap();
+                        lock.len()
+                    };
+
+                    // Only transcribe if there's new audio since the last pass
+                    if len < MIN_LIVE_TRANSCRIBE_SAMPLES || len == last_len {
+                        continue;
+                    }
+                    last_len = len;
+
+                    let raw_chunk = {
+                        let lock = samples_clone.lock().unwrap();
+                        lock[..len].to_vec()
+                    };
+
+                    // Convert raw device-format audio to 16 kHz mono f32 so
+                    // whisper.cpp receives the format it expects.
+                    let chunk = audio::to_mono_16k(&raw_chunk, channels_clone, sample_rate);
+                    if chunk.is_empty() {
+                        continue;
+                    }
+
+                    let audio_ms = (chunk.len() as u128) * 1000 / 16_000;
+                    let result = engine_clone.transcribe(&chunk, &options_clone, audio_ms);
+
+                    match result {
+                        Ok(transcript) => {
+                            let text = transcript.text.trim().to_string();
+                            if !text.is_empty() {
+                                let state = OverlayState::Recording {
+                                    device_label: device_label_clone.clone(),
+                                    started_at_ms,
+                                    max_seconds,
+                                    live_text: Some(LiveText::unstable(text)),
+                                };
+                                let _ = app_clone.emit(events::OVERLAY_EVENT, state);
+                            }
+                        }
+                        Err(_) => {
+                            // Live transcription failures are non-fatal
+                        }
+                    }
+                }
+            })
+            .ok();
+
+        Self {
+            engine,
+            options,
+            samples,
+            app,
+            device_label,
+            started_at_ms,
+            max_seconds,
+            stop,
+            thread,
+        }
+    }
+
+    fn stop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -971,6 +1153,7 @@ mod tests {
                 device_label: "Microphone".into(),
                 started_at_ms: 1,
                 max_seconds: 300,
+                live_text: None,
             },
             OverlayState::Processing { started_at_ms: 1 },
             OverlayState::Inserted {

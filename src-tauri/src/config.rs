@@ -955,10 +955,8 @@ mod tests {
     #[test]
     fn vocabulary_applies_as_a_patch() {
         let mut settings = Settings::default();
-        let patch: SettingsPatch = serde_json::from_str(
-            r#"{"vocabulary":["TypeScript","typescript","Rust"]}"#,
-        )
-        .unwrap();
+        let patch: SettingsPatch =
+            serde_json::from_str(r#"{"vocabulary":["TypeScript","typescript","Rust"]}"#).unwrap();
         settings.apply(patch);
         settings.normalize();
         assert_eq!(

@@ -269,17 +269,22 @@ const BATCH_UNITS: usize = 24;
 /// Gap between batches. Simple native controls keep up with 2 ms, but browser
 /// and Electron editors process injected input asynchronously and can drop
 /// characters when a long transcript arrives faster than their state updates.
-/// 6 ms per 24 characters is still far quicker than typing.
-const BATCH_SETTLE_MS: u64 = 6;
+/// 12 ms per 24 characters gives slow applications time to process each batch.
+const BATCH_SETTLE_MS: u64 = 12;
 
 /// Types text with `SendInput` using Unicode events.
 ///
 /// Newlines become real Enter presses (chat apps and editors treat a bare CR
 /// inconsistently), everything else travels as UTF-16 code units. The returned
-/// count is code points, not units, so a surrogate pair is one character.
+/// count is code points that were actually sent to the input stream, not just
+/// attempted.
 pub fn send_unicode_text(text: &str) -> Result<usize> {
     let units: Vec<u16> = text.encode_utf16().collect();
-    let mut typed = 0usize;
+    if units.is_empty() {
+        return Ok(0);
+    }
+
+    let mut total_typed = 0usize;
 
     for (start, end) in plan_batches(&units, BATCH_UNITS) {
         let mut events: Vec<INPUT> = Vec::with_capacity((end - start) * 2 + 2);
@@ -298,16 +303,10 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
                     }
                     events.push(virtual_key_input(VK_RETURN, SCAN_RETURN, false));
                     events.push(virtual_key_input(VK_RETURN, SCAN_RETURN, true));
-                    typed += 1;
                 }
                 unit => {
                     events.push(unicode_input(unit, false));
                     events.push(unicode_input(unit, true));
-                    // A surrogate pair is one code point; the low half was
-                    // already counted when the high half arrived.
-                    if !(0xDC00..0xE000).contains(&unit) {
-                        typed += 1;
-                    }
                 }
             }
         }
@@ -316,6 +315,7 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
             continue;
         }
 
+        // Send all events for this batch, retrying on partial sends.
         let mut offset = 0usize;
         let mut attempts = 0;
         while offset < events.len() {
@@ -331,14 +331,27 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
                 std::thread::sleep(std::time::Duration::from_millis(5));
                 continue;
             }
-            offset += sent;
+            // `sent` counts INPUT structures. Each character is 2 events
+            // (down + up), each newline is 2 events. Round down to whole
+            // events so we never deliver a half event (e.g. a key-up without
+            // its matching down).
+            let sent_events = sent / 2 * 2;
+            offset += sent_events;
+            // Count whole characters: 2 events per character for regular
+            // keys, 2 events per newline.
+            total_typed += sent_events / 2;
+
+            if sent < remaining.len() {
+                // Partial send: give the target a moment before sending more.
+                std::thread::sleep(std::time::Duration::from_millis(BATCH_SETTLE_MS));
+            }
         }
 
         // Give the target a chance to process the batch before the next one.
         std::thread::sleep(std::time::Duration::from_millis(BATCH_SETTLE_MS));
     }
 
-    Ok(typed)
+    Ok(total_typed)
 }
 
 /// Sends Ctrl+V.

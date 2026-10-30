@@ -224,7 +224,7 @@ impl Engine {
                         "a transcription is already running".to_string(),
                     ));
                 }
-                let guard = BusyGuard(Arc::clone(&self.busy));
+                let _guard = BusyGuard(Arc::clone(&self.busy));
 
                 // Reset cancellation at the start of each transcription.
                 self.cancelled.store(false, Ordering::SeqCst);
@@ -244,7 +244,7 @@ impl Engine {
 
                 let mut combined_text = String::new();
                 let mut total_segments = 0usize;
-                let mut total_compute_ms = 0u128;
+                let mut _total_compute_ms = 0u128;
 
                 for (chunk_idx, (chunk_start, chunk_end)) in chunks.iter().enumerate() {
                     // Check cancellation between chunks.
@@ -256,7 +256,7 @@ impl Engine {
                     let chunk_started = Instant::now();
                     let result = engine.transcribe(chunk, options);
                     let compute_ms = chunk_started.elapsed().as_millis();
-                    total_compute_ms += compute_ms;
+                    _total_compute_ms += compute_ms;
 
                     match result {
                         Ok((text, segments)) => {
@@ -581,7 +581,11 @@ mod tests {
         let samples: Vec<f32> = loud.into_iter().chain(silent).chain(more_loud).collect();
 
         let chunks = split_into_chunks(&samples);
-        assert!(chunks.len() >= 2, "expected at least 2 chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() >= 2,
+            "expected at least 2 chunks, got {}",
+            chunks.len()
+        );
 
         // First chunk should end within the silent region.
         let first_end = chunks[0].1;
@@ -594,10 +598,9 @@ mod tests {
 
     #[test]
     fn split_into_chunks_respects_min_chunk_size() {
-        // All silence: no boundary found, so chunks should be exactly
-        // MAX_CHUNK_SAMPLES each (no min-size constraint violated since we
-        // can't find silence).
-        let samples = vec![0.0001f32; 3 * MAX_CHUNK_SAMPLES];
+        // All loud audio (above silence threshold): no boundary found, so
+        // chunks should be exactly MAX_CHUNK_SAMPLES each.
+        let samples = vec![0.5f32; 3 * MAX_CHUNK_SAMPLES];
         let chunks = split_into_chunks(&samples);
         assert_eq!(chunks.len(), 3);
         for (start, end) in &chunks {

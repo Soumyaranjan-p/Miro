@@ -262,7 +262,7 @@ impl WhisperEngine {
                 actual_chars, audio_seconds, expected_max_chars
             );
             return Err(Failure::Transcription(
-                "transcript is suspiciously long, likely hallucinated".into()
+                "transcript is suspiciously long, likely hallucinated".into(),
             ));
         }
 
@@ -368,10 +368,7 @@ mod tests {
     #[test]
     fn build_initial_prompt_empty_returns_none() {
         assert_eq!(build_initial_prompt(&[]), None);
-        assert_eq!(
-            build_initial_prompt(&["   ".into(), "\t".into()]),
-            None
-        );
+        assert_eq!(build_initial_prompt(&["   ".into(), "\t".into()]), None);
     }
 
     #[test]
@@ -393,15 +390,14 @@ mod tests {
 
     #[test]
     fn build_initial_prompt_trims_and_filters_empty() {
-        let prompt = build_initial_prompt(&[
-            "  hello  ".into(),
-            "".into(),
-            "   ".into(),
-            "world".into(),
-        ])
-        .unwrap();
+        let prompt =
+            build_initial_prompt(&["  hello  ".into(), "".into(), "   ".into(), "world".into()])
+                .unwrap();
         let words: Vec<&str> = prompt.split_whitespace().collect();
-        assert!(!words.iter().any(|w| w.is_empty()), "no empty words: {prompt}");
+        assert!(
+            !words.iter().any(|w| w.is_empty()),
+            "no empty words: {prompt}"
+        );
         assert!(words.contains(&"hello"), "hello kept: {prompt}");
         assert!(words.contains(&"world"), "world kept: {prompt}");
     }
@@ -434,9 +430,7 @@ mod tests {
 
     #[test]
     fn build_initial_prompt_caps_term_count() {
-        let many: Vec<String> = (0..MAX_VOCAB_TERMS * 2)
-            .map(|i| format!("t{i}"))
-            .collect();
+        let many: Vec<String> = (0..MAX_VOCAB_TERMS * 2).map(|i| format!("t{i}")).collect();
         let prompt = build_initial_prompt(&many).unwrap();
         let count = prompt
             .split_whitespace()

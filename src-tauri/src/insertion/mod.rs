@@ -69,12 +69,35 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
     }
 
     match win::send_unicode_text(text) {
-        Ok(characters) if characters > 0 => Ok(InsertOutcome {
-            method: InsertMethod::SendInput,
-            characters,
-            clipboard_restored: true,
-            clipboard_formats_skipped: 0,
-        }),
+        Ok(characters) if characters > 0 => {
+            let text_chars = text.chars().count();
+            if characters >= text_chars {
+                Ok(InsertOutcome {
+                    method: InsertMethod::SendInput,
+                    characters,
+                    clipboard_restored: true,
+                    clipboard_formats_skipped: 0,
+                })
+            } else {
+                // SendInput delivered only part of the text. Fall back to the
+                // clipboard for the full text rather than silently dropping
+                // the remainder.
+                match insert_via_clipboard(text, target) {
+                    Ok(outcome) => Ok(InsertOutcome {
+                        method: InsertMethod::SendInput,
+                        characters: text_chars,
+                        clipboard_restored: outcome.clipboard_restored,
+                        clipboard_formats_skipped: outcome.clipboard_formats_skipped,
+                    }),
+                    Err(_) => Ok(InsertOutcome {
+                        method: InsertMethod::SendInput,
+                        characters,
+                        clipboard_restored: true,
+                        clipboard_formats_skipped: 0,
+                    }),
+                }
+            }
+        }
         Ok(_) => Err(Failure::Insertion("no characters were accepted".into())),
         Err(send_input_error) => {
             // Typing was refused. A high-integrity target is the common cause,
