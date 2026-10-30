@@ -13,8 +13,22 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::audio::resample::rms;
 use crate::errors::{Failure, Result};
 use crate::logging::{self, Event};
+
+/// Maximum chunk size for long recordings: 60 seconds of 16 kHz audio.
+const MAX_CHUNK_MS: u128 = 60_000;
+/// Minimum chunk size before we look for a silence boundary: 30 seconds.
+const MIN_CHUNK_MS: u128 = 30_000;
+/// Maximum samples per chunk at 16 kHz mono.
+const MAX_CHUNK_SAMPLES: usize = (16_000 * MAX_CHUNK_MS as usize) / 1000;
+/// Minimum samples per chunk at 16 kHz mono.
+const MIN_CHUNK_SAMPLES: usize = (16_000 * MIN_CHUNK_MS as usize) / 1000;
+/// Analysis window for boundary detection: 20 ms at 16 kHz = 320 samples.
+const BOUNDARY_WINDOW_SAMPLES: usize = 320;
+/// RMS below this is treated as silence for chunk-boundary purposes.
+const BOUNDARY_SILENCE_RMS: f32 = 0.005;
 
 #[cfg(feature = "engine-whisper")]
 mod whisper;
@@ -39,6 +53,9 @@ pub struct EngineOptions {
     /// `None` or "auto" lets the engine detect the language.
     pub language: Option<String>,
     pub threads: usize,
+    /// User-supplied terms that steer the recognizer toward domain-specific
+    /// words and names. Combined with the fixed style prompt.
+    pub vocabulary: Vec<String>,
 }
 
 impl Default for EngineOptions {
@@ -46,6 +63,7 @@ impl Default for EngineOptions {
         Self {
             language: Some("en".to_string()),
             threads: default_threads(),
+            vocabulary: Vec::new(),
         }
     }
 }
@@ -76,6 +94,10 @@ pub struct Engine {
     /// inside the engine, so the next request waits for it instead of piling on.
     busy: Arc<AtomicBool>,
     last_compute_ms: AtomicU64,
+    /// Set when cancellation is requested during a (possibly chunked)
+    /// transcription. Checked between chunks so long dictations can be
+    /// aborted without waiting for the full clip to finish.
+    cancelled: Arc<AtomicBool>,
 }
 
 enum Backend {
@@ -92,6 +114,7 @@ impl Engine {
             model_id: None,
             busy: Arc::new(AtomicBool::new(false)),
             last_compute_ms: AtomicU64::new(0),
+            cancelled: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -116,6 +139,7 @@ impl Engine {
                         model_id: Some(model_id.to_string()),
                         busy: Arc::new(AtomicBool::new(false)),
                         last_compute_ms: AtomicU64::new(0),
+                        cancelled: Arc::new(AtomicBool::new(false)),
                     })
                 }
                 Err(failure) => {
@@ -165,10 +189,22 @@ impl Engine {
         self.last_compute_ms.load(Ordering::Relaxed)
     }
 
+    /// Requests cancellation of an in-flight (possibly chunked) transcription.
+    /// Checked between chunks so long dictations can be aborted without waiting
+    /// for the full clip to finish.
+    pub fn cancel_transcription(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+    }
+
     /// Transcribes 16 kHz mono f32 samples.
     ///
     /// Runs synchronously on the calling thread - the session layer owns which
     /// thread that is - so that a caller can never accidentally block the UI.
+    ///
+    /// Long recordings are split into 30-60 second chunks at low-energy
+    /// boundaries and transcribed sequentially. Cancellation is checked between
+    /// chunks so a long dictation can be aborted without waiting for the full
+    /// clip to finish.
     pub fn transcribe(
         &self,
         samples: &[f32],
@@ -190,39 +226,97 @@ impl Engine {
                 }
                 let guard = BusyGuard(Arc::clone(&self.busy));
 
+                // Reset cancellation at the start of each transcription.
+                self.cancelled.store(false, Ordering::SeqCst);
+
                 logging::event(Event::TranscriptionStarted {
                     samples: samples.len(),
                 });
                 let started = Instant::now();
-                let result = engine.transcribe(samples, options);
+
+                // Split long recordings into chunks; short ones go straight
+                // through as a single chunk.
+                let chunks = if samples.len() > MAX_CHUNK_SAMPLES {
+                    split_into_chunks(samples)
+                } else {
+                    vec![(0, samples.len())]
+                };
+
+                let mut combined_text = String::new();
+                let mut total_segments = 0usize;
+                let mut total_compute_ms = 0u128;
+
+                for (chunk_idx, (chunk_start, chunk_end)) in chunks.iter().enumerate() {
+                    // Check cancellation between chunks.
+                    if self.cancelled.load(Ordering::SeqCst) {
+                        return Err(Failure::Cancelled("transcription"));
+                    }
+
+                    let chunk = &samples[*chunk_start..*chunk_end];
+                    let chunk_started = Instant::now();
+                    let result = engine.transcribe(chunk, options);
+                    let compute_ms = chunk_started.elapsed().as_millis();
+                    total_compute_ms += compute_ms;
+
+                    match result {
+                        Ok((text, segments)) => {
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                if chunk_idx > 0 && !combined_text.is_empty() {
+                                    combined_text.push(' ');
+                                }
+                                combined_text.push_str(trimmed);
+                                total_segments += segments;
+                            }
+                        }
+                        Err(failure) => {
+                            // Skip empty-transcript chunks (silence between
+                            // speech) but propagate real errors.
+                            if matches!(failure, Failure::TranscriptEmpty) {
+                                continue;
+                            }
+                            logging::event(Event::TranscriptionFailed {
+                                code: failure.code().as_str(),
+                            });
+                            return Err(failure);
+                        }
+                    }
+                }
+
+                if combined_text.trim().is_empty() {
+                    return Err(Failure::TranscriptEmpty);
+                }
+
+                // Reject transcripts that are suspiciously long for the audio
+                // duration. Normal speech is ~150-200 chars per 10 seconds.
+                let audio_seconds = samples.len() as f64 / 16000.0;
+                let expected_max_chars = (audio_seconds * 25.0) as usize;
+                if combined_text.chars().count() > expected_max_chars.max(100) {
+                    logging::event(Event::TranscriptionFailed {
+                        code: "engine_failed",
+                    });
+                    return Err(Failure::Transcription(
+                        "transcript is suspiciously long, likely hallucinated".into(),
+                    ));
+                }
+
                 let compute_ms = started.elapsed().as_millis();
                 self.last_compute_ms
                     .store(compute_ms as u64, Ordering::Relaxed);
 
-                match result {
-                    Ok((text, segments)) => {
-                        logging::event(Event::TranscriptionFinished {
-                            segments,
-                            ms: compute_ms,
-                            chars: text.chars().count(),
-                            words: text.split_whitespace().count(),
-                        });
-                        drop(guard);
-                        Ok(Transcript {
-                            text,
-                            segments,
-                            audio_ms,
-                            compute_ms,
-                        })
-                    }
-                    Err(failure) => {
-                        logging::event(Event::TranscriptionFailed {
-                            code: failure.code().as_str(),
-                        });
-                        drop(guard);
-                        Err(failure)
-                    }
-                }
+                logging::event(Event::TranscriptionFinished {
+                    segments: total_segments,
+                    ms: compute_ms,
+                    chars: combined_text.chars().count(),
+                    words: combined_text.split_whitespace().count(),
+                });
+
+                Ok(Transcript {
+                    text: combined_text,
+                    segments: total_segments,
+                    audio_ms,
+                    compute_ms,
+                })
             }
             Backend::Unavailable => Err(Failure::EngineNotBuilt),
         }
@@ -246,6 +340,53 @@ impl Drop for BusyGuard {
 pub fn deadline_for(audio_ms: u128) -> Duration {
     let seconds = (audio_ms / 1000).max(15);
     Duration::from_secs((seconds * 3).clamp(60, 900) as u64)
+}
+
+/// Splits audio samples into approximately 30–60 second chunks, preferring
+/// low-energy boundaries where practical.
+///
+/// Returns a list of `(start, end)` sample index pairs. Each chunk is at least
+/// `MIN_CHUNK_SAMPLES` long (except possibly the last) and at most
+/// `MAX_CHUNK_SAMPLES` long. Within that range, the split point is chosen at a
+/// 20 ms window whose RMS is below `BOUNDARY_SILENCE_RMS`, so cuts fall in
+/// pauses rather than mid-word when possible. If no silence is found in range,
+/// the chunk is cut at `MAX_CHUNK_SAMPLES`.
+fn split_into_chunks(samples: &[f32]) -> Vec<(usize, usize)> {
+    let total = samples.len();
+    if total <= MAX_CHUNK_SAMPLES {
+        return vec![(0, total)];
+    }
+
+    let mut chunks: Vec<(usize, usize)> = Vec::new();
+    let mut start = 0;
+
+    while start < total {
+        let remaining = total - start;
+        if remaining <= MAX_CHUNK_SAMPLES {
+            chunks.push((start, total));
+            break;
+        }
+
+        let search_start = start + MIN_CHUNK_SAMPLES;
+        let search_end = start + MAX_CHUNK_SAMPLES;
+
+        // Find the first low-energy window in the search range.
+        let mut cut = None;
+        let mut pos = search_start;
+        while pos + BOUNDARY_WINDOW_SAMPLES <= search_end {
+            if rms(&samples[pos..pos + BOUNDARY_WINDOW_SAMPLES]) < BOUNDARY_SILENCE_RMS {
+                cut = Some(pos);
+                break;
+            }
+            pos += BOUNDARY_WINDOW_SAMPLES;
+        }
+
+        let cut = cut.unwrap_or(start + MAX_CHUNK_SAMPLES);
+        chunks.push((start, cut));
+        start = cut;
+    }
+
+    chunks
 }
 
 #[cfg(test)]
@@ -408,6 +549,59 @@ mod tests {
             }
             file.seek(SeekFrom::Current((size + (size & 1)) as i64))
                 .ok()?;
+        }
+    }
+
+    #[test]
+    fn split_into_chunks_keeps_short_audio_as_single_chunk() {
+        let samples = vec![0.1f32; 1000];
+        let chunks = split_into_chunks(&samples);
+        assert_eq!(chunks, vec![(0, 1000)]);
+    }
+
+    #[test]
+    fn split_into_chunks_splits_long_audio_at_max_size() {
+        // 3 minutes of audio at 16 kHz = 2_880_000 samples.
+        // MAX_CHUNK_SAMPLES = 960_000 (60 s), so we expect 3 chunks.
+        let samples = vec![0.1f32; 2_880_000];
+        let chunks = split_into_chunks(&samples);
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0], (0, MAX_CHUNK_SAMPLES));
+        assert_eq!(chunks[1], (MAX_CHUNK_SAMPLES, 2 * MAX_CHUNK_SAMPLES));
+        assert_eq!(chunks[2], (2 * MAX_CHUNK_SAMPLES, 2_880_000));
+    }
+
+    #[test]
+    fn split_into_chunks_cuts_at_silence_boundary() {
+        // 90 seconds of audio: first 60 s loud, next 30 s silent, then more
+        // loud audio. The split should fall in the silent region.
+        let loud = vec![0.5f32; MAX_CHUNK_SAMPLES];
+        let silent = vec![0.0001f32; MIN_CHUNK_SAMPLES]; // below BOUNDARY_SILENCE_RMS
+        let more_loud = vec![0.5f32; MAX_CHUNK_SAMPLES];
+        let samples: Vec<f32> = loud.into_iter().chain(silent).chain(more_loud).collect();
+
+        let chunks = split_into_chunks(&samples);
+        assert!(chunks.len() >= 2, "expected at least 2 chunks, got {}", chunks.len());
+
+        // First chunk should end within the silent region.
+        let first_end = chunks[0].1;
+        assert!(
+            first_end >= MAX_CHUNK_SAMPLES && first_end <= MAX_CHUNK_SAMPLES + MIN_CHUNK_SAMPLES,
+            "first chunk end {} should be in silent region",
+            first_end
+        );
+    }
+
+    #[test]
+    fn split_into_chunks_respects_min_chunk_size() {
+        // All silence: no boundary found, so chunks should be exactly
+        // MAX_CHUNK_SAMPLES each (no min-size constraint violated since we
+        // can't find silence).
+        let samples = vec![0.0001f32; 3 * MAX_CHUNK_SAMPLES];
+        let chunks = split_into_chunks(&samples);
+        assert_eq!(chunks.len(), 3);
+        for (start, end) in &chunks {
+            assert_eq!(*end - *start, MAX_CHUNK_SAMPLES);
         }
     }
 }

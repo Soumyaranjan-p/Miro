@@ -28,6 +28,10 @@ pub const MIN_RECORDING_SECONDS: u32 = 30;
 pub const MAX_RECORDING_SECONDS: u32 = 600;
 pub const MAX_FILLER_WORDS: usize = 64;
 pub const MAX_FILLER_WORD_LEN: usize = 32;
+/// Maximum number of vocabulary terms kept after dedup.
+pub const MAX_VOCAB_TERMS: usize = 64;
+/// Maximum characters per vocabulary term.
+pub const MAX_VOCAB_TERM_LEN: usize = 100;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -230,6 +234,9 @@ pub struct Settings {
     pub overlay_position: OverlayPosition,
     pub show_transcript_preview: bool,
     pub start_on_login: bool,
+    /// User-supplied terms that steer the recognizer toward domain-specific
+    /// words and names. Trimmed, deduplicated and length-capped on load.
+    pub vocabulary: Vec<String>,
 }
 
 impl Default for Settings {
@@ -254,6 +261,7 @@ impl Default for Settings {
             overlay_position: OverlayPosition::BottomCenter,
             show_transcript_preview: false,
             start_on_login: false,
+            vocabulary: Vec::new(),
         }
     }
 }
@@ -283,6 +291,7 @@ pub struct SettingsPatch {
     pub overlay_position: Option<OverlayPosition>,
     pub show_transcript_preview: Option<bool>,
     pub start_on_login: Option<bool>,
+    pub vocabulary: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default, Debug, Clone)]
@@ -377,6 +386,24 @@ impl Settings {
         }
         self.cleanup.filler_words = seen;
         self.intent.normalize();
+
+        // Vocabulary: trim, dedupe case-insensitively, filter empty, cap count
+        // and per-term length so a runaway list can't bloat the prompt.
+        let mut seen: Vec<String> = Vec::new();
+        for term in &self.vocabulary {
+            let trimmed = term.trim().to_string();
+            if trimmed.is_empty() || trimmed.chars().count() > MAX_VOCAB_TERM_LEN {
+                continue;
+            }
+            let lower = trimmed.to_lowercase();
+            if !seen.iter().any(|s| s.to_lowercase() == lower) {
+                seen.push(trimmed);
+            }
+            if seen.len() >= MAX_VOCAB_TERMS {
+                break;
+            }
+        }
+        self.vocabulary = seen;
     }
 
     pub fn apply(&mut self, patch: SettingsPatch) {
@@ -423,6 +450,9 @@ impl Settings {
         }
         if let Some(start_on_login) = patch.start_on_login {
             self.start_on_login = start_on_login;
+        }
+        if let Some(vocabulary) = patch.vocabulary {
+            self.vocabulary = vocabulary;
         }
         if let Some(cleanup) = patch.cleanup {
             if let Some(enabled) = cleanup.enabled {
@@ -876,5 +906,66 @@ mod tests {
                 "settings must never grow a `{forbidden}` field"
             );
         }
+    }
+
+    #[test]
+    fn vocabulary_defaults_to_empty() {
+        assert_eq!(Settings::default().vocabulary, Vec::<String>::new());
+    }
+
+    #[test]
+    fn vocabulary_is_normalized_on_load() {
+        let mut settings = Settings {
+            vocabulary: vec![
+                "  TypeScript  ".into(),
+                "typescript".into(),
+                "".into(),
+                "   ".into(),
+                "Rust".into(),
+                "rust".into(),
+                "x".repeat(MAX_VOCAB_TERM_LEN + 1).into(),
+            ],
+            ..Settings::default()
+        };
+        settings.normalize();
+        assert_eq!(
+            settings.vocabulary,
+            vec!["TypeScript", "Rust"],
+            "vocabulary trimmed, deduped, empty/overlong removed: {:?}",
+            settings.vocabulary
+        );
+    }
+
+    #[test]
+    fn vocabulary_count_is_capped() {
+        let mut settings = Settings {
+            vocabulary: (0..MAX_VOCAB_TERMS * 2)
+                .map(|i| format!("term{i}"))
+                .collect(),
+            ..Settings::default()
+        };
+        settings.normalize();
+        assert_eq!(
+            settings.vocabulary.len(),
+            MAX_VOCAB_TERMS,
+            "vocabulary capped at {MAX_VOCAB_TERMS}"
+        );
+    }
+
+    #[test]
+    fn vocabulary_applies_as_a_patch() {
+        let mut settings = Settings::default();
+        let patch: SettingsPatch = serde_json::from_str(
+            r#"{"vocabulary":["TypeScript","typescript","Rust"]}"#,
+        )
+        .unwrap();
+        settings.apply(patch);
+        settings.normalize();
+        assert_eq!(
+            settings.vocabulary,
+            vec!["TypeScript", "Rust"],
+            "patch applied then normalized: {:?}",
+            settings.vocabulary
+        );
     }
 }

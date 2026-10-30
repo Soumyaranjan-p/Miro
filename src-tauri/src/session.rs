@@ -225,6 +225,7 @@ impl Session {
     }
 
     /// Abandons the current dictation: the audio is zeroed, nothing is inserted.
+    /// Also cancels any in-flight transcription.
     pub fn cancel(&self, app: &AppHandle) {
         let (had_recording, stage) = {
             let inner = lock(&self.inner);
@@ -233,6 +234,12 @@ impl Session {
 
         if let Some(recording) = lock(&self.inner).recording.as_ref() {
             recording.control.cancel();
+        }
+
+        // Cancel any in-flight transcription so chunked long recordings can be
+        // stopped mid-way rather than waiting for the full clip.
+        if let Some(engine) = self.engine.lock().ok().as_ref() {
+            engine.cancel_transcription();
         }
 
         if had_recording || stage != Phase::Idle {
@@ -461,6 +468,7 @@ impl Session {
         let options = EngineOptions {
             language: Some(settings.language.clone()),
             threads: engine::default_threads(),
+            vocabulary: settings.vocabulary.clone(),
         };
 
         let result = engine.transcribe(&samples, &options, audio_ms);

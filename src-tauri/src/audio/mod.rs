@@ -78,6 +78,12 @@ const NOISE_FLOOR_WARMUP: usize = 150;
 /// clipping trailing syllables at the key-up edge.
 const STOP_DRAIN_MS: u128 = 80;
 
+/// How long to wait for a disconnected microphone to reconnect before giving up
+/// and failing the capture with `MicDisconnected`.
+const MIC_RECOVERY_TIMEOUT: Duration = Duration::from_secs(10);
+/// How often to poll for device reappearance during recovery.
+const MIC_RECOVERY_POLL: Duration = Duration::from_millis(500);
+
 /// Voice level expressed relative to the room's noise floor and the speaker's
 /// recent peak, so a quiet voice in a quiet room reads as clearly as a loud
 /// voice in a loud room. Mirrors BetterWispr's `VoiceLevelMeter`.
@@ -458,6 +464,37 @@ fn append_as_f32(target: &mut Vec<f32>, format: SampleFormat, data: &Data) {
     }
 }
 
+/// Re-enumerate input devices and find the one matching `wanted`, or the
+/// default input device when `wanted` is `None`. Returns `None` when no
+/// matching device is currently available — used during recovery polling
+/// after a microphone disconnect.
+fn find_input_device(
+    host: &cpal::Host,
+    wanted: Option<&str>,
+) -> Option<(cpal::Device, String)> {
+    let mut devices = host.input_devices().ok()?;
+    match wanted {
+        None => host.default_input_device().map(|d| {
+            let label = d.to_string();
+            (d, label)
+        }),
+        Some(wanted) => {
+            let wanted = wanted.trim();
+            if wanted.is_empty() {
+                return host.default_input_device().map(|d| {
+                    let label = d.to_string();
+                    (d, label)
+                });
+            }
+            devices.find_map(|d| {
+                let id = d.id().map(|id| id.to_string()).unwrap_or_default();
+                let label = d.to_string();
+                (id == wanted || label == wanted).then_some((d, label))
+            })
+        }
+    }
+}
+
 fn is_supported_format(format: SampleFormat) -> bool {
     matches!(
         format,
@@ -631,8 +668,29 @@ fn run_capture(
     on_level: Option<Arc<dyn Fn(LevelFrame) + Send + Sync>>,
     ready: &Sender<std::result::Result<(), Failure>>,
 ) -> CaptureOutcome {
+    // Resolve the default input configuration for a device. Called each time
+    // a stream is created so that a reconnected device with different
+    // settings is picked up correctly.
+    fn resolve_device_config(
+        device: &cpal::Device,
+    ) -> Result<(StreamConfig, SampleFormat, u32, u16)> {
+        let supported = device
+            .default_input_config()
+            .map_err(|err| map_cpal_error(&err))?;
+        let format = supported.sample_format();
+        let channels = supported.channels();
+        let sample_rate = supported.sample_rate();
+        let config: StreamConfig = supported.config();
+        if sample_rate == 0 || channels == 0 {
+            return Err(Failure::MicUnsupportedFormat(format!(
+                "{sample_rate} Hz, {channels} channels"
+            )));
+        }
+        Ok((config, format, sample_rate, channels))
+    }
+
     let host = cpal::default_host();
-    let (device, label) = match open_device(&host, device.as_deref()) {
+    let (mut device, mut label) = match open_device(&host, device.as_deref()) {
         Ok(pair) => pair,
         Err(failure) => {
             let _ = ready.send(Err(clone_failure(&failure)));
@@ -640,27 +698,14 @@ fn run_capture(
         }
     };
 
-    let (config, format, sample_rate, channels) = match device.default_input_config() {
-        Ok(supported) => {
-            let format = supported.sample_format();
-            let channels = supported.channels();
-            let sample_rate = supported.sample_rate();
-            let config: StreamConfig = supported.config();
-            (config, format, sample_rate, channels)
-        }
-        Err(err) => {
-            let failure = map_cpal_error(&err);
-            let _ = ready.send(Err(clone_failure(&failure)));
-            return CaptureOutcome::Failed(failure);
-        }
-    };
-
-    if sample_rate == 0 || channels == 0 {
-        let failure =
-            Failure::MicUnsupportedFormat(format!("{sample_rate} Hz, {channels} channels"));
-        let _ = ready.send(Err(clone_failure(&failure)));
-        return CaptureOutcome::Failed(failure);
-    }
+    let (mut config, mut format, mut sample_rate, mut channels) =
+        match resolve_device_config(&device) {
+            Ok(tuple) => tuple,
+            Err(failure) => {
+                let _ = ready.send(Err(clone_failure(&failure)));
+                return CaptureOutcome::Failed(failure);
+            }
+        };
 
     let shared = Arc::new(Shared {
         samples: Mutex::new(Vec::with_capacity(
@@ -675,115 +720,218 @@ fn run_capture(
         first_callback: AtomicBool::new(false),
     });
 
-    let stream = match open_stream(
-        &device,
-        &config,
-        format,
-        mode == CaptureMode::Record,
-        Arc::clone(&shared),
-        levels.clone(),
-    ) {
-        Ok(stream) => stream,
-        Err(failure) => {
-            let _ = ready.send(Err(clone_failure(&failure)));
-            return CaptureOutcome::Failed(failure);
-        }
-    };
+    let mut stream: Option<cpal::Stream> = None;
+    let mut ready_sent = false;
+    let mut recovery_deadline: Option<Instant> = None;
 
-    if let Err(err) = stream.play() {
-        let failure = map_cpal_error(&err);
-        let _ = ready.send(Err(clone_failure(&failure)));
-        return CaptureOutcome::Failed(failure);
-    }
-
-    // Wait for the first callback before reporting readiness. Silence counts:
-    // the callback fires even when the mic is silent, so this confirms the
-    // device is actually delivering audio rather than having opened silently.
-    // Mirrors BetterWispr's "wait for an actual audio callback" readiness check.
-    let first_callback_deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        thread::sleep(Duration::from_millis(20));
-        if shared.first_callback.load(std::sync::atomic::Ordering::Acquire) {
-            let _ = ready.send(Ok(()));
-            break;
-        }
-        if Instant::now() >= first_callback_deadline {
-            let failure = Failure::Internal(
-                "the audio device opened but delivered no callback in time".into(),
-            );
-            let _ = ready.send(Err(clone_failure(&failure)));
-            return CaptureOutcome::Failed(failure);
-        }
-        if let Ok(slot) = shared.stream_error.lock() {
-            if let Some(stored) = slot.as_ref() {
-                let failure = clone_failure(stored);
-                let _ = ready.send(Err(failure));
-                return CaptureOutcome::Failed(clone_failure(stored));
+    'recovery: loop {
+        // --- Recovery: wait for a disconnected device to reappear ---
+        if let Some(deadline) = recovery_deadline {
+            if Instant::now() >= deadline {
+                drop(stream.take());
+                eprintln!("[miro-audio] recovery timeout, failing capture");
+                return CaptureOutcome::Failed(Failure::MicDisconnected);
             }
-        }
-    }
-    // The pump doubles as the supervisor: it watches the clock, the stop flag
-    // and the error callback, and publishes levels while it does.
-    let frame_interval = Duration::from_millis(1000 / LEVEL_HZ);
-    let mut failure: Option<Failure> = None;
-    // Adaptive level meter: reports level relative to the room's noise floor
-    // and the speaker's recent peak, so quiet speech reads clearly.
-    let mut meter = LevelMeter::new();
-    // When a stop was first seen. A hold-to-talk release must not cut the
-    // audio at the key-up edge: keep rolling for RELEASE_TAIL_MS and let the
-    // trailing syllable land in the buffer. The max-seconds limit ends the
-    // recording immediately (there is nothing being cut mid-word there).
-    let mut stop_requested: Option<Instant> = None;
-    loop {
-        thread::sleep(frame_interval);
-
-        if let Ok(slot) = shared.stream_error.lock() {
-            if let Some(stored) = slot.as_ref() {
-                failure = Some(clone_failure(stored));
-            }
-        }
-        if failure.is_some() {
-            break;
-        }
-
-        let limit_reached =
-            mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms;
-        if limit_reached {
-            shared
-                .limit_reached
-                .store(true, std::sync::atomic::Ordering::SeqCst);
-            break;
-        }
-
-        if stop.load(std::sync::atomic::Ordering::SeqCst) {
-            let began = stop_requested.get_or_insert_with(Instant::now);
-            if began.elapsed().as_millis() < RELEASE_TAIL_MS {
-                if let Some(callback) = on_level.as_ref() {
-                    callback(levels.frame());
+            match find_input_device(
+                &host,
+                device.id().ok().as_ref().map(|id| id.to_string()).as_deref(),
+            ) {
+                Some((dev, lbl)) => {
+                    device = dev;
+                    label = lbl;
+                    recovery_deadline = None;
+                    eprintln!("[miro-audio] device reconnected: {}", label);
                 }
-                continue;
+                None => {
+                    // Publish silence while the device is gone so the overlay
+                    // doesn't show a stale level.
+                    if let Some(callback) = on_level.as_ref() {
+                        callback(LevelFrame { level: 0.0, peak: 0.0 });
+                    }
+                    // Honour cancellation during recovery.
+                    if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+                        drop(stream.take());
+                        return CaptureOutcome::Cancelled;
+                    }
+                    thread::sleep(MIC_RECOVERY_POLL);
+                    continue 'recovery;
+                }
             }
-            // Drain: give the in-flight callback a chance to finish delivering
-            // its buffer before we drop the stream, so trailing audio isn't
-            // clipped at the stop boundary.
-            thread::sleep(Duration::from_millis(STOP_DRAIN_MS as u64));
-            break;
         }
 
-        if let Some(callback) = on_level.as_ref() {
-            let frame = levels.frame();
-            // Publish an adaptive level (relative to noise floor and peak)
-            // alongside the raw peak so the overlay can show both.
-            let adaptive = meter.update(frame.level, 1.0 / LEVEL_HZ as f64);
-            callback(LevelFrame {
-                level: adaptive,
-                peak: frame.peak,
-            });
+        // --- Create (or re-create) the stream ---
+        if stream.is_none() {
+            // When recovering from a disconnect, re-resolve config in case the
+            // device came back with different settings. If the rate or channel
+            // count changed, mixing old and new audio into one buffer would
+            // corrupt the resampler input, so abort recovery instead.
+            if recovery_deadline.is_some() {
+                let (new_config, new_format, new_rate, new_ch) =
+                    match resolve_device_config(&device) {
+                        Ok(tuple) => tuple,
+                        Err(_failure) => {
+                            thread::sleep(MIC_RECOVERY_POLL);
+                            continue 'recovery;
+                        }
+                    };
+                if new_rate != sample_rate || new_ch != channels {
+                    drop(stream.take());
+                    return CaptureOutcome::Failed(Failure::MicDisconnected);
+                }
+                config = new_config;
+                format = new_format;
+                sample_rate = new_rate;
+                channels = new_ch;
+            }
+
+            match open_stream(
+                &device,
+                &config,
+                format,
+                mode == CaptureMode::Record,
+                Arc::clone(&shared),
+                levels.clone(),
+            ) {
+                Ok(s) => {
+                    if let Err(err) = s.play() {
+                        let failure = map_cpal_error(&err);
+                        drop(stream.take());
+                        if recovery_deadline.is_some() {
+                            thread::sleep(MIC_RECOVERY_POLL);
+                            continue 'recovery;
+                        }
+                        let _ = ready.send(Err(clone_failure(&failure)));
+                        return CaptureOutcome::Failed(failure);
+                    }
+                    stream = Some(s);
+                }
+                Err(failure) => {
+                    drop(stream.take());
+                    if recovery_deadline.is_some() {
+                        thread::sleep(MIC_RECOVERY_POLL);
+                        continue 'recovery;
+                    }
+                    let _ = ready.send(Err(clone_failure(&failure)));
+                    return CaptureOutcome::Failed(failure);
+                }
+            }
+        }
+
+        // --- Wait for first callback (initial open only) ---
+        if !ready_sent {
+            let first_callback_deadline = Instant::now() + Duration::from_secs(5);
+            'wait: loop {
+                thread::sleep(Duration::from_millis(20));
+                if shared.first_callback.load(std::sync::atomic::Ordering::Acquire) {
+                    let _ = ready.send(Ok(()));
+                    ready_sent = true;
+                    break 'wait;
+                }
+                if Instant::now() >= first_callback_deadline {
+                    drop(stream.take());
+                    let failure = Failure::Internal(
+                        "the audio device opened but delivered no callback in time".into(),
+                    );
+                    let _ = ready.send(Err(clone_failure(&failure)));
+                    return CaptureOutcome::Failed(failure);
+                }
+                if let Ok(slot) = shared.stream_error.lock() {
+                    if let Some(stored) = slot.as_ref() {
+                        match stored {
+                            Failure::MicDisconnected => {
+                                drop(stream.take());
+                                recovery_deadline =
+                                    Some(Instant::now() + MIC_RECOVERY_TIMEOUT);
+                                break 'wait;
+                            }
+                            _ => {
+                                let failure = clone_failure(stored);
+                                drop(stream.take());
+                                let _ = ready.send(Err(clone_failure(&failure)));
+                                return CaptureOutcome::Failed(failure);
+                            }
+                        }
+                    }
+                }
+                if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    drop(stream.take());
+                    return CaptureOutcome::Cancelled;
+                }
+            }
+        }
+
+        // --- Pump loop: watch clock, stop flag, stream errors ---
+        let frame_interval = Duration::from_millis(1000 / LEVEL_HZ);
+        let mut meter = LevelMeter::new();
+        let mut stop_requested: Option<Instant> = None;
+
+        'pump: loop {
+            thread::sleep(frame_interval);
+
+            if let Ok(slot) = shared.stream_error.lock() {
+                if let Some(stored) = slot.as_ref() {
+                    match stored {
+                        Failure::MicDisconnected => {
+                            drop(stream.take());
+                            recovery_deadline =
+                                Some(Instant::now() + MIC_RECOVERY_TIMEOUT);
+                            eprintln!(
+                                "[miro-audio] device disconnected, waiting for reconnection..."
+                            );
+                            break 'pump;
+                        }
+                        _ => {
+                            drop(stream.take());
+                            let failure = clone_failure(stored);
+                            if !ready_sent {
+                                let _ = ready.send(Err(clone_failure(&failure)));
+                            }
+                            return CaptureOutcome::Failed(failure);
+                        }
+                    }
+                }
+            }
+
+            let limit_reached =
+                mode == CaptureMode::Record && shared.started.elapsed().as_millis() >= shared.limit_ms;
+            if limit_reached {
+                shared
+                    .limit_reached
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                break 'pump;
+            }
+
+            if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                let began = stop_requested.get_or_insert_with(Instant::now);
+                if began.elapsed().as_millis() < RELEASE_TAIL_MS {
+                    if let Some(callback) = on_level.as_ref() {
+                        callback(levels.frame());
+                    }
+                    continue;
+                }
+                thread::sleep(Duration::from_millis(STOP_DRAIN_MS as u64));
+                break 'pump;
+            }
+
+            if let Some(callback) = on_level.as_ref() {
+                let frame = levels.frame();
+                let adaptive = meter.update(frame.level, 1.0 / LEVEL_HZ as f64);
+                callback(LevelFrame {
+                    level: adaptive,
+                    peak: frame.peak,
+                });
+            }
+        }
+
+        // If pump exited due to recovery, continue the outer loop; otherwise
+        // we are done and fall through to audio processing.
+        if recovery_deadline.is_none() {
+            break 'recovery;
         }
     }
 
     // No callbacks run after this point, so the buffer is ours to read.
-    drop(stream);
+    drop(stream.take());
     let duration_ms = shared.started.elapsed().as_millis();
     let packets = shared.packets.load(std::sync::atomic::Ordering::Relaxed);
     let callback_samples = shared
@@ -812,11 +960,6 @@ fn run_capture(
         } else {
             CaptureOutcome::Cancelled
         };
-    }
-
-    if let Some(failure) = failure {
-        discard(raw);
-        return CaptureOutcome::Failed(failure);
     }
 
     // Downmix and resample once, now that recording is over. Diagnostics run

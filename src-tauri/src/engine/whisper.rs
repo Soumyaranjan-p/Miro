@@ -32,6 +32,52 @@ use crate::errors::{Failure, Result};
 const STYLE_PROMPT: &str =
     "Hello, this is a sentence. I use TypeScript, JavaScript, GitHub, Node.js, and Kubernetes.";
 
+/// Maximum characters in the combined initial prompt.
+const MAX_PROMPT_CHARS: usize = 500;
+/// Maximum number of vocabulary terms kept after dedup.
+const MAX_VOCAB_TERMS: usize = 64;
+/// Maximum characters per vocabulary term.
+const MAX_VOCAB_TERM_LEN: usize = 100;
+
+/// Builds whisper.cpp's initial prompt from the fixed style hint plus
+/// user-supplied vocabulary terms.
+///
+/// Terms are trimmed, deduplicated case-insensitively, filtered for emptiness
+/// and per-term length, then appended after STYLE_PROMPT. The combined prompt
+/// is truncated to [`MAX_PROMPT_CHARS`]. Returns `None` when there are no
+/// terms to contribute (either no vocabulary or the caller is not English).
+fn build_initial_prompt(vocabulary: &[String]) -> Option<String> {
+    let mut seen: Vec<String> = Vec::new();
+    for term in vocabulary {
+        let trimmed = term.trim().to_string();
+        if trimmed.is_empty() || trimmed.chars().count() > MAX_VOCAB_TERM_LEN {
+            continue;
+        }
+        let lower = trimmed.to_lowercase();
+        if !seen.iter().any(|s| s.to_lowercase() == lower) {
+            seen.push(trimmed);
+        }
+        if seen.len() >= MAX_VOCAB_TERMS {
+            break;
+        }
+    }
+    if seen.is_empty() {
+        return None;
+    }
+    let mut prompt = String::with_capacity(MAX_PROMPT_CHARS);
+    prompt.push_str(STYLE_PROMPT);
+    prompt.push(' ');
+    for term in &seen {
+        if prompt.len() + term.len() + 1 > MAX_PROMPT_CHARS {
+            break;
+        }
+        prompt.push_str(term);
+        prompt.push(' ');
+    }
+    prompt.truncate(MAX_PROMPT_CHARS);
+    Some(prompt.trim().to_string())
+}
+
 /// Segments whose no-speech probability is this high are a *candidate* for
 /// silence. They are only discarded when the words they contain are also
 /// low-confidence: accented speech and a noisy room can push a real segment
@@ -100,8 +146,20 @@ impl WhisperEngine {
         }
 
         // The style prompt is English, so only use it for English dictation.
-        if matches!(options.language.as_deref(), Some("en")) {
-            params.set_initial_prompt(STYLE_PROMPT);
+        // User vocabulary terms are appended after it to steer recognition
+        // toward domain-specific words and names.
+        let initial_prompt: Option<String> = match options.language.as_deref() {
+            Some("en") => {
+                // English: always have at least the fixed style prompt.
+                Some(
+                    build_initial_prompt(&options.vocabulary)
+                        .unwrap_or_else(|| STYLE_PROMPT.to_string()),
+                )
+            }
+            _ => build_initial_prompt(&options.vocabulary),
+        };
+        if let Some(prompt) = initial_prompt {
+            params.set_initial_prompt(&prompt);
         }
 
         state
@@ -305,5 +363,88 @@ mod tests {
         // Whisper itself says this is speech. The guard is a silence filter,
         // not a general confidence filter, so it does not second-guess that.
         assert!(!is_silent_segment(0.1, Some(0.05)));
+    }
+
+    #[test]
+    fn build_initial_prompt_empty_returns_none() {
+        assert_eq!(build_initial_prompt(&[]), None);
+        assert_eq!(
+            build_initial_prompt(&["   ".into(), "\t".into()]),
+            None
+        );
+    }
+
+    #[test]
+    fn build_initial_prompt_deduplicates_case_insensitively() {
+        let prompt = build_initial_prompt(&[
+            "TypeScript".into(),
+            "typescript".into(),
+            "TYPESCRIPT".into(),
+            "Rust".into(),
+        ])
+        .unwrap();
+        let typescript_count = prompt
+            .split_whitespace()
+            .filter(|w| w.eq_ignore_ascii_case("typescript"))
+            .count();
+        assert_eq!(typescript_count, 1, "typescript must appear once: {prompt}");
+        assert!(prompt.contains("Rust"), "rust must appear: {prompt}");
+    }
+
+    #[test]
+    fn build_initial_prompt_trims_and_filters_empty() {
+        let prompt = build_initial_prompt(&[
+            "  hello  ".into(),
+            "".into(),
+            "   ".into(),
+            "world".into(),
+        ])
+        .unwrap();
+        let words: Vec<&str> = prompt.split_whitespace().collect();
+        assert!(!words.iter().any(|w| w.is_empty()), "no empty words: {prompt}");
+        assert!(words.contains(&"hello"), "hello kept: {prompt}");
+        assert!(words.contains(&"world"), "world kept: {prompt}");
+    }
+
+    #[test]
+    fn build_initial_prompt_truncates_to_max_chars() {
+        let terms: Vec<String> = (0..80).map(|i| format!("word{i:03}")).collect();
+        let prompt = build_initial_prompt(&terms).unwrap();
+        assert!(
+            prompt.chars().count() <= MAX_PROMPT_CHARS,
+            "prompt must not exceed {MAX_PROMPT_CHARS} chars, got {}",
+            prompt.chars().count()
+        );
+        assert!(
+            prompt.starts_with(STYLE_PROMPT),
+            "prompt must start with style prompt: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_initial_prompt_rejects_overly_long_terms() {
+        let too_long: String = (0..MAX_VOCAB_TERM_LEN + 1).map(|_| 'x').collect();
+        let prompt = build_initial_prompt(&[too_long.clone(), "ok".into()]).unwrap();
+        assert!(
+            !prompt.contains(&too_long[..]),
+            "overly long term must be dropped: {prompt}"
+        );
+        assert!(prompt.contains("ok"), "short term must survive: {prompt}");
+    }
+
+    #[test]
+    fn build_initial_prompt_caps_term_count() {
+        let many: Vec<String> = (0..MAX_VOCAB_TERMS * 2)
+            .map(|i| format!("t{i}"))
+            .collect();
+        let prompt = build_initial_prompt(&many).unwrap();
+        let count = prompt
+            .split_whitespace()
+            .filter(|w| w.len() > 1 && w[1..].chars().all(|c| c.is_ascii_digit()))
+            .count();
+        assert!(
+            count <= MAX_VOCAB_TERMS,
+            "term count capped at {MAX_VOCAB_TERMS}, got {count}: {prompt}"
+        );
     }
 }
