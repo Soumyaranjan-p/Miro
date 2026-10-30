@@ -29,6 +29,9 @@ serde_json = "1"
 # audio capture; the resampler to 16 kHz mono is ours (see src/audio/resample.rs)
 cpal = "0.18"
 
+# FFT for spectral subtraction noise suppression
+rustfft = "6.2"
+
 # Local speech recognition. whisper.cpp is C++, so it is a default-on feature:
 # `--no-default-features` still builds Miro, which then reports
 # `engine_unavailable` honestly instead of pretending to transcribe.

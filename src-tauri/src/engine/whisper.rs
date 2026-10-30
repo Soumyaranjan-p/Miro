@@ -82,7 +82,7 @@ fn build_initial_prompt(vocabulary: &[String]) -> Option<String> {
 /// silence. They are only discarded when the words they contain are also
 /// low-confidence: accented speech and a noisy room can push a real segment
 /// over this threshold, and dropping it silently loses part of the dictation.
-const NO_SPEECH_THRESHOLD: f32 = 0.6;
+const NO_SPEECH_THRESHOLD: f32 = 0.75;
 
 /// Mean per-word token probability below this means the decoder was guessing.
 /// Used together with [`NO_SPEECH_THRESHOLD`], never on its own.
@@ -139,6 +139,7 @@ impl WhisperEngine {
         params.set_no_speech_thold(NO_SPEECH_THRESHOLD);
         params.set_suppress_blank(true);
         params.set_suppress_nst(true);
+        params.set_logprob_thold(-1.0);
 
         match options.language.as_deref() {
             Some("auto") | Some("") | None => params.set_detect_language(true),

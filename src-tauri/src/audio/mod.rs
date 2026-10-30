@@ -18,6 +18,8 @@
 //! trade of textbook real-time purity for a simpler, auditable data path.
 
 pub mod resample;
+pub mod noise_suppress;
+pub mod vad;
 
 use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -1026,39 +1028,24 @@ fn run_capture(
     let mut resampled = resampler.process(&mono, false);
     resampled.extend(resampler.process(&[], true)); // flush the tail
     discard(mono);
-    // Gate on speech before amplifying: background noise from a quiet earphone
-    // mic must not be boosted into something whisper will hallucinate words
-    // from. The raw (resampled, un-normalized) level is the honest measure.
-    if has_no_speech(&resampled, duration_ms) {
-        let nfloor = noise_floor(&resampled);
-        let gate = f32::max(SILENCE_RMS, nfloor * SPEECH_OVER_NOISE);
-        let loud = loud_windows_at(&resampled, gate);
-        if loud > 0 {
-            eprintln!(
-                "[miro-audio] audio_empty: {} samples, {duration_ms} ms, peak {:.4}, loud windows {} of {} \
-                 (need {}, gate {:.5} = max(fixed {SILENCE_RMS}, noise_floor {nfloor:.5} x {SPEECH_OVER_NOISE})) \
-                 - captured audio was too brief",
-                resampled.len(),
-                peak(&resampled),
-                loud,
-                resampled.len() / (TARGET_SAMPLE_RATE as usize / 50).max(1),
-                MIN_LOUD_WINDOWS,
-                gate,
-            );
-        } else {
-            eprintln!(
-                "[miro-audio] audio_silent: {} samples, {duration_ms} ms, loud windows 0 - \
-                 the device `{}` fed silence; check mic selection and Windows microphone privacy",
-                resampled.len(),
-                label
-            );
-        }
+    // Apply spectral-subtraction noise suppression to reduce background noise
+    // (fans, keyboards, room tone) before the speech gate and engine.
+    let mut ns = noise_suppress::NoiseSuppressor::new();
+    ns.process(&mut resampled, sample_rate);
+    // Gate on speech using the adaptive VAD: steady background noise won't
+    // trigger whisper, which prevents it from inventing words from silence.
+    let mut vad = vad::Vad::new();
+    let vad_result = vad.analyze(&resampled);
+    if !vad_result.has_speech {
+        eprintln!(
+            "[miro-audio] audio_silent: {} samples, {duration_ms} ms, peak {:.4}, \
+             noise_floor {:.5} - no speech detected; check mic selection and Windows microphone privacy",
+            resampled.len(),
+            peak(&resampled),
+            vad_result.noise_floor,
+        );
         discard(resampled);
-        return CaptureOutcome::Failed(if loud == 0 {
-            Failure::AudioSilent { device: label }
-        } else {
-            Failure::AudioEmpty
-        });
+        return CaptureOutcome::Failed(Failure::AudioSilent { device: label });
     }
 
     normalize_peak(&mut resampled);
