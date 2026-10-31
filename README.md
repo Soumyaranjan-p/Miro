@@ -1,27 +1,29 @@
 # Miro
 
-**Speak naturally. Type everywheree.**
+**Speak naturally. Type everywhere.**
 
 Miro is a local-first voice typing utility for Windows. Press a shortcut, speak,
 and the transcript is typed into whatever application you were already in.
 Transcription runs on your machine with whisper.cpp; audio and transcripts live
 in memory and are never written to disk.
 
-<!-- The interface in one line: a floating overlay that never takes focus, and a
-     settings window that only contains settings. -->
-
 ## What it does
 
-- **Three global shortcuts.** Hold-to-talk dictation (default: hold `Ctrl + M` —
-  watched by a keyboard hook that catches both the press and the release while
-  leaving the keys free for the focused app), plus one-press mode keys: Normal
-  (default `Ctrl+Alt`) and Intent (default `Ctrl+Alt+Space`). All rebindable
-  from the Shortcuts page, with real conflict detection that refuses a
-  combination instead of failing silently. The page also shows how each key
-  reached Miro: an OS registration or the keyboard hook.
+- **Global shortcut dictation.** Hold-to-talk (default: hold `Ctrl + M`, watched
+  by a keyboard hook that catches both press and release while leaving the keys
+  free for the focused app), plus one-press mode keys: Normal (default
+  `Ctrl+Alt`) and Intent (default `Ctrl+Alt+Space`). All rebindable from the
+  Shortcuts page, with real conflict detection that refuses a combination
+  instead of failing silently.
 - **Local transcription.** whisper.cpp with a quantised `small.en` model by
   default; smaller, larger and multilingual models are opt-in downloads you
   confirm.
+- **Adaptive noise suppression.** Spectral-subtraction filtering runs on every
+  recording before transcription, reducing steady background noise (fans,
+  keyboards, room tone) so whisper doesn't hallucinate words from noise.
+- **Voice activity detection.** Before transcription, Miro checks that the
+  capture actually contains speech; true silence is rejected immediately instead
+  of being handed to the engine.
 - **Types into the app you were in.** Unicode `SendInput` first, with a
   clipboard fallback that saves and restores your clipboard. A transcript that
   fails to insert stays reachable: copy it, or paste it later yourself.
@@ -29,20 +31,16 @@ in memory and are never written to disk.
   other windows, and never steals focus from the app you are typing into.
 - **Two modes.** Normal is everything working; Intent pauses dictation and
   puts Miro on guard. Your mode, shortcut and preferences persist.
-- **A Miro that reacts.** The Home page shows the live companion: eyes that
-  follow your cursor, a squish when clicked (twice fast and it flips, three
-  times fast and it gets dizzy), hearts when hovered, sleep when ignored. It
-  reacts to the app's mode from either direction — mode buttons or the
-  `Ctrl+Alt` / `Ctrl+Alt+Space` hotkeys — and glows alert red in Intent
-  mode. The interface is set in Inter, bundled locally
-  (`@fontsource-variable/inter`). A small, static drawing of the same artwork
-  is the sidebar profile picture, and the icons a headless browser captures
-  from that artwork.
 - **Microphone checks before it records.** The device list is verified before
-  capture starts, recording keeps recording for a beat after you release the
-  key so word endings are not cut, buffers that are too short or silent are
-  refused locally, and every failure names itself (no device, permission
-  refused, empty audio) instead of a blank "detecting…".
+  capture starts, recording keeps rolling for one second after you release the
+  key so word endings are not cut, and every failure names itself (no device,
+  permission refused, empty audio) instead of a blank "detecting…".
+- **Microphone disconnect recovery.** If your mic is unplugged mid-dictation,
+  Miro waits up to ten seconds for it to reconnect and resumes — it does not
+  throw away your recording.
+- **Live partial transcription.** While you speak, Miro re-recognizes the
+  capture buffer every 1.5 seconds and shows provisional words in the overlay,
+  so you can see progress without waiting for the full dictation to finish.
 - **Statistics, numerals only.** Dictations per day, words, speaking speed and
   where time went by mode — aggregated numbers on page and disk (`stats.json`
   holds counts, never a word of text).
@@ -57,6 +55,8 @@ in memory and are never written to disk.
   retry window only, then it is gone; Miro has no screen to read old dictations
   because there is nothing to read.
 - No AI text editing in this version. Clean-up is a fixed set of rules.
+- No persistent storage of audio or transcripts — everything is zeroized after
+  use.
 
 ## Quick start
 
@@ -86,52 +86,34 @@ cargo test --lib                  # rust tests
 npm run build                     # production webview bundles
 ```
 
-**Last full run (2026-10-22):** every one of the above is clean — 155 Rust unit
-tests pass (2 ignored, platform-gated) and 26 frontend tests pass, `clippy
--D warnings` and `eslint --max-warnings=0` report nothing, and the production
-bundle builds. The two ignored tests were also run for real: one feeds a
-synthetic spoken sentence through a downloaded `tiny.en` model ("the quick
-brown fox…" is transcribed correctly on CPU in ~2 s), the other captures two
-seconds from the real microphone and logs samples, peak and sample-rate. The
-privacy audit reports no stray audio or transcript files.
-
-## Where things are
-
-| Path | Contents |
-|---|---|
-| `src/` | React + TypeScript for the two windows: `main.tsx` (the app shell), `overlay.tsx` (overlay) |
-| `src/components/shell/` | the desktop app's pages: Home, Statistics, Shortcuts, Settings |
-| `public/miro-mascot.html` | the live companion: its own SVG artwork and animation script, dropped in as designed (`window.Miro.setMode` is the app's hook into it) |
-| `public/miro-avatar.svg` | the same mascot as a small static drawing — the sidebar profile picture |
-| `src/lib/fox/` + `LiveFox.tsx` | the previous procedural canvas painter; kept for the icon harness |
-| `icon-harness.html` + `src/icon-harness.ts` | still available to re-render the canvas painter; `public/miro-avatar.svg` is now the icon source `generate-icons.py` scales |
-| `src/lib/` | IPC contract, overlay state machine, formatting, error copy, theme |
-| `src-tauri/src/session.rs` | the dictation flow: hotkey → record → transcribe → insert → clear |
-| `src-tauri/src/stats.rs` | per-day dictation/words/mode-time counters; `stats.json` keeps numerals only |
-| `src-tauri/src/keyboard_hook.rs` | the low-level hook that catches lone keys (the right `Ctrl`) and push-to-talk release |
-| `src-tauri/src/audio/` | cpal capture, level frames, and the resampler to 16 kHz mono |
-| `src-tauri/src/engine/` | the speech engine boundary and the whisper.cpp backend |
-| `src-tauri/src/insertion/` | focus tracking, `SendInput`, clipboard fallback with restore |
-| `src-tauri/src/hotkeys.rs` | shortcut parsing, plugin + hook registration, conflict reporting |
-| `src-tauri/src/privacy.rs` | temp-file sweep, buffer zeroing, the retry window |
-| `docs/` | decisions and limits: [ADR-0001](docs/ADR-0001-speech-engine.md), [PRIVACY](docs/PRIVACY.md), [MODELS](docs/MODELS.md), [COMPATIBILITY](docs/COMPATIBILITY.md), [KNOWN LIMITATIONS](docs/KNOWN-LIMITATIONS.md) |
-| `scripts/` | verification, privacy audit, icon generation, toolchain setup |
+**Last full run (2026-10-31):** every one of the above is clean — Rust unit tests
+pass (2 ignored, platform-gated), `cargo clippy -D warnings` and `eslint
+--max-warnings=0` report nothing, and the production bundle builds. The two
+ignored tests were also run for real: one feeds a synthetic spoken sentence
+through a downloaded `tiny.en` model ("the quick brown fox…" is transcribed
+correctly on CPU in ~2 s), the other captures two seconds from the real
+microphone and logs samples, peak and sample-rate. The privacy audit reports no
+stray audio or transcript files.
 
 ## How the pieces fit
 
 ```
-hotkey ─► session ─► audio (own thread) ─► resample to 16 kHz mono
-             │                                     │
-             │                                     ▼
-             │                          engine (whisper.cpp, own thread)
-             │                                     │
-             │                                     ▼
-             │                          textproc (deterministic clean-up)
-             ▼                                     │
-        overlay events  ◄──────────────  insertion into the remembered window
-        (no text, only                          │
-         counts and codes)                      ▼
-                                        clear buffers / retry window
+hotkey ─► session ─► audio (own thread)
+              │             ├─ noise suppression (spectral subtraction)
+              │             ├─ voice activity detection (20 ms energy gate)
+              │             └─ resample to 16 kHz mono
+              │                                     │
+              │                             engine (whisper.cpp, own thread)
+              │                                     │
+              │                             textproc (deterministic clean-up)
+              │                                     │
+              └──► overlay events ◄─────────────────┘
+                         (no text, only
+                          counts and codes)
+              │
+              │                         insertion into the remembered window
+              ▼                                     │
+           clear buffers / retry window
 ```
 
 Two properties fall out of that shape and are worth stating:
@@ -146,3 +128,17 @@ Two properties fall out of that shape and are worth stating:
 
 MIT. The bundled engine is whisper.cpp (MIT) and the models are MIT-licensed
 Whisper weights published by the whisper.cpp project.
+
+## Known limitations
+
+- **Single speech engine.** whisper.cpp only; no Parakeet, Apple SFSpeech or
+  cloud alternatives.
+- **English-optimized default.** The style prompt and default model are English;
+  multilingual models work but the style prompt may not match.
+- **Live transcription is CPU-intensive.** Partial recognition runs every 1.5 s
+  while you speak; on slow CPUs this can add load.
+- **Clipboard fallback for difficult targets.** Elevated apps, some terminals
+  and password fields may refuse injected keystrokes; Miro falls back to
+  clipboard paste (Ctrl+V) when that happens.
+- **Manual testing recommended.** This build has not been exercised with a
+  physical microphone in this repository's environment.
