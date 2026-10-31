@@ -184,12 +184,12 @@ mod tests {
     fn vad_resets_between_recordings() {
         let mut vad = Vad::new();
         // First recording: loud audio.
-        let mut loud = vec![0.5f32; 16000];
+        let loud = vec![0.5f32; 16000];
         let r1 = vad.analyze(&loud);
         assert!(r1.has_speech);
         // Reset and analyze silence.
         vad.reset();
-        let mut silence = vec![0.0001f32; 16000];
+        let silence = vec![0.0001f32; 16000];
         let r2 = vad.analyze(&silence);
         assert!(!r2.has_speech);
     }

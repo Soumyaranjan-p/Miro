@@ -25,7 +25,6 @@ const SPECTRAL_FLOOR: f32 = 0.1;
 /// Spectral subtraction noise suppressor.
 pub struct NoiseSuppressor {
     noise_magnitude: Option<Vec<f32>>,
-    frames_seen: usize,
     forward_planner: FftPlanner<f32>,
     inverse_planner: FftPlanner<f32>,
 }
@@ -40,7 +39,6 @@ impl NoiseSuppressor {
     pub fn new() -> Self {
         Self {
             noise_magnitude: None,
-            frames_seen: 0,
             forward_planner: FftPlanner::new(),
             inverse_planner: FftPlanner::new(),
         }
@@ -53,8 +51,8 @@ impl NoiseSuppressor {
             return;
         }
 
-        let mut forward = self.forward_planner.plan_fft(FFT_SIZE, FftDirection::Forward);
-        let mut inverse = self.inverse_planner.plan_fft(FFT_SIZE, FftDirection::Inverse);
+        let forward = self.forward_planner.plan_fft(FFT_SIZE, FftDirection::Forward);
+        let inverse = self.inverse_planner.plan_fft(FFT_SIZE, FftDirection::Inverse);
 
         // Estimate noise floor from the first NOISE_FRAMES frames.
         if self.noise_magnitude.is_none() {
