@@ -12,9 +12,8 @@ in memory and are never written to disk.
 - **Global shortcut dictation.** Hold-to-talk (default: hold `Ctrl + M`, watched
   by a keyboard hook that catches both press and release while leaving the keys
   free for the focused app), plus one-press mode keys: Normal (default
-  `Ctrl+Alt`) and Intent (default `Ctrl+Alt+Space`). All rebindable from the
-  Shortcuts page, with real conflict detection that refuses a combination
-  instead of failing silently.
+  `Ctrl+Alt`). All rebindable from the Shortcuts page, with real conflict
+  detection that refuses a combination instead of failing silently.
 - **Local transcription.** whisper.cpp with a quantised `small.en` model by
   default; smaller, larger and multilingual models are opt-in downloads you
   confirm.
@@ -29,8 +28,8 @@ in memory and are never written to disk.
   fails to insert stays reachable: copy it, or paste it later yourself.
 - **A floating overlay** that shows recording, processing and errors, sits above
   other windows, and never steals focus from the app you are typing into.
-- **Two modes.** Normal is everything working; Intent pauses dictation and
-  puts Miro on guard. Your mode, shortcut and preferences persist.
+- **Normal mode.** Everything works: dictation, stats, preferences. Your
+  shortcut and settings persist across restarts.
 - **Microphone checks before it records.** The device list is verified before
   capture starts, recording keeps rolling for one second after you release the
   key so word endings are not cut, and every failure names itself (no device,
