@@ -19,13 +19,9 @@ const PAGES: Array<{ id: PageId; label: string; icon: ReactNode }> = [
 function Sidebar({
   page,
   onNavigate,
-  intentActive,
-  onToggleMode,
 }: {
   page: PageId;
   onNavigate: (next: PageId) => void;
-  intentActive: boolean;
-  onToggleMode: () => void;
 }) {
   return (
     <aside className="msh-sidebar">
@@ -47,26 +43,10 @@ function Sidebar({
           </button>
         ))}
       </nav>
-
-      <button
-        type="button"
-        className={`msh-modepill${intentActive ? " is-intent" : ""}`}
-        onClick={onToggleMode}
-        title={intentActive ? "Back to Normal mode" : "Switch to Intent mode"}
-      >
-        <span className="msh-modepill__dot" aria-hidden />
-        <span>{intentActive ? "Intent mode" : "Normal mode"}</span>
-        <span className="msh-modepill__hint">{intentActive ? "on" : "on"}</span>
-      </button>
     </aside>
   );
 }
 
-/**
- * The sidebar profile picture: the mascot as a small, static image (the same
- * artwork as the live one, frozen in its calm pose). Live reaction lives on
- * the Home page; the avatar just says who owns the app.
- */
 function SidebarFox(): ReactNode {
   return <img className="msh-sidebar__avatar" src="./miro-avatar.svg" alt="Miro" width={34} height={34} />;
 }
@@ -80,7 +60,7 @@ function greeting(userName: string): string {
 }
 
 export function MiroApp() {
-  // A ?page= query is a dev/preview convenience; the app always opens on Home.
+  // A ?page= query is a dev convenience; the app always opens on Home.
   const initialPage = new URLSearchParams(window.location.search).get("page");
   const [page, setPage] = useState<PageId>(
     initialPage === "statistics" || initialPage === "shortcuts" || initialPage === "settings"
@@ -88,9 +68,7 @@ export function MiroApp() {
       : "home",
   );
   const [userName, setUserName] = useState("");
-  const { settings } = useSettings();
   const reducedMotion = useReducedMotion();
-  const intentActive = settings?.homeMode === "intent";
 
   useEffect(() => {
     let cancelled = false;
@@ -107,13 +85,9 @@ export function MiroApp() {
     };
   }, []);
 
-  const toggleMode = () => {
-    void ipc.switchMode(intentActive ? "home" : "intent").catch(() => undefined);
-  };
-
   return (
     <div className="msh-app" data-motion={reducedMotion ? "reduced" : "full"}>
-      <Sidebar page={page} onNavigate={setPage} intentActive={intentActive} onToggleMode={toggleMode} />
+      <Sidebar page={page} onNavigate={setPage} />
       <main className="msh-main">
         {page === "home" ? (
           <PageHome greeting={greeting(userName)} onNavigateToStatistics={() => setPage("statistics")} />

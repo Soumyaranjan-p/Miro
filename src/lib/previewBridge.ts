@@ -26,7 +26,6 @@ const settings: Settings = {
   version: 3,
   shortcut: "Ctrl+M",
   normalShortcut: "Ctrl+Alt",
-  intentShortcut: "Ctrl+Alt+Space",
   mode: "push_to_talk",
   homeMode: "home",
   soundOn: true,
@@ -51,15 +50,6 @@ const settings: Settings = {
       "i mean",
       "like",
     ],
-  },
-  intent: {
-    enabled: false,
-    backend: "local",
-    endpoint: "http://127.0.0.1:11434",
-    model: "llama3.2",
-    timeoutMs: 4000,
-    maxOutputChars: 1200,
-    cloudConsentEndpoint: null,
   },
   theme: "system",
   overlayPosition: "bottom-center",
@@ -149,7 +139,6 @@ function previewStats(): StatsSummary {
       words,
       speechMs,
       normalMs: speechMs * 9,
-      intentMs: offset % 3 === 0 ? speechMs * 4 : 0,
     });
     totalWords += words;
     totalDictations += dictations;
@@ -160,7 +149,6 @@ function previewStats(): StatsSummary {
     totalWords,
     totalSpeechMs,
     normalMs: totalSpeechMs * 9,
-    intentMs: totalSpeechMs * 2,
     wordsPerMinute: totalSpeechMs > 0 ? totalWords / (totalSpeechMs / 60_000) : null,
     streakDays: 5,
     days,
@@ -269,13 +257,6 @@ export const previewBridge: MiroBridge = {
           mechanism: "plugin",
           detail: null,
         },
-        {
-          role: "intent",
-          registered: true,
-          shortcut: settings.intentShortcut,
-          mechanism: "plugin",
-          detail: null,
-        },
       ],
       microphone: { state: "available", detail: null },
       temp: { state: "clean", detail: null },
@@ -377,9 +358,6 @@ export const previewBridge: MiroBridge = {
       stopLevels();
       overlay({ kind: "hidden" });
     }
-  },
-  async switchMode(mode) {
-    await this.setSettings({ homeMode: mode });
   },
   // The preview has one fixture transcript, same as the overlay demo.
   async getPendingTranscript() {

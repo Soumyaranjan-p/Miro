@@ -64,13 +64,3 @@ export function IconCheck() {
     </Node>
   );
 }
-
-export function IconIntent() {
-  return (
-    <Node>
-      <path d="M12 3.5 5 6v5.5c0 4.4 2.9 7.4 7 9 4.1-1.6 7-4.6 7-9V6Z" />
-      <path d="M12 9v4" />
-      <circle cx="12" cy="16" r="0.4" fill="currentColor" stroke="none" />
-    </Node>
-  );
-}

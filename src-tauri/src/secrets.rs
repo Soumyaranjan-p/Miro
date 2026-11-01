@@ -1,4 +1,4 @@
-//! Secret storage for the cloud Intent Mode backend.
+//! Secret storage for the cloud backend.
 //!
 //! The API key is the only secret Miro keeps. It never enters `config.json`:
 //! it lives in Windows Credential Manager, and the rest of the application

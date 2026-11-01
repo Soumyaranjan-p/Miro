@@ -34,10 +34,6 @@ pub struct DayEntry {
     pub words: u32,
     pub speech_ms: u64,
     pub normal_ms: u64,
-    /// Time spent in Intent Mode. The alias is the one-time rename shim for a
-    /// stats file written before the mode was renamed.
-    #[serde(alias = "incidentMs")]
-    pub intent_ms: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
@@ -55,7 +51,6 @@ pub struct StatsDay {
     pub words: u32,
     pub speech_ms: u64,
     pub normal_ms: u64,
-    pub intent_ms: u64,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -65,7 +60,6 @@ pub struct StatsSummary {
     pub total_words: u32,
     pub total_speech_ms: u64,
     pub normal_ms: u64,
-    pub intent_ms: u64,
     /// Average words per minute over all recorded speech, or None without data.
     pub words_per_minute: Option<f64>,
     /// Consecutive days ending today (or yesterday) with at least one dictation.
@@ -163,7 +157,6 @@ pub fn on_mode_changed(app: &AppHandle) {
             let entry = stats.days.entry(local_date_key(since_ms)).or_default();
             match mode {
                 HomeMode::Home => entry.normal_ms = entry.normal_ms.saturating_add(span),
-                HomeMode::Intent => entry.intent_ms = entry.intent_ms.saturating_add(span),
             }
             if let Err(failure) = save(&path, &stats) {
                 logging::event(Event::Failure {
@@ -193,13 +186,11 @@ pub fn summary(app: &AppHandle) -> Result<StatsSummary> {
     let mut total_words = 0u32;
     let mut total_speech_ms = 0u64;
     let mut normal_ms = 0u64;
-    let mut intent_ms = 0u64;
     for entry in stats.days.values() {
         total_dictations = total_dictations.saturating_add(entry.dictations);
         total_words = total_words.saturating_add(entry.words);
         total_speech_ms = total_speech_ms.saturating_add(entry.speech_ms);
         normal_ms = normal_ms.saturating_add(entry.normal_ms);
-        intent_ms = intent_ms.saturating_add(entry.intent_ms);
     }
 
     let words_per_minute = if total_speech_ms > 0 && total_words > 0 {
@@ -226,7 +217,6 @@ pub fn summary(app: &AppHandle) -> Result<StatsSummary> {
             words: entry.words,
             speech_ms: entry.speech_ms,
             normal_ms: entry.normal_ms,
-            intent_ms: entry.intent_ms,
         })
         .collect();
 
@@ -235,7 +225,6 @@ pub fn summary(app: &AppHandle) -> Result<StatsSummary> {
         total_words,
         total_speech_ms,
         normal_ms,
-        intent_ms,
         words_per_minute,
         streak_days: streak(&stats),
         days,
@@ -299,7 +288,6 @@ mod tests {
         let entry = stats.days.entry(date.to_string()).or_default();
         match mode {
             HomeMode::Home => entry.normal_ms = entry.normal_ms.saturating_add(ms),
-            HomeMode::Intent => entry.intent_ms = entry.intent_ms.saturating_add(ms),
         }
     }
 
@@ -320,11 +308,9 @@ mod tests {
     fn mode_seconds_land_in_their_own_bucket() {
         let mut stats = file();
         apply_mode_seconds(&mut stats, "2026-10-20", HomeMode::Home, 1_000_000);
-        apply_mode_seconds(&mut stats, "2026-10-20", HomeMode::Intent, 500_000);
 
         let day = &stats.days["2026-10-20"];
         assert_eq!(day.normal_ms, 1_000_000);
-        assert_eq!(day.intent_ms, 500_000);
         assert_eq!(day.dictations, 0, "time in a mode is not a dictation");
     }
 
@@ -399,7 +385,6 @@ mod tests {
         .unwrap();
 
         let stats = load(&path);
-        assert_eq!(stats.days["2026-10-20"].intent_ms, 500);
         assert_eq!(stats.version, STATS_VERSION);
         let _ = fs::remove_dir_all(&dir);
     }

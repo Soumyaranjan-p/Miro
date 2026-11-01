@@ -133,7 +133,7 @@ pub enum Failure {
     TempCleanup(String),
     #[error("settings could not be saved: {0}")]
     ConfigWrite(String),
-    #[error("cloud Intent Mode needs consent for the configured endpoint")]
+    #[error("cloud API key not configured")]
     CloudConsentRequired,
     #[error("no cloud API key is stored")]
     CloudKeyMissing,

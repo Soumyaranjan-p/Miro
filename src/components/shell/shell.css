@@ -107,11 +107,6 @@
   outline-offset: 2px;
 }
 
-.msh-modepill.is-intent {
-  border-color: color-mix(in oklab, var(--miro-danger) 45%, transparent);
-  background: var(--miro-danger-soft);
-}
-
 .msh-modepill__dot {
   width: 8px;
   height: 8px;
@@ -120,12 +115,6 @@
   background: var(--miro-success);
   box-shadow: 0 0 6px color-mix(in oklab, var(--miro-success) 55%, transparent);
   flex: none;
-}
-
-.msh-modepill.is-intent .msh-modepill__dot {
-  background: var(--miro-danger);
-  box-shadow: 0 0 6px color-mix(in oklab, var(--miro-danger) 55%, transparent);
-  animation: msh-breathe 2.4s ease-in-out infinite;
 }
 
 .msh-modepill__hint {
@@ -379,11 +368,6 @@
   background: var(--miro-accent-soft);
 }
 
-.msh-mode.is-active.is-intent {
-  border-color: color-mix(in oklab, var(--miro-danger) 55%, transparent);
-  background: var(--miro-danger-soft);
-}
-
 .msh-mode__name {
   display: flex;
   align-items: center;
@@ -410,11 +394,6 @@
   place-items: center;
   background: var(--miro-accent);
   color: var(--miro-accent-ink);
-}
-
-.msh-mode.is-active.is-intent .msh-mode__check {
-  background: var(--miro-danger);
-  color: #fff;
 }
 
 /* ---------- charts ---------- */

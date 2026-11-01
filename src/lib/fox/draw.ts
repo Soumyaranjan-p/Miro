@@ -27,7 +27,6 @@
 export type FoxState =
   | "neutral"
   | "normal"
-  | "intent"
   | "listening"
   | "processing"
   | "error";
@@ -106,7 +105,6 @@ interface Pose {
 
 function poseFor(state: FoxState): Pose {
   switch (state) {
-    case "intent":
     case "error":
       return { earBack: 0.7, tailTuck: 0.9, tense: 1.4, blush: 0.35 };
     case "listening":
@@ -132,8 +130,6 @@ function eyeShape(state: FoxState, level: number): EyeSpec {
   switch (state) {
     case "listening":
       return { openness: 0.92, wide: 0.35 + level * 0.25 };
-    case "intent":
-      return { openness: 1, wide: 0.6 };
     case "error":
       return { openness: 0.42, wide: 0.3 };
     case "processing":
@@ -516,7 +512,7 @@ export function drawFox(
   // The click reaction runs down on its own clock.
   render.poke = Math.max(0, render.poke - dt);
 
-  const colors = params.state === "intent" || params.state === "error" ? ALERT : CALM;
+  const colors = params.state === "error" ? ALERT : CALM;
   const intent = colors === ALERT;
   const pose = mixPose(poseFor("normal"), poseFor(params.state), render.blend);
 

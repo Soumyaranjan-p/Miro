@@ -55,7 +55,7 @@ pub enum OverlayState {
     /// mode did not change, so pressing Ctrl+Alt while already in Normal
     /// mode answers "Miro is calm" instead of silence.
     Mode {
-        /// "home" (Miro calm) or "intent" (Miro on guard).
+        /// "home" (Miro calm).
         #[serde(rename = "homeMode")]
         home_mode: &'static str,
     },

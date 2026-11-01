@@ -1,18 +1,13 @@
 import { useCallback } from "react";
 import { formatShortcut } from "../../lib/format";
-import { useRuntimeStatus, useSettings } from "../../lib/hooks";
+import { useSettings, useRuntimeStatus } from "../../lib/hooks";
 import { ipc, type SettingsPatch } from "../../lib/ipc";
 import type { HotkeyStatus } from "../../lib/types";
-import { IconKeyboard, IconIntent } from "./Icons";
+import { IconKeyboard } from "./Icons";
 import { IconMic } from "../icons";
 import { Banner, Mono, Pill, Section } from "../settings/Controls";
 import { ShortcutField, type ShortcutCommitResult } from "../settings/ShortcutField";
 
-/**
- * All three rebindable hotkeys on one page: the dictation hold, the Normal
- * mode switch and the Intent mode switch. The registry is suspended while a
- * field captures, so the very keys being recorded arrive as keystrokes.
- */
 export function PageShortcuts() {
   const { settings, update } = useSettings();
   const { status } = useRuntimeStatus(5000);
@@ -62,7 +57,7 @@ export function PageShortcuts() {
       <Section
         title="Normal mode"
         icon={<IconKeyboard />}
-        description="Flips the whole app back to Normal mode: dictation live, Miro calm."
+        description="Flips the whole app back to Normal mode: dictation paused, Miro calm."
       >
         <HotkeyRow
           settings={settings}
@@ -80,27 +75,6 @@ export function PageShortcuts() {
         />
       </Section>
 
-      <Section
-        title="Intent mode"
-        icon={<IconIntent />}
-        description="Flips the app into Intent mode: dictation paused, Miro on guard."
-      >
-        <HotkeyRow
-          settings={settings}
-          update={update}
-          fieldName="intentShortcut"
-          defaultShortcut="Ctrl+Alt+Space"
-          label="Intent mode hotkey"
-          hint={
-            <>
-              Default is <Mono>Ctrl+Alt+Space</Mono>. Keep the mode keys one press apart so they are hard to confuse.
-            </>
-          }
-          mode="push_to_talk"
-          runtime={status?.hotkeys.find((entry) => entry.role === "intent")}
-        />
-      </Section>
-
       <Banner tone="info" title="How the keys reach Miro">
         Where Windows allows it, keys are registered with the operating system. A key alone with no modifiers (like the
         dictation default) uses a keyboard hook instead: Miro compares what it sees against your shortcut only and passes
@@ -110,7 +84,7 @@ export function PageShortcuts() {
   );
 }
 
-type HotkeyFieldName = "shortcut" | "normalShortcut" | "intentShortcut";
+type HotkeyFieldName = "shortcut" | "normalShortcut";
 
 function HotkeyRow({
   settings,
@@ -122,7 +96,7 @@ function HotkeyRow({
   mode,
   runtime,
 }: {
-  settings: { shortcut: string; normalShortcut: string; intentShortcut: string; mode: "toggle" | "push_to_talk" };
+  settings: { shortcut: string; normalShortcut: string; mode: "toggle" | "push_to_talk" };
   update: (patch: SettingsPatch) => Promise<unknown>;
   fieldName: HotkeyFieldName;
   defaultShortcut: string;

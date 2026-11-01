@@ -9,28 +9,13 @@
 export type DictationMode = "toggle" | "push_to_talk";
 export type ThemePreference = "system" | "light" | "dark";
 export type OverlayPosition = "bottom-center" | "bottom-right" | "center";
-/** Which screen the home window opens on: the dictation home or Intent Mode. */
-export type HomeMode = "home" | "intent";
+/** Which screen the home window opens on: the dictation home. */
+export type HomeMode = "home";
 
 /** How live dictation inserts transcribed words. */
 export type LiveMode = "insert" | "preview" | "off";
 
 export type RestructureBackend = "local" | "cloud";
-
-/**
- * Intent Mode settings. Off by default; when off, dictation is unchanged.
- * `cloudConsentEndpoint` is the exact endpoint the user consented to send
- * transcripts to, or null when consent has not been given.
- */
-export interface IntentSettings {
-  enabled: boolean;
-  backend: RestructureBackend;
-  endpoint: string;
-  model: string;
-  timeoutMs: number;
-  maxOutputChars: number;
-  cloudConsentEndpoint: string | null;
-}
 
 /** Live text shown in the overlay during streaming dictation. */
 export interface LiveText {
@@ -56,9 +41,7 @@ export interface Settings {
   mode: DictationMode;
   /** Normal-mode hotkey: switches the home window to Normal mode. */
   normalShortcut: string;
-  /** Intent-mode hotkey: switches the home window to Intent mode. */
-  intentShortcut: string;
-  /** Home window: last selected mode - Normal ("home") or Intent ("intent"). */
+  /** Home window: last selected mode - Normal ("home"). */
   homeMode: HomeMode;
   /** Home window sound toggle. */
   soundOn: boolean;
@@ -69,7 +52,6 @@ export interface Settings {
   language: string;
   maxRecordingSeconds: number;
   cleanup: CleanupOptions;
-  intent: IntentSettings;
   theme: ThemePreference;
   overlayPosition: OverlayPosition;
   showTranscriptPreview: boolean;
@@ -124,7 +106,7 @@ export type ErrorCode =
  */
 export type OverlayState =
   | { kind: "hidden" }
-  | { kind: "mode"; homeMode: "home" | "intent" }
+  | { kind: "mode"; homeMode: "home" }
   | {
       kind: "recording";
       deviceLabel: string;
@@ -182,7 +164,7 @@ export interface ModelInfo {
 
 /**
  * One configured global hotkey and how it ended up registered. `role` is the
- * stable label the dispatcher uses: "dictation", "normal", "intent".
+ * stable label the dispatcher uses: "dictation", "normal".
  */
 export interface HotkeyStatus {
   role: string;
@@ -248,8 +230,6 @@ export interface StatsDay {
   speechMs: number;
   /** Time spent in Normal mode, beginning on that local day. */
   normalMs: number;
-  /** Time spent in Intent mode, beginning on that local day. */
-  intentMs: number;
 }
 
 /** Aggregated numbers for the Statistics page. Read-only, from `stats.json`. */
@@ -258,7 +238,6 @@ export interface StatsSummary {
   totalWords: number;
   totalSpeechMs: number;
   normalMs: number;
-  intentMs: number;
   /** Average words per minute over all recorded speech, or null without data. */
   wordsPerMinute: number | null;
   /** Consecutive days ending today (or yesterday) with at least one dictation. */

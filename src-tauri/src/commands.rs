@@ -13,9 +13,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-use crate::config::{
-    HomeMode, Mode, Settings, SettingsPatch,
-};
+use crate::config::{Mode, Settings, SettingsPatch};
 use crate::errors::{ErrorCode, Failure};
 use crate::events::{self, ModelProgress, RuntimeStatus};
 use crate::hotkeys::{Hotkey, Mechanism};
@@ -116,15 +114,11 @@ pub fn set_settings(
 
     if after.shortcut != before.shortcut
         || after.normal_shortcut != before.normal_shortcut
-        || after.intent_shortcut != before.intent_shortcut
         || after.mode != before.mode
     {
         apply_global_hotkeys(&app, &after)?;
     }
     if after.home_mode != before.home_mode {
-        // Leaving a mode abandons whatever was in flight: Intent mode is a
-        // visual state, so a recording migrating between modes would be
-        // surprising.
         session.cancel(&app);
         crate::stats::on_mode_changed(&app);
     }
@@ -139,57 +133,6 @@ pub fn set_settings(
     session.refresh_runtime(&app);
     let _ = app.emit(events::SETTINGS_EVENT, after.clone());
     Ok(after)
-}
-
-/// The single source of truth for the application mode visible everywhere.
-/// Used by the plugin-hotkey dispatcher, the mode pill and shortcuts.
-pub fn switch_home_mode(app: &AppHandle, mode: HomeMode) -> CmdResult<()> {
-    let app_state = app.state::<AppState>();
-    let before = app_state.settings();
-    if before.home_mode == mode {
-        // Even a no-op press answers on the overlay: a hotkey that says
-        // nothing feels broken.
-        acknowledge_mode(app, mode);
-        return Ok(());
-    }
-    let after = app_state.update(SettingsPatch {
-        home_mode: Some(mode),
-        ..SettingsPatch::default()
-    })?;
-
-    let session = app.state::<Session>();
-    session.cancel(app);
-    crate::stats::on_mode_changed(app);
-    session.refresh_runtime(app);
-    let _ = app.emit(events::SETTINGS_EVENT, after.clone());
-    acknowledge_mode(app, mode);
-    Ok(())
-}
-
-/// Briefly answers a mode hotkey on the overlay ("Miro calm" / "Miro on
-/// guard"), in both the changed and the no-op case. Skipped while a
-/// dictation is in flight: that overlay is busy telling a story already.
-fn acknowledge_mode(app: &AppHandle, mode: HomeMode) {
-    let session = app.state::<Session>();
-    if session.phase() != crate::session::Phase::Idle {
-        return;
-    }
-    crate::session::emit_overlay(
-        app,
-        events::OverlayState::Mode {
-            home_mode: match mode {
-                HomeMode::Home => "home",
-                HomeMode::Intent => "intent",
-            },
-        },
-    );
-}
-
-/// The command mirror of [`switch_home_mode`], exposed so the UI's mode pill
-/// and shortcut cards can flip the mode through IPC.
-#[tauri::command]
-pub fn switch_home_mode_command(app: AppHandle, mode: HomeMode) -> CmdResult<()> {
-    switch_home_mode(&app, mode)
 }
 
 /// Plans and applies all three global hotkeys.
@@ -217,7 +160,6 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
     let roles = [
         ("dictation", &settings.shortcut, settings.mode),
         ("normal", &settings.normal_shortcut, Mode::PushToTalk),
-        ("intent", &settings.intent_shortcut, Mode::PushToTalk),
     ];
 
     let mut parsed: Vec<(&str, Hotkey, Mode)> = Vec::new();
@@ -340,7 +282,7 @@ pub fn apply_global_hotkeys(app: &AppHandle, settings: &Settings) -> CmdResult<(
             role: match role {
                 "dictation" => "dictation",
                 "normal" => "normal",
-                _ => "intent",
+                _ => "normal",
             },
             registered,
             shortcut: canonical,
@@ -390,7 +332,6 @@ pub fn check_shortcut(
     for (other, label) in [
         (&settings.shortcut, "the dictation hotkey"),
         (&settings.normal_shortcut, "the Normal mode hotkey"),
-        (&settings.intent_shortcut, "the Intent mode hotkey"),
     ] {
         if let Ok(other_hotkey) = Hotkey::parse(other) {
             if other_hotkey.same_target(&parsed) {
@@ -749,20 +690,4 @@ pub fn get_startup_info(app: AppHandle, session: State<'_, Session>) -> CmdResul
 pub struct StartupInfo {
     pub version: String,
     pub engine: events::EngineStatus,
-}
-
-/// Cloud API key management commands (stubs for now)
-#[tauri::command]
-pub fn cloud_key_status() -> CmdResult<bool> {
-    Ok(false)
-}
-
-#[tauri::command]
-pub fn set_cloud_api_key(_key: String) -> CmdResult<()> {
-    Ok(())
-}
-
-#[tauri::command]
-pub fn clear_cloud_api_key() -> CmdResult<()> {
-    Ok(())
 }

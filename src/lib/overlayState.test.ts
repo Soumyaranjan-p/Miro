@@ -108,7 +108,6 @@ describe("overlay state machine", () => {
     ).toBeNull();
     expect(autoHideDelayMs({ kind: "recording", deviceLabel: "x", startedAtMs: 0, maxSeconds: 60, liveText: null })).toBeNull();
     expect(autoHideDelayMs({ kind: "mode", homeMode: "home" })).toBe(2200);
-    expect(autoHideDelayMs({ kind: "mode", homeMode: "intent" })).toBe(2200);
     expect(autoHideDelayMs(initialOverlayState)).toBeNull();
   });
 

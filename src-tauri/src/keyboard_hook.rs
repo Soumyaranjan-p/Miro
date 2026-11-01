@@ -49,7 +49,7 @@ pub enum PressEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WatchedHotkey {
     /// Stable role label the dispatcher maps to behaviour ("dictation",
-    /// "normal", "intent"). Not a secret: it names which action fires.
+    /// "normal"). Not a secret: it names which action fires.
     pub role: &'static str,
     /// One group per required key; a group is satisfied by any of its keys.
     pub groups: Vec<Vec<u32>>,
@@ -98,8 +98,8 @@ impl HookMatcher {
     }
 
     /// The satisfied hotkey requiring the most keys, or None. More keys wins:
-    /// pressing Ctrl+Alt+Space must mean the intent hotkey, not the plain
-    /// Ctrl+Alt hotkey that is implicitly satisfied at the same moment.
+    /// pressing Ctrl+Alt must mean the normal hotkey, not the plain
+    /// Control+Alt hotkey that is implicitly satisfied at the same moment.
     fn best(&self) -> Option<usize> {
         (0..self.hotkeys.len())
             .filter(|index| self.satisfied(*index))
@@ -534,7 +534,7 @@ mod tests {
     fn the_longer_combination_wins_and_stepping_back_does_not_refire() {
         let mut matcher = HookMatcher::new(vec![
             watched("Ctrl+Alt", "normal"),
-            watched("Ctrl+Alt+Space", "intent"),
+            watched("Ctrl+Alt+Space", "extended"),
         ]);
         // Ctrl+Alt engages the Normal hotkey...
         assert_eq!(
@@ -545,13 +545,13 @@ mod tests {
             ),
             ["down"]
         );
-        // ...and Space upgrades to Intent.
+        // ...and Space upgrades to the extended hotkey.
         assert_eq!(
-            signals(&mut matcher, "intent", &[("Space", true)]),
+            signals(&mut matcher, "extended", &[("Space", true)]),
             ["down"]
         );
         // Releasing Space must not flip straight back to Normal: the user
-        // released the intent key, not requested a mode dance.
+        // released the extended key, not requested a mode dance.
         assert_eq!(
             signals(&mut matcher, "normal", &[("Space", false)]),
             [] as [&str; 0]
@@ -571,7 +571,7 @@ mod tests {
     fn the_previous_hotkey_releases_when_a_hotkey_supersedes_it() {
         let mut matcher = HookMatcher::new(vec![
             watched("Ctrl+Alt", "dictation"),
-            watched("Ctrl+Alt+Space", "intent"),
+            watched("Ctrl+Alt+Space", "extended"),
         ]);
         signals(
             &mut matcher,

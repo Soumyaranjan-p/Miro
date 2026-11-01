@@ -23,7 +23,6 @@ pub const CONFIG_FILE: &str = "config.json";
 /// edges - the release edge is what push-to-talk needs to stop by itself.
 pub const DEFAULT_SHORTCUT: &str = "Ctrl+M";
 pub const DEFAULT_NORMAL_SHORTCUT: &str = "Ctrl+Alt";
-pub const DEFAULT_INTENT_SHORTCUT: &str = "Ctrl+Alt+Space";
 pub const MIN_RECORDING_SECONDS: u32 = 30;
 pub const MAX_RECORDING_SECONDS: u32 = 600;
 pub const MAX_FILLER_WORDS: usize = 64;
@@ -47,9 +46,6 @@ pub enum HomeMode {
     /// Normal Mode: dictation as it works today.
     #[default]
     Home,
-    /// Intent Mode: spoken intent is restructured into a prompt before it is
-    /// inserted.
-    Intent,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -117,93 +113,6 @@ impl Default for Cleanup {
     }
 }
 
-/// Which backend turns spoken intent into a prompt.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum RestructureBackend {
-    /// A model served by Ollama on this machine.
-    #[default]
-    Local,
-    /// An OpenAI-compatible chat-completions endpoint.
-    Cloud,
-}
-
-pub const DEFAULT_INTENT_ENDPOINT: &str = "http://127.0.0.1:11434";
-pub const DEFAULT_INTENT_MODEL: &str = "llama3.2";
-pub const MIN_INTENT_TIMEOUT_MS: u32 = 500;
-pub const MAX_INTENT_TIMEOUT_MS: u32 = 15_000;
-pub const MIN_INTENT_OUTPUT_CHARS: usize = 200;
-pub const MAX_INTENT_OUTPUT_CHARS: usize = 8_000;
-
-/// Intent Mode: spoken intent is restructured into a prompt before insertion.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(default, rename_all = "camelCase")]
-pub struct IntentSettings {
-    /// Off by default; off means dictation behaves exactly as it does today.
-    pub enabled: bool,
-    pub backend: RestructureBackend,
-    /// Ollama base URL for the local backend, or the full chat-completions URL
-    /// for the cloud backend.
-    pub endpoint: String,
-    pub model: String,
-    /// Hard deadline for the restructure call. Falls back to the raw transcript.
-    pub timeout_ms: u32,
-    /// Upper bound on the prompt handed to the review overlay.
-    pub max_output_chars: usize,
-    /// The exact endpoint the user consented to send transcripts to. `None`
-    /// means no cloud consent has been given, and cloud mode stays blocked.
-    pub cloud_consent_endpoint: Option<String>,
-}
-
-impl Default for IntentSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            backend: RestructureBackend::Local,
-            endpoint: DEFAULT_INTENT_ENDPOINT.to_string(),
-            model: DEFAULT_INTENT_MODEL.to_string(),
-            timeout_ms: 4_000,
-            max_output_chars: 1_200,
-            cloud_consent_endpoint: None,
-        }
-    }
-}
-
-impl IntentSettings {
-    /// Clamps values a user or a hand-edited file could get wrong.
-    pub fn normalize(&mut self) {
-        self.endpoint = self.endpoint.trim().to_string();
-        if self.endpoint.is_empty() {
-            self.endpoint = DEFAULT_INTENT_ENDPOINT.to_string();
-        }
-        self.model = self.model.trim().to_string();
-        if self.model.is_empty() {
-            self.model = DEFAULT_INTENT_MODEL.to_string();
-        }
-        self.timeout_ms = self
-            .timeout_ms
-            .clamp(MIN_INTENT_TIMEOUT_MS, MAX_INTENT_TIMEOUT_MS);
-        self.max_output_chars = self
-            .max_output_chars
-            .clamp(MIN_INTENT_OUTPUT_CHARS, MAX_INTENT_OUTPUT_CHARS);
-        self.cloud_consent_endpoint = self
-            .cloud_consent_endpoint
-            .take()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
-    }
-
-    /// True when the stored consent is for the endpoint currently configured.
-    pub fn cloud_consent_matches(&self) -> bool {
-        self.cloud_consent_endpoint.as_deref() == Some(self.endpoint.as_str())
-    }
-
-    /// True when this configuration would send dictation off the machine.
-    pub fn requires_cloud(&self) -> bool {
-        self.enabled && self.backend == RestructureBackend::Cloud
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -212,14 +121,8 @@ pub struct Settings {
     pub shortcut: String,
     /// Hotkey that switches back to Normal mode (`home`).
     pub normal_shortcut: String,
-    /// Hotkey that switches to Intent Mode (`intent`).
-    ///
-    /// The alias is a one-time migration shim: a config written before the mode
-    /// was renamed stores this under its old key, and still has to load.
-    #[serde(alias = "incidentShortcut")]
-    pub intent_shortcut: String,
     pub mode: Mode,
-    /// Which screen the home window opens on: dictation home or Intent Mode.
+    /// Which screen the home window opens on: dictation home.
     pub home_mode: HomeMode,
     /// Volume-cue toggle exposed by the home window's sound button.
     pub sound_on: bool,
@@ -229,7 +132,6 @@ pub struct Settings {
     pub language: String,
     pub max_recording_seconds: u32,
     pub cleanup: Cleanup,
-    pub intent: IntentSettings,
     pub theme: Theme,
     pub overlay_position: OverlayPosition,
     pub show_transcript_preview: bool,
@@ -245,7 +147,6 @@ impl Default for Settings {
             version: CONFIG_VERSION,
             shortcut: DEFAULT_SHORTCUT.to_string(),
             normal_shortcut: DEFAULT_NORMAL_SHORTCUT.to_string(),
-            intent_shortcut: DEFAULT_INTENT_SHORTCUT.to_string(),
             // The dictation hotkey (Ctrl+M by default) carries both edges of a
             // hold, so push-to-talk works with a combo as well as a key.
             mode: Mode::Toggle,
@@ -256,7 +157,6 @@ impl Default for Settings {
             language: "en".to_string(),
             max_recording_seconds: 300,
             cleanup: Cleanup::default(),
-            intent: IntentSettings::default(),
             theme: Theme::System,
             overlay_position: OverlayPosition::BottomCenter,
             show_transcript_preview: false,
@@ -273,10 +173,6 @@ impl Default for Settings {
 pub struct SettingsPatch {
     pub shortcut: Option<String>,
     pub normal_shortcut: Option<String>,
-    /// Accepts the pre-rename key too, so an old interface build cannot
-    /// silently drop the hotkey while keeping the rest of a patch.
-    #[serde(alias = "incidentShortcut")]
-    pub intent_shortcut: Option<String>,
     pub mode: Option<Mode>,
     pub home_mode: Option<HomeMode>,
     pub sound_on: Option<bool>,
@@ -286,7 +182,6 @@ pub struct SettingsPatch {
     pub language: Option<String>,
     pub max_recording_seconds: Option<u32>,
     pub cleanup: Option<CleanupPatch>,
-    pub intent: Option<IntentSettingsPatch>,
     pub theme: Option<Theme>,
     pub overlay_position: Option<OverlayPosition>,
     pub show_transcript_preview: Option<bool>,
@@ -304,23 +199,6 @@ pub struct CleanupPatch {
     pub filler_words: Option<Vec<String>>,
 }
 
-/// A partial update of the Intent Mode settings. Consent is normally written
-/// by the dedicated command, but it is patchable so the setting can be reset
-/// without a second schema.
-#[derive(Deserialize, Default, Debug, Clone)]
-#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
-pub struct IntentSettingsPatch {
-    pub enabled: Option<bool>,
-    pub backend: Option<RestructureBackend>,
-    pub endpoint: Option<String>,
-    pub model: Option<String>,
-    pub timeout_ms: Option<u32>,
-    pub max_output_chars: Option<usize>,
-    pub cloud_consent_endpoint: Option<String>,
-    /// Explicitly withdraw cloud consent. The API key is removed separately.
-    pub clear_cloud_consent: Option<bool>,
-}
-
 fn double_option<'de, D, T>(deserializer: D) -> std::result::Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -335,11 +213,7 @@ impl Settings {
     ///
     /// Version 1 stored the dictation default as the right Ctrl key; Ctrl+M is
     /// the default now, so a file that still holds that literal moves with the
-    /// default, while any deliberately chosen key stays untouched. Version 3
-    /// renamed the mode from Incident to Intent: the old JSON key is accepted
-    /// by the serde alias on [`Settings::intent_shortcut`], so the value is
-    /// already in place by the time this runs and is rewritten on the next
-    /// save.
+    /// default, while any deliberately chosen key stays untouched.
     pub fn migrate(&mut self) {
         if self.version < 2 && self.shortcut.eq_ignore_ascii_case("controlright") {
             self.shortcut = DEFAULT_SHORTCUT.to_string();
@@ -352,15 +226,11 @@ impl Settings {
         self.version = CONFIG_VERSION;
         self.shortcut = self.shortcut.trim().to_string();
         self.normal_shortcut = self.normal_shortcut.trim().to_string();
-        self.intent_shortcut = self.intent_shortcut.trim().to_string();
         if self.shortcut.is_empty() {
             self.shortcut = DEFAULT_SHORTCUT.to_string();
         }
         if self.normal_shortcut.is_empty() {
             self.normal_shortcut = DEFAULT_NORMAL_SHORTCUT.to_string();
-        }
-        if self.intent_shortcut.is_empty() {
-            self.intent_shortcut = DEFAULT_INTENT_SHORTCUT.to_string();
         }
         self.max_recording_seconds = self
             .max_recording_seconds
@@ -385,7 +255,6 @@ impl Settings {
             }
         }
         self.cleanup.filler_words = seen;
-        self.intent.normalize();
 
         // Vocabulary: trim, dedupe case-insensitively, filter empty, cap count
         // and per-term length so a runaway list can't bloat the prompt.
@@ -412,9 +281,6 @@ impl Settings {
         }
         if let Some(shortcut) = patch.normal_shortcut {
             self.normal_shortcut = shortcut;
-        }
-        if let Some(shortcut) = patch.intent_shortcut {
-            self.intent_shortcut = shortcut;
         }
         if let Some(mode) = patch.mode {
             self.mode = mode;
@@ -469,32 +335,6 @@ impl Settings {
             }
             if let Some(words) = cleanup.filler_words {
                 self.cleanup.filler_words = words;
-            }
-        }
-        if let Some(intent) = patch.intent {
-            if let Some(enabled) = intent.enabled {
-                self.intent.enabled = enabled;
-            }
-            if let Some(backend) = intent.backend {
-                self.intent.backend = backend;
-            }
-            if let Some(endpoint) = intent.endpoint {
-                self.intent.endpoint = endpoint;
-            }
-            if let Some(model) = intent.model {
-                self.intent.model = model;
-            }
-            if let Some(timeout_ms) = intent.timeout_ms {
-                self.intent.timeout_ms = timeout_ms;
-            }
-            if let Some(max_output_chars) = intent.max_output_chars {
-                self.intent.max_output_chars = max_output_chars;
-            }
-            if let Some(consent) = intent.cloud_consent_endpoint {
-                self.intent.cloud_consent_endpoint = Some(consent);
-            }
-            if intent.clear_cloud_consent == Some(true) {
-                self.intent.cloud_consent_endpoint = None;
             }
         }
         self.normalize();
@@ -684,10 +524,10 @@ mod tests {
     fn home_mode_and_sound_toggle_persist_through_patches() {
         let mut settings = Settings::default();
         let patch: SettingsPatch =
-            serde_json::from_str(r#"{"homeMode":"intent","soundOn":false}"#).unwrap();
+            serde_json::from_str(r#"{"homeMode":"home","soundOn":false}"#).unwrap();
         settings.apply(patch);
 
-        assert_eq!(settings.home_mode, HomeMode::Intent);
+        assert_eq!(settings.home_mode, HomeMode::Home);
         assert!(!settings.sound_on);
     }
 
@@ -764,130 +604,15 @@ mod tests {
         let mut settings = Settings::default();
         settings.apply(
             serde_json::from_str(
-                r#"{"normalShortcut":"Ctrl+Shift+N","intentShortcut":"Ctrl+Shift+I"}"#,
+                r#"{"normalShortcut":"Ctrl+Shift+N"}"#,
             )
             .unwrap(),
         );
         assert_eq!(settings.normal_shortcut, "Ctrl+Shift+N");
-        assert_eq!(settings.intent_shortcut, "Ctrl+Shift+I");
 
         settings.normal_shortcut = "   ".into();
         settings.normalize();
         assert_eq!(settings.normal_shortcut, DEFAULT_NORMAL_SHORTCUT);
-    }
-
-    #[test]
-    fn a_pre_rename_config_keeps_the_intent_hotkey() {
-        // The one place the old key name survives, on purpose: a config written
-        // before the rename must still load, and must be rewritten under the
-        // new key the next time settings are saved.
-        let dir = temp_dir("legacy-intent-key");
-        fs::create_dir_all(&dir).unwrap();
-        let raw = r#"{
-            "version": 2,
-            "shortcut": "Ctrl+M",
-            "normalShortcut": "Ctrl+Alt",
-            "incidentShortcut": "Ctrl+Shift+I",
-            "homeMode": "intent",
-            "modelId": "small.en"
-        }"#;
-        fs::write(dir.join(CONFIG_FILE), raw).unwrap();
-
-        let store = ConfigStore::new(&dir);
-        let loaded = store.load();
-        assert_eq!(loaded.intent_shortcut, "Ctrl+Shift+I");
-        assert_eq!(loaded.version, CONFIG_VERSION);
-
-        let json = serde_json::to_string(&loaded).unwrap();
-        assert!(json.contains("\"intentShortcut\""));
-        assert!(!json.contains("Incident"));
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn intent_mode_is_off_by_default_and_local() {
-        let intent = IntentSettings::default();
-        assert!(!intent.enabled);
-        assert_eq!(intent.backend, RestructureBackend::Local);
-        assert_eq!(intent.endpoint, DEFAULT_INTENT_ENDPOINT);
-        assert_eq!(intent.timeout_ms, 4_000);
-        assert_eq!(intent.max_output_chars, 1_200);
-        assert_eq!(intent.cloud_consent_endpoint, None);
-    }
-
-    #[test]
-    fn intent_settings_are_clamped_and_trimmed() {
-        let mut settings = Settings {
-            intent: IntentSettings {
-                endpoint: "  http://127.0.0.1:11434  ".into(),
-                model: "  llama3.2  ".into(),
-                timeout_ms: 1,
-                max_output_chars: 10,
-                ..IntentSettings::default()
-            },
-            ..Settings::default()
-        };
-        settings.normalize();
-        assert_eq!(settings.intent.endpoint, "http://127.0.0.1:11434");
-        assert_eq!(settings.intent.model, "llama3.2");
-        assert_eq!(settings.intent.timeout_ms, MIN_INTENT_TIMEOUT_MS);
-        assert_eq!(settings.intent.max_output_chars, MIN_INTENT_OUTPUT_CHARS);
-
-        settings.intent.timeout_ms = 100_000;
-        settings.intent.max_output_chars = 100_000;
-        settings.intent.endpoint = "   ".into();
-        settings.intent.model.clear();
-        settings.normalize();
-        assert_eq!(settings.intent.timeout_ms, MAX_INTENT_TIMEOUT_MS);
-        assert_eq!(settings.intent.max_output_chars, MAX_INTENT_OUTPUT_CHARS);
-        assert_eq!(settings.intent.endpoint, DEFAULT_INTENT_ENDPOINT);
-        assert_eq!(settings.intent.model, DEFAULT_INTENT_MODEL);
-    }
-
-    #[test]
-    fn intent_settings_apply_as_a_nested_patch() {
-        let mut settings = Settings::default();
-        let patch: SettingsPatch = serde_json::from_str(
-            r#"{"intent":{"enabled":true,"backend":"cloud","endpoint":"https://example.test/v1/chat/completions","model":"gpt-4o-mini","timeoutMs":2500,"maxOutputChars":900}}"#,
-        )
-        .unwrap();
-        settings.apply(patch);
-
-        assert!(settings.intent.enabled);
-        assert_eq!(settings.intent.backend, RestructureBackend::Cloud);
-        assert_eq!(
-            settings.intent.endpoint,
-            "https://example.test/v1/chat/completions"
-        );
-        assert_eq!(settings.intent.model, "gpt-4o-mini");
-        assert_eq!(settings.intent.timeout_ms, 2_500);
-        assert_eq!(settings.intent.max_output_chars, 900);
-
-        // A later patch that only touches one key leaves the rest alone.
-        settings.apply(
-            serde_json::from_str::<SettingsPatch>(r#"{"intent":{"enabled":false}}"#).unwrap(),
-        );
-        assert!(!settings.intent.enabled);
-        assert_eq!(settings.intent.model, "gpt-4o-mini");
-    }
-
-    #[test]
-    fn cloud_consent_is_bound_to_the_exact_endpoint() {
-        let mut intent = IntentSettings {
-            enabled: true,
-            backend: RestructureBackend::Cloud,
-            endpoint: "https://one.example/v1/chat/completions".into(),
-            cloud_consent_endpoint: Some("https://one.example/v1/chat/completions".into()),
-            ..IntentSettings::default()
-        };
-        assert!(intent.requires_cloud());
-        assert!(intent.cloud_consent_matches());
-
-        intent.endpoint = "https://two.example/v1/chat/completions".into();
-        assert!(
-            !intent.cloud_consent_matches(),
-            "new endpoint needs consent"
-        );
     }
 
     #[test]

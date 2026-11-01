@@ -4,7 +4,7 @@ import { formatShortcut } from "../../lib/format";
 import { useLevelHistory, useModelProgress, useRuntimeStatus, useSettings, useStats } from "../../lib/hooks";
 import { EVENTS, asOverlayState, ipc } from "../../lib/ipc";
 import type { OverlayState } from "../../lib/types";
-import { IconCheck, IconHome, IconIntent } from "./Icons";
+import { IconHome } from "./Icons";
 import { Button, Mono, Pill } from "../settings/Controls";
 
 /** The live mascot page's `window.Miro` bridge. */
@@ -35,19 +35,17 @@ export function PageHome({
     return off;
   }, []);
 
-  const intentMode = settings?.homeMode === "intent";
   const dictation = status?.hotkeys.find((entry) => entry.role === "dictation");
 
   return (
     <div className="msh-page">
       <Hero
         greeting={greeting}
-        intentMode={intentMode}
         shortcut={settings?.shortcut}
         registered={dictation?.registered ?? false}
       />
 
-      <ModeCard intentActive={intentMode} />
+      <ModeCard />
 
       <section className="miro-card px-4 py-3.5">
         <header className="mb-3 flex items-start justify-between gap-3">
@@ -80,24 +78,20 @@ export function PageHome({
 
 function Hero({
   greeting,
-  intentMode,
   shortcut,
   registered,
 }: {
   greeting: string;
-  intentMode: boolean;
   shortcut: string | undefined;
   registered: boolean;
 }) {
   return (
     <section className="msh-hero">
-      <HeroMascot intentMode={intentMode} />
+      <HeroMascot />
       <div className="msh-hero__body">
         <h1>{greeting}</h1>
         <p>
-          {intentMode ? (
-            <>Intent mode is on: dictation is paused, Miro is on guard.</>
-          ) : registered ? (
+          {registered ? (
             <>
               Hold <Mono>{shortcut ? formatShortcut(shortcut) : "the dictation key"}</Mono>, speak, release —
               Miro types.
@@ -116,7 +110,7 @@ function Hero({
  * (public/miro-mascot.html) in a cropped frame. The app's mode is piped into
  * its `window.Miro.setMode` bridge, which reacts with the page's own motion.
  */
-function HeroMascot({ intentMode }: { intentMode: boolean }) {
+function HeroMascot() {
   const frameRef = useRef<HTMLIFrameElement>(null);
 
   const applyMode = useCallback(() => {
@@ -125,12 +119,12 @@ function HeroMascot({ intentMode }: { intentMode: boolean }) {
       // The app is dark; keep the mascot's stage in its dark palette even on
       // a light-scheme system.
       win?.document?.documentElement?.setAttribute("data-theme", "dark");
-      win?.Miro?.setMode(intentMode ? "intent" : "normal");
+      win?.Miro?.setMode("home");
     } catch {
       // The frame is same-origin in Tauri and in the preview server; any other
       // origin simply keeps its own theme and mode.
     }
-  }, [intentMode]);
+  }, []);
 
   // Apply at load, and again whenever the mode changes (UI button or hotkey).
   useEffect(() => {
@@ -152,55 +146,26 @@ function HeroMascot({ intentMode }: { intentMode: boolean }) {
 
 /* ------------------------------------------------------------------ modes */
 
-function ModeCard({ intentActive }: { intentActive: boolean }) {
-  const [pending, setPending] = useState(false);
-
-  const switchTo = useCallback(async (mode: "home" | "intent") => {
-    setPending(true);
-    try {
-      await ipc.switchMode(mode);
-    } finally {
-      setPending(false);
-    }
-  }, []);
-
+function ModeCard() {
   return (
     <section className="miro-card px-4 py-3.5">
       <header className="mb-3">
         <h2 className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">Mode</h2>
         <p className="mt-0.5 text-[12px] leading-[1.5] text-muted">
-          Global, and switchable from the keyboard with the mode hotkeys on the Shortcuts page.
+          Normal mode — speak freely, insert anywhere.
         </p>
       </header>
       <div className="msh-modes">
         <button
           type="button"
-          className={`msh-mode${intentActive ? "" : " is-active"}`}
-          disabled={pending || !intentActive || undefined}
-          onClick={() => void switchTo("home")}
-          aria-pressed={!intentActive}
+          className="msh-mode"
+          aria-pressed="true"
         >
           <span className="msh-mode__name">
             <IconHome /> Normal mode
           </span>
           <span className="msh-mode__desc">
             Dictation as it lives: hold the key, speak, release, words land where you type.
-          </span>
-        </button>
-        <button
-          type="button"
-          className={`msh-mode${intentActive ? " is-active is-intent" : ""}`}
-          disabled={pending || intentActive || undefined}
-          onClick={() => void switchTo("intent")}
-          aria-pressed={intentActive}
-        >
-          {intentActive && <span className="msh-mode__check"><IconCheck /></span>}
-          <span className="msh-mode__name">
-            <IconIntent /> Intent mode
-          </span>
-          <span className="msh-mode__desc">
-            For on-call focus: dictation paused so nothing interrupts you, statistics keep running, switch back with one
-            tap.
           </span>
         </button>
       </div>

@@ -38,11 +38,9 @@ export function PageStatistics() {
 
   const modeData = useMemo(() => {
     const normal = (stats?.normalMs ?? 0) / 3_600_000;
-    const intent = (stats?.intentMs ?? 0) / 3_600_000;
-    if (normal <= 0 && intent <= 0) return [];
+    if (normal <= 0) return [];
     return [
       { name: "Normal mode", value: normal, color: "#f28c3b" },
-      { name: "Intent mode", value: intent, color: "#e5484d" },
     ];
   }, [stats]);
 

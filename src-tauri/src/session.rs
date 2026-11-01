@@ -20,7 +20,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio::{self, Capture, CaptureControl, CaptureMode, CaptureOutcome, LevelFrame};
-use crate::config::{HomeMode, Mode, Settings};
+use crate::config::{Mode, Settings};
 use crate::engine::{self, Engine, EngineOptions};
 use crate::errors::{Failure, Result};
 use crate::events::{self, LiveText, OverlayState, RuntimeStatus};
@@ -107,18 +107,6 @@ impl Session {
 
     /// Starts recording. Refuses if a dictation is already in flight.
     pub fn start(&self, app: &AppHandle) -> Result<()> {
-        // Intent mode is a visual state for now: dictation does not run in
-        // it. The refusal is silent-but-logged - the mode was chosen on
-        // purpose, so a hotkey in a game or another app must not yank the app
-        // into recording.
-        if state::state(app).settings().home_mode != HomeMode::Home {
-            logging::event(Event::Failure {
-                code: "intent_mode",
-                detail: "dictation is only available in Normal mode".to_string(),
-            });
-            return Ok(());
-        }
-
         let settings = state::state(app).settings();
         // Cheap pre-flight so a blocked or missing microphone answers with a
         // clear, explicit failure before any capture machinery spins up.
@@ -993,11 +981,7 @@ impl HookBinding {
                             // In toggle mode, ignore release events completely
                         }
                         "normal" if signal.event == PressEvent::Down => {
-                            let _ = crate::commands::switch_home_mode(&app_handle, HomeMode::Home);
-                        }
-                        "intent" if signal.event == PressEvent::Down => {
-                            let _ =
-                                crate::commands::switch_home_mode(&app_handle, HomeMode::Intent);
+                            // "Normal" mode no longer exists; pressing it does nothing.
                         }
                         _ => {}
                     }

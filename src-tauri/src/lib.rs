@@ -95,7 +95,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::set_settings,
-            commands::switch_home_mode_command,
             commands::get_runtime_status,
             commands::get_startup_info,
             commands::check_shortcut,
@@ -121,9 +120,6 @@ pub fn run() {
             commands::open_app_data_folder,
             commands::open_external,
             commands::get_user_display_name,
-            commands::cloud_key_status,
-            commands::set_cloud_api_key,
-            commands::clear_cloud_api_key,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -253,7 +249,6 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     let role = [
         ("dictation", &settings.shortcut),
         ("normal", &settings.normal_shortcut),
-        ("intent", &settings.intent_shortcut),
     ]
     .into_iter()
     .find_map(|(role, text)| {
@@ -266,12 +261,9 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
 
     match role {
         Some("normal") if pressed => {
-            let _ = commands::switch_home_mode(app, config::HomeMode::Home);
+            // "Normal" mode no longer exists; pressing it does nothing.
         }
-        Some("intent") if pressed => {
-            let _ = commands::switch_home_mode(app, config::HomeMode::Intent);
-        }
-        Some("dictation") => {
+        Some("dictation") if pressed => {
             if settings.mode == config::Mode::PushToTalk {
                 // Both edges of a hold mean something; repeats are harmless
                 // because the phase machine ignores stale presses.
