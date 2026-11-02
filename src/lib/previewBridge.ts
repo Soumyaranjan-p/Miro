@@ -177,11 +177,70 @@ function on<T>(event: MiroEventName, handler: (payload: T) => void): () => void 
     listeners.set(event, set as Set<Listener<never>>);
   }
   set.add(handler);
+  announcePending();
   return () => set.delete(handler);
 }
 
 const forcedState = new URLSearchParams(window.location.search).get("state");
+let forcedPending = forcedState !== null;
 
+/**
+ * The pinned state waits for the overlay's first subscription. A timer raced
+ * the first render often enough that a screenshot of `?state=recording` could
+ * show the idle overlay instead, which is a harness bug that reads like a
+ * product bug.
+ */
+function announcePending(): void {
+  if (!forcedPending) return;
+  forcedPending = false;
+  window.setTimeout(() => applyForcedState(forcedState), 0);
+}
+
+/** Pin a single state for screenshots: ?state=recording|live|processing|inserted|error */
+function applyForcedState(target: string | null): void {
+  switch (target) {
+    case "recording":
+      overlay({
+        kind: "recording",
+        deviceLabel: "Microphone Array",
+        startedAtMs: Date.now() - 7400,
+        maxSeconds: 300,
+        liveText: null,
+      });
+      startLevels();
+      break;
+    case "live":
+      overlay({
+        kind: "recording",
+        deviceLabel: "Microphone Array",
+        startedAtMs: Date.now() - 42_000,
+        maxSeconds: 300,
+        liveText: {
+          committed: "So the plan for Thursday is to ship the overlay first",
+          unstable: "and then look at the settings page",
+        },
+      });
+      startLevels();
+      break;
+    case "processing":
+      overlay({ kind: "processing", startedAtMs: Date.now() });
+      break;
+    case "inserted":
+      overlay({ kind: "inserted", characters: 148, audioMs: 6400, retryId: 1 });
+      break;
+    case "copied":
+      overlay({ kind: "copied", characters: 148 });
+      break;
+    case "error":
+      overlay({ kind: "error", code: "focus_changed", detail: null, retryable: true, retryId: 1 });
+      break;
+    case "mode":
+      overlay({ kind: "mode", homeMode: "home" });
+      break;
+    default:
+      break;
+  }
+}
 function overlay(state: OverlayState): void {
   emit(EVENTS.overlay, state);
 }
@@ -382,25 +441,3 @@ export const previewBridge: MiroBridge = {
   on,
 };
 
-// Pin a single state for screenshots: ?state=recording|processing|inserted|error
-if (forcedState) {
-  window.setTimeout(() => {
-    switch (forcedState) {
-      case "recording":
-        overlay({ kind: "recording", deviceLabel: "Microphone Array", startedAtMs: Date.now() - 7400, maxSeconds: 300, liveText: null });
-        startLevels();
-        break;
-      case "processing":
-        overlay({ kind: "processing", startedAtMs: Date.now() });
-        break;
-      case "inserted":
-        overlay({ kind: "inserted", characters: 148, audioMs: 6400, retryId: 1 });
-        break;
-      case "error":
-        overlay({ kind: "error", code: "focus_changed", detail: null, retryable: true, retryId: 1 });
-        break;
-      default:
-        break;
-    }
-  }, 50);
-}

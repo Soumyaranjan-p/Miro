@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ipc } from "../../lib/ipc";
-import { useReducedMotion, useSettings } from "../../lib/hooks";
+import { useReducedMotion } from "../../lib/hooks";
 import { PageHome } from "./PageHome";
 import { PageShortcuts } from "./PageShortcuts";
 import { PageSettings } from "./PageSettings";

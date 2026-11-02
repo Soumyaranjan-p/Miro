@@ -61,6 +61,7 @@ export interface MiroBridge {
   copyPendingTranscript(retryId: number): Promise<void>;
   toggleDictation(): Promise<void>;
   /** Reads the in-memory transcript the events referenced. Rust-only state. */
+  getPendingTranscript(retryId: number): Promise<string>;
   /** Types the pending transcript into whatever app the user has front. */
   pastePending(retryId: number): Promise<void>;
   /** Usage statistics: numeric aggregates only. */
@@ -79,6 +80,20 @@ const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 export const isPreview = !inTauri;
 
 function subscribe<T>(event: MiroEventName, handler: (payload: T) => void): () => void {
+  // In the browser preview the preview bridge owns the event bus; in Tauri the
+  // event API does. One subscribe, routed by environment.
+  if (!inTauri) {
+    let off = () => {};
+    let disposed = false;
+    void bridge().then((b) => {
+      if (disposed) return;
+      off = b.on(event, handler);
+    });
+    return () => {
+      disposed = true;
+      off();
+    };
+  }
   let unlisten: UnlistenFn | undefined;
   let disposed = false;
   void listen<T>(event, (e) => handler(e.payload))
@@ -160,6 +175,7 @@ export const ipc: MiroBridge = {
   stopRecording: async () => (await bridge()).stopRecording(),
   retryInsertion: async (id) => (await bridge()).retryInsertion(id),
   copyPendingTranscript: async (id) => (await bridge()).copyPendingTranscript(id),
+  getPendingTranscript: async (id) => (await bridge()).getPendingTranscript(id),
   toggleDictation: async () => (await bridge()).toggleDictation(),
   pastePending: async (id) => (await bridge()).pastePending(id),
   getStats: async () => (await bridge()).getStats(),
