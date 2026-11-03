@@ -30,12 +30,30 @@ use crate::logging::{self, Event};
 pub enum InsertMethod {
     SendInput,
     Clipboard,
+    /// Partial SendInput, then clipboard pasted the whole text. Reported as
+    /// used by the log; the fix is being tracked separately.
+    SendInputAndClipboard,
+}
+
+impl InsertMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            InsertMethod::SendInput => "SendInput",
+            InsertMethod::Clipboard => "Clipboard",
+            InsertMethod::SendInputAndClipboard => "SendInput+Clipboard",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct InsertOutcome {
     pub method: InsertMethod,
     pub characters: usize,
+    /// Length of the source text in UTF-16 code units.
+    pub utf16_units: usize,
+    /// Raw INPUT structures consumed by SendInput (0 when the clipboard path
+    /// was used without any SendInput attempt succeeding).
+    pub raw_events_sent: usize,
     /// False when the clipboard could not be put back as it was found.
     pub clipboard_restored: bool,
     /// Formats the clipboard held that Miro cannot duplicate (bitmaps, private
@@ -68,13 +86,16 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
         return Err(Failure::FocusChanged);
     }
 
+    let utf16_units = text.encode_utf16().count();
     match win::send_unicode_text(text) {
-        Ok(characters) if characters > 0 => {
+        Ok(result) if result.characters > 0 => {
             let text_chars = text.chars().count();
-            if characters >= text_chars {
+            if result.characters >= text_chars {
                 Ok(InsertOutcome {
                     method: InsertMethod::SendInput,
-                    characters,
+                    characters: result.characters,
+                    utf16_units: result.utf16_units,
+                    raw_events_sent: result.raw_events_sent,
                     clipboard_restored: true,
                     clipboard_formats_skipped: 0,
                 })
@@ -84,21 +105,28 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
                 // the remainder.
                 match insert_via_clipboard(text, target) {
                     Ok(outcome) => Ok(InsertOutcome {
-                        method: InsertMethod::SendInput,
+                        method: InsertMethod::SendInputAndClipboard,
                         characters: text_chars,
+                        utf16_units: result.utf16_units,
+                        raw_events_sent: result.raw_events_sent,
                         clipboard_restored: outcome.clipboard_restored,
                         clipboard_formats_skipped: outcome.clipboard_formats_skipped,
                     }),
                     Err(_) => Ok(InsertOutcome {
                         method: InsertMethod::SendInput,
-                        characters,
+                        characters: result.characters,
+                        utf16_units: result.utf16_units,
+                        raw_events_sent: result.raw_events_sent,
                         clipboard_restored: true,
                         clipboard_formats_skipped: 0,
                     }),
                 }
             }
         }
-        Ok(_) => Err(Failure::Insertion("no characters were accepted".into())),
+        Ok(result) => Err(Failure::Insertion(format!(
+            "no characters were accepted (raw_input_events={}, utf16_units={})",
+            result.raw_events_sent, result.utf16_units
+        ))),
         Err(send_input_error) => {
             // Typing was refused. A high-integrity target is the common cause,
             // so say that instead of a vague failure - but only after trying.
@@ -106,7 +134,12 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
                 return Err(Failure::InsertionBlocked);
             }
             match insert_via_clipboard(text, target) {
-                Ok(outcome) => Ok(outcome),
+                Ok(outcome) => Ok(InsertOutcome {
+                    method: InsertMethod::Clipboard,
+                    utf16_units,
+                    raw_events_sent: 0,
+                    ..outcome
+                }),
                 Err(_) => Err(send_input_error),
             }
         }
@@ -141,10 +174,13 @@ pub fn insert_via_clipboard(text: &str, target: Target) -> Result<InsertOutcome>
 
     let restored = clipboard::restore(&snapshot, sequence);
 
+    let utf16_units = text.encode_utf16().count();
     match (pasted, restored) {
         (Ok(()), Ok(_)) => Ok(InsertOutcome {
             method: InsertMethod::Clipboard,
             characters: text.chars().count(),
+            utf16_units,
+            raw_events_sent: 0,
             clipboard_restored: true,
             clipboard_formats_skipped: snapshot.skipped,
         }),

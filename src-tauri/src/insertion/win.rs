@@ -276,15 +276,20 @@ const BATCH_SETTLE_MS: u64 = 12;
 ///
 /// Newlines become real Enter presses (chat apps and editors treat a bare CR
 /// inconsistently), everything else travels as UTF-16 code units. The returned
-/// count is code points that were actually sent to the input stream, not just
-/// attempted.
-pub fn send_unicode_text(text: &str) -> Result<usize> {
+/// result carries the UTF-16 length and the raw event count so callers can
+/// log what was actually done.
+pub fn send_unicode_text(text: &str) -> Result<UnicodeSendResult> {
     let units: Vec<u16> = text.encode_utf16().collect();
     if units.is_empty() {
-        return Ok(0);
+        return Ok(UnicodeSendResult {
+            characters: 0,
+            raw_events_sent: 0,
+            utf16_units: 0,
+        });
     }
 
     let mut total_typed = 0usize;
+    let mut total_raw_events = 0usize;
 
     for (start, end) in plan_batches(&units, BATCH_UNITS) {
         let mut events: Vec<INPUT> = Vec::with_capacity((end - start) * 2 + 2);
@@ -337,6 +342,7 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
             // its matching down).
             let sent_events = sent / 2 * 2;
             offset += sent_events;
+            total_raw_events += sent;
             // Count whole characters: 2 events per character for regular
             // keys, 2 events per newline.
             total_typed += sent_events / 2;
@@ -351,7 +357,11 @@ pub fn send_unicode_text(text: &str) -> Result<usize> {
         std::thread::sleep(std::time::Duration::from_millis(BATCH_SETTLE_MS));
     }
 
-    Ok(total_typed)
+    Ok(UnicodeSendResult {
+        characters: total_typed,
+        raw_events_sent: total_raw_events,
+        utf16_units: units.len(),
+    })
 }
 
 /// Sends Ctrl+V.
@@ -455,6 +465,17 @@ pub fn work_area_for_cursor() -> Option<WorkArea> {
     } else {
         None
     }
+}
+
+/// Result of typing text with SendInput. Callers log from this verbatim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnicodeSendResult {
+    /// Code points actually sent to the input stream (the current behavior).
+    pub characters: usize,
+    /// Raw INPUT structures consumed by the OS (down+up per UTF-16 unit).
+    pub raw_events_sent: usize,
+    /// Length of the source text in UTF-16 code units.
+    pub utf16_units: usize,
 }
 
 const SUBCLASS_ID: usize = 0x4D49_524F; // "MIRO"

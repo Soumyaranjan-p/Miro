@@ -104,7 +104,14 @@ pub enum Event {
     InsertionFinished {
         ok: bool,
         code: &'static str,
+        /// SendInput | Clipboard | SendInput+Clipboard
+        method: &'static str,
+        /// Code points actually delivered to the user's app.
         characters: usize,
+        /// Length of the source text in UTF-16 code units.
+        utf16_units: usize,
+        /// Raw INPUT structures consumed by SendInput (down+up per unit).
+        send_input_events: usize,
     },
     ClipboardSnapshot {
         formats: usize,
@@ -192,8 +199,14 @@ impl fmt::Display for Event {
             Event::InsertionFinished {
                 ok,
                 code,
+                method,
                 characters,
-            } => write!(f, "insertion.finished ok={ok} code={code} characters={characters}"),
+                utf16_units,
+                send_input_events,
+            } => write!(
+                f,
+                "insertion.finished ok={ok} code={code} method={method} characters={characters} utf16_units={utf16_units} send_input_events={send_input_events}"
+            ),
             Event::ClipboardSnapshot { formats, skipped } => {
                 write!(f, "clipboard.snapshot formats={formats} skipped={skipped}")
             }
@@ -219,12 +232,15 @@ mod tests {
         let rendered = Event::InsertionFinished {
             ok: false,
             code: "focus_changed",
+            method: "SendInput",
             characters: 0,
+            utf16_units: 12,
+            send_input_events: 8,
         }
         .to_string();
         assert_eq!(
             rendered,
-            "insertion.finished ok=false code=focus_changed characters=0"
+            "insertion.finished ok=false code=focus_changed method=SendInput characters=0 utf16_units=12 send_input_events=8"
         );
         assert!(!rendered.contains('\n'));
     }

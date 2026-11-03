@@ -359,7 +359,10 @@ impl Session {
                 logging::event(Event::InsertionFinished {
                     ok: true,
                     code: "ok",
+                    method: result.method.as_str(),
                     characters: result.characters,
+                    utf16_units: result.utf16_units,
+                    send_input_events: result.raw_events_sent,
                 });
                 emit_overlay(
                     app,
@@ -563,6 +566,7 @@ impl Session {
             id
         };
 
+        let utf16_units = text.encode_utf16().count();
         let outcome = insertion::insert(&text, target);
 
         match outcome {
@@ -571,7 +575,10 @@ impl Session {
                 logging::event(Event::InsertionFinished {
                     ok: true,
                     code: "ok",
+                    method: result.method.as_str(),
                     characters: result.characters,
+                    utf16_units: result.utf16_units,
+                    send_input_events: result.raw_events_sent,
                 });
                 if result.clipboard_formats_skipped > 0 {
                     logging::event(Event::ClipboardSnapshot {
@@ -604,7 +611,10 @@ impl Session {
                 logging::event(Event::InsertionFinished {
                     ok: false,
                     code: failure.code().as_str(),
+                    method: "none",
                     characters: 0,
+                    utf16_units,
+                    send_input_events: 0,
                 });
                 // The panel copy is already in the pending store under the id.
                 self.reset(app);
@@ -659,7 +669,10 @@ impl Session {
                 logging::event(Event::InsertionFinished {
                     ok: true,
                     code: "ok",
+                    method: result.method.as_str(),
                     characters: result.characters,
+                    utf16_units: result.utf16_units,
+                    send_input_events: result.raw_events_sent,
                 });
                 emit_overlay(
                     app,
