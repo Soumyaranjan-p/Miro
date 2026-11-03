@@ -169,16 +169,10 @@ impl Session {
         // Start the live transcriber if the engine is available, so the user
         // sees partial results while speaking instead of waiting until stop.
         let live_transcriber = engine.map(|engine| {
-            // Look up the device's sample rate and channel count so the live
-            // transcriber can downmix and resample raw capture audio to the
-            // 16 kHz mono that whisper expects.
-            let devices = audio::list_input_devices();
-            let device_info = devices
-                .iter()
-                .find(|d| d.label == device_label || d.id == device_label);
-            let sample_rate = device_info.and_then(|d| d.sample_rate).unwrap_or(48_000);
-            let channels = device_info.and_then(|d| d.channels).unwrap_or(2);
-
+            // The capture reports the rate and channel count it actually
+            // opened with, so raw samples are downmixed and resampled exactly
+            // as the final transcription will do.
+            let format = capture.format();
             LiveTranscriber::start(
                 engine,
                 EngineOptions {
@@ -187,8 +181,8 @@ impl Session {
                     vocabulary: settings.vocabulary.clone(),
                 },
                 Arc::clone(capture.samples()),
-                sample_rate,
-                channels,
+                format.sample_rate,
+                format.channels,
                 app.clone(),
                 device_label.clone(),
                 started_at_ms,
@@ -1009,22 +1003,17 @@ impl Default for HookBinding {
 /// waiting for the full dictation to finish.
 ///
 /// Runs on its own thread and is stopped when recording ends. Each pass
-/// transcribes all samples captured so far; the text is marked as unstable
-/// since it may change as more context arrives.
-#[allow(dead_code)]
+/// transcribes all samples captured so far. Words are split into a committed
+/// prefix (agreed by two consecutive hypotheses, the LocalAgreement-2 rule) and
+/// an unstable tail that may still change as more context arrives; the overlay
+/// paints the two differently.
 struct LiveTranscriber {
-    engine: Arc<Engine>,
-    options: EngineOptions,
-    samples: Arc<Mutex<Vec<f32>>>,
-    app: AppHandle,
-    device_label: String,
-    started_at_ms: u64,
-    max_seconds: u32,
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
 
 impl LiveTranscriber {
+    #[allow(clippy::too_many_arguments)]
     fn start(
         engine: Arc<Engine>,
         options: EngineOptions,
@@ -1038,81 +1027,111 @@ impl LiveTranscriber {
     ) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = Arc::clone(&stop);
-        let app_clone = app.clone();
-        let device_label_clone = device_label.clone();
-        let engine_clone = Arc::clone(&engine);
-        let options_clone = options.clone();
-        let samples_clone = Arc::clone(&samples);
-        let channels_clone = channels;
 
         let thread = thread::Builder::new()
             .name("miro-live-transcribe".to_string())
             .spawn(move || {
                 let mut last_len = 0;
-                loop {
-                    thread::sleep(Duration::from_millis(LIVE_TRANSCRIBE_INTERVAL_MS));
-                    if stop_clone.load(Ordering::SeqCst) {
+                let mut previous: Vec<String> = Vec::new();
+                let mut committed: Vec<String> = Vec::new();
+                let mut last_emitted: Option<(String, String)> = None;
+
+                'live: loop {
+                    if wait_for_pass(&stop_clone) {
                         break;
                     }
 
-                    let len = {
-                        let lock = samples_clone.lock().unwrap();
-                        lock.len()
+                    let len = match samples.lock() {
+                        Ok(buffer) => buffer.len(),
+                        Err(_) => break,
                     };
 
-                    // Only transcribe if there's new audio since the last pass
-                    if len < MIN_LIVE_TRANSCRIBE_SAMPLES || len == last_len {
+                    // Only transcribe when new audio has arrived since the
+                    // previous pass.
+                    if len == last_len {
                         continue;
                     }
                     last_len = len;
 
-                    let raw_chunk = {
-                        let lock = samples_clone.lock().unwrap();
-                        lock[..len].to_vec()
+                    let raw_chunk = match samples.lock() {
+                        Ok(buffer) => buffer[..len].to_vec(),
+                        Err(_) => break,
                     };
 
-                    // Convert raw device-format audio to 16 kHz mono f32 so
-                    // whisper.cpp receives the format it expects.
-                    let chunk = audio::to_mono_16k(&raw_chunk, channels_clone, sample_rate);
-                    if chunk.is_empty() {
+                    // Raw samples are interleaved at the device's native rate;
+                    // convert to the 16 kHz mono whisper expects.
+                    let chunk = audio::to_mono_16k(&raw_chunk, channels, sample_rate);
+                    if chunk.len() < MIN_LIVE_TRANSCRIBE_SAMPLES {
                         continue;
                     }
 
                     let audio_ms = (chunk.len() as u128) * 1000 / 16_000;
-                    let result = engine_clone.transcribe(&chunk, &options_clone, audio_ms);
+                    let result = engine.transcribe(&chunk, &options, audio_ms);
 
-                    match result {
-                        Ok(transcript) => {
-                            let text = transcript.text.trim().to_string();
-                            if !text.is_empty() {
-                                let state = OverlayState::Recording {
-                                    device_label: device_label_clone.clone(),
-                                    started_at_ms,
-                                    max_seconds,
-                                    live_text: Some(LiveText::unstable(text)),
-                                };
-                                let _ = app_clone.emit(events::OVERLAY_EVENT, state);
-                            }
-                        }
-                        Err(_) => {
-                            // Live transcription failures are non-fatal
-                        }
+                    // A stop that landed while inference was running must not
+                    // paint one last recording frame over the final state.
+                    if stop_clone.load(Ordering::SeqCst) {
+                        break 'live;
                     }
+
+                    let Ok(transcript) = result else {
+                        // Live transcription failures are non-fatal: the final
+                        // pass is still to come.
+                        continue;
+                    };
+                    let current = split_words(transcript.text.trim());
+                    if current.is_empty() {
+                        continue;
+                    }
+
+                    // Commit only what the previous and current hypotheses
+                    // agree on. While the buffer is still growing the newest
+                    // word is withheld: it may be cut off by the buffer edge.
+                    let agreed = agreed_prefix(&previous, &current);
+                    let grew = current.len() > previous.len();
+                    let commit_upto = if grew {
+                        agreed.saturating_sub(1)
+                    } else {
+                        agreed
+                    };
+                    if commit_upto > committed.len() {
+                        committed.extend_from_slice(&current[committed.len()..commit_upto]);
+                    }
+                    let unstable = if current.len() > committed.len() {
+                        current[committed.len()..].join(" ")
+                    } else {
+                        String::new()
+                    };
+                    previous = current;
+
+                    let committed_text = committed.join(" ");
+                    if committed_text.is_empty() && unstable.is_empty() {
+                        continue;
+                    }
+
+                    // Do not repaint when a pass produced exactly the same
+                    // words; the overlay keeps its current frame.
+                    let frame = (committed_text, unstable);
+                    if last_emitted.as_ref() == Some(&frame) {
+                        continue;
+                    }
+                    last_emitted = Some(frame.clone());
+
+                    let state = OverlayState::Recording {
+                        device_label: device_label.clone(),
+                        started_at_ms,
+                        max_seconds,
+                        live_text: Some(LiveText {
+                            committed: frame.0,
+                            unstable: frame.1,
+                        }),
+                    };
+                    let _ = app.emit(events::OVERLAY_EVENT, state);
                 }
             })
             .ok();
 
-        Self {
-            engine,
-            options,
-            samples,
-            app,
-            device_label,
-            started_at_ms,
-            max_seconds,
-            stop,
-            thread,
-        }
+        Self { stop, thread }
     }
 
     fn stop(&mut self) {
@@ -1121,6 +1140,45 @@ impl LiveTranscriber {
             let _ = thread.join();
         }
     }
+}
+
+/// Sleeps until the next decode pass, waking early when stop is requested.
+/// Returns true when the transcriber should stop.
+fn wait_for_pass(stop: &AtomicBool) -> bool {
+    let deadline = std::time::Instant::now() + Duration::from_millis(LIVE_TRANSCRIBE_INTERVAL_MS);
+    while std::time::Instant::now() < deadline {
+        if stop.load(Ordering::SeqCst) {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    stop.load(Ordering::SeqCst)
+}
+
+/// Words as the overlay shows them: whitespace-normalised, punctuation kept.
+fn split_words(text: &str) -> Vec<String> {
+    text.split_whitespace().map(str::to_string).collect()
+}
+
+/// Comparison key for LocalAgreement: case and punctuation must not stop a
+/// word from counting as agreed between two hypotheses.
+fn agreement_key(word: &str) -> String {
+    word.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// Length of the common word prefix of two hypotheses.
+fn agreed_prefix(previous: &[String], current: &[String]) -> usize {
+    previous
+        .iter()
+        .zip(current)
+        .take_while(|(a, b)| {
+            let (a, b) = (agreement_key(a), agreement_key(b));
+            !a.is_empty() && a == b
+        })
+        .count()
 }
 
 #[cfg(test)]

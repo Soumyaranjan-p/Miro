@@ -6,7 +6,7 @@ interface LevelMeterProps {
   frames: number[];
   height?: number;
   /** Ember while recording, neutral while processing or probing. */
-  tone?: "accent" | "muted" | "danger";
+  tone?: "accent" | "muted" | "danger" | "light";
   className?: string;
 }
 
@@ -49,9 +49,11 @@ export function LevelMeter({ frames, height = 40, tone = "accent", className }: 
       const color =
         tone === "accent"
           ? styles.getPropertyValue("--miro-accent").trim() || "#ff4d2e"
-          : tone === "danger"
+         : tone === "danger"
             ? styles.getPropertyValue("--miro-danger").trim() || "#cc2b20"
-            : styles.getPropertyValue("--miro-line-strong").trim() || "#d3d3d8";
+         : tone === "light"
+            ? "#ffffff"
+           : styles.getPropertyValue("--miro-line-strong").trim() || "#d3d3d8";
 
       const centre = cssHeight / 2;
       const count = Math.max(1, Math.floor(cssWidth / (BAR_WIDTH + BAR_GAP)));

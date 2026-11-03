@@ -277,11 +277,23 @@ impl CaptureControl {
     }
 }
 
+/// The native format the device actually delivered at.
+///
+/// The live transcriber needs this to downmix and resample raw samples while
+/// the recording is still running; guessing from the settings is wrong
+/// whenever the device is the system default or was reconfigured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CaptureFormat {
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
 /// A running capture. Dropping it abandons the recording.
 pub struct Capture {
     stop: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
     levels: LevelSink,
+    format: CaptureFormat,
     /// Raw samples captured so far, shared with the live transcriber.
     pub samples: Arc<Mutex<Vec<f32>>>,
     finished: Receiver<CaptureOutcome>,
@@ -292,6 +304,11 @@ pub struct Capture {
 impl Capture {
     pub fn levels(&self) -> &LevelSink {
         &self.levels
+    }
+
+    /// Sample rate and channel count of the buffer behind [`Capture::samples`].
+    pub fn format(&self) -> CaptureFormat {
+        self.format
     }
 
     /// Raw samples captured so far, for the live transcriber.
@@ -620,7 +637,7 @@ pub fn start(
     let cancel = Arc::new(AtomicBool::new(false));
     let levels = LevelSink::new();
     let (tx, finished) = channel::<CaptureOutcome>();
-    let (ready_tx, ready_rx) = channel::<std::result::Result<(), Failure>>();
+    let (ready_tx, ready_rx) = channel::<std::result::Result<CaptureFormat, Failure>>();
 
     let samples = Arc::new(Mutex::new(Vec::new()));
     let samples_clone = Arc::clone(&samples);
@@ -647,10 +664,11 @@ pub fn start(
         .map_err(|e| Failure::Internal(format!("spawn audio thread: {e}")))?;
 
     match ready_rx.recv_timeout(Duration::from_secs(10)) {
-        Ok(Ok(())) => Ok(Capture {
+        Ok(Ok(format)) => Ok(Capture {
             stop,
             cancel,
             levels,
+            format,
             samples,
             finished,
             thread: Some(thread),
@@ -676,7 +694,7 @@ fn run_capture(
     levels: LevelSink,
     samples: Arc<Mutex<Vec<f32>>>,
     on_level: Option<Arc<dyn Fn(LevelFrame) + Send + Sync>>,
-    ready: &Sender<std::result::Result<(), Failure>>,
+    ready: &Sender<std::result::Result<CaptureFormat, Failure>>,
 ) -> CaptureOutcome {
     // Resolve the default input configuration for a device. Called each time
     // a stream is created so that a reconnected device with different
@@ -842,7 +860,10 @@ fn run_capture(
                     .first_callback
                     .load(std::sync::atomic::Ordering::Acquire)
                 {
-                    let _ = ready.send(Ok(()));
+                    let _ = ready.send(Ok(CaptureFormat {
+                        sample_rate,
+                        channels,
+                    }));
                     ready_sent = true;
                     break 'wait;
                 }
