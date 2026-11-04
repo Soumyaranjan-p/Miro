@@ -532,7 +532,9 @@ impl Session {
                 });
                 // Dropping the transcript zeroizes the raw engine output.
                 drop(transcript);
-                processed
+                // Always-on offline spell checking via the Windows SPELL API —
+                // same checker Notepad and Edge use. Never blocks insertion.
+                crate::spellcheck::correct_text(&processed, &settings.language)
             }
             Err(failure) => {
                 self.reset(app);

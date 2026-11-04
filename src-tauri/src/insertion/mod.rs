@@ -66,6 +66,16 @@ pub struct InsertOutcome {
 /// long and the user's clipboard is missing for a noticeable moment.
 const PASTE_SETTLE_MS: u64 = 180;
 
+/// SendInput is reliable for short text only. Browsers/Electron apps process
+/// injected Unicode events asynchronously and silently drop anything beyond
+/// their queue capacity, which is why long dictation used to duplicate: the
+/// partial prefix was typed and then the full text pasted again. A single
+/// clipboard paste is atomic — it either works fully or not at all — and is
+/// faster than batch-injecting hundreds of events. 128 UTF-16 units (about
+/// 125 characters, roughly a sentence) is well within whatever queue Windows
+/// gives us; anything longer takes the single-paste path.
+const CLIPBOARD_THRESHOLD_UTF16_UNITS: usize = 128;
+
 /// Types `text` into the window the user was in when they started dictating.
 pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
     if text.trim().is_empty() {
@@ -87,61 +97,34 @@ pub fn insert(text: &str, target: Target) -> Result<InsertOutcome> {
     }
 
     let utf16_units = text.encode_utf16().count();
+
+    if utf16_units > CLIPBOARD_THRESHOLD_UTF16_UNITS {
+        // Long text: one atomic clipboard paste, no SendInput attempt at all.
+        // Nothing partial can be duplicated and the paste is far faster than
+        // injecting hundreds of events.
+        return insert_via_clipboard(text, target);
+    }
+
+    // Short text: SendInput exclusively. There is deliberately NO clipboard
+    // fallback after a partial attempt — that is the duplicate-paste bug. If
+    // the app refuses the injection, the error path reports it honestly and
+    // the user can Retry or Copy from the overlay (both re-use this same
+    // insertion logic, so no partial text is ever re-pasted on top of what
+    // is already in the app).
     match win::send_unicode_text(text) {
-        Ok(result) if result.characters > 0 => {
-            let text_chars = text.chars().count();
-            if result.characters >= text_chars {
-                Ok(InsertOutcome {
-                    method: InsertMethod::SendInput,
-                    characters: result.characters,
-                    utf16_units: result.utf16_units,
-                    raw_events_sent: result.raw_events_sent,
-                    clipboard_restored: true,
-                    clipboard_formats_skipped: 0,
-                })
-            } else {
-                // SendInput delivered only part of the text. Fall back to the
-                // clipboard for the full text rather than silently dropping
-                // the remainder.
-                match insert_via_clipboard(text, target) {
-                    Ok(outcome) => Ok(InsertOutcome {
-                        method: InsertMethod::SendInputAndClipboard,
-                        characters: text_chars,
-                        utf16_units: result.utf16_units,
-                        raw_events_sent: result.raw_events_sent,
-                        clipboard_restored: outcome.clipboard_restored,
-                        clipboard_formats_skipped: outcome.clipboard_formats_skipped,
-                    }),
-                    Err(_) => Ok(InsertOutcome {
-                        method: InsertMethod::SendInput,
-                        characters: result.characters,
-                        utf16_units: result.utf16_units,
-                        raw_events_sent: result.raw_events_sent,
-                        clipboard_restored: true,
-                        clipboard_formats_skipped: 0,
-                    }),
-                }
-            }
-        }
-        Ok(result) => Err(Failure::Insertion(format!(
-            "no characters were accepted (raw_input_events={}, utf16_units={})",
-            result.raw_events_sent, result.utf16_units
-        ))),
+        Ok(result) => Ok(InsertOutcome {
+            method: InsertMethod::SendInput,
+            characters: result.characters,
+            utf16_units: result.utf16_units,
+            raw_events_sent: result.raw_events_sent,
+            clipboard_restored: true,
+            clipboard_formats_skipped: 0,
+        }),
         Err(send_input_error) => {
-            // Typing was refused. A high-integrity target is the common cause,
-            // so say that instead of a vague failure - but only after trying.
             if target.is_probably_elevated() {
                 return Err(Failure::InsertionBlocked);
             }
-            match insert_via_clipboard(text, target) {
-                Ok(outcome) => Ok(InsertOutcome {
-                    method: InsertMethod::Clipboard,
-                    utf16_units,
-                    raw_events_sent: 0,
-                    ..outcome
-                }),
-                Err(_) => Err(send_input_error),
-            }
+            Err(send_input_error)
         }
     }
 }

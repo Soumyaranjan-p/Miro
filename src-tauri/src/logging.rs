@@ -97,6 +97,10 @@ pub enum Event {
         characters: usize,
         words: usize,
     },
+    SpellcheckApplied {
+        errors: usize,
+        fixed: usize,
+    },
     InsertionAttempt {
         target: &'static str,
         mode: &'static str,
@@ -192,6 +196,9 @@ impl fmt::Display for Event {
             Event::TranscriptionFailed { code } => write!(f, "engine.transcribe.failed code={code}"),
             Event::TranscriptProcessed { characters, words } => {
                 write!(f, "transcript.processed characters={characters} words={words}")
+            }
+            Event::SpellcheckApplied { errors, fixed } => {
+                write!(f, "spellcheck.applied errors={errors} fixed={fixed}")
             }
             Event::InsertionAttempt { target, mode } => {
                 write!(f, "insertion.attempt target={target} mode={mode}")
