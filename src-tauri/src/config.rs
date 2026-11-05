@@ -40,6 +40,20 @@ pub enum Mode {
     Toggle,
 }
 
+/// How live dictation delivers words while recording is in progress.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LiveMode {
+    /// Committed words are spell-checked and typed into the app as they are
+    /// finalised. About two seconds of latency.
+    #[default]
+    Insert,
+    /// Committed words show in the overlay only.
+    Preview,
+    /// No live transcription until recording stops.
+    Off,
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum HomeMode {
@@ -122,6 +136,8 @@ pub struct Settings {
     /// Hotkey that switches back to Normal mode (`home`).
     pub normal_shortcut: String,
     pub mode: Mode,
+    /// How words are delivered while dictation is in progress.
+    pub live_mode: LiveMode,
     /// Which screen the home window opens on: dictation home.
     pub home_mode: HomeMode,
     /// Volume-cue toggle exposed by the home window's sound button.
@@ -150,6 +166,9 @@ impl Default for Settings {
             // The dictation hotkey (Ctrl+M by default) carries both edges of a
             // hold, so push-to-talk works with a combo as well as a key.
             mode: Mode::Toggle,
+            // Live dictation is on by default: committed words are typed into
+            // the app as they are finalised.
+            live_mode: LiveMode::Insert,
             home_mode: HomeMode::Home,
             sound_on: true,
             microphone: None,
@@ -174,6 +193,7 @@ pub struct SettingsPatch {
     pub shortcut: Option<String>,
     pub normal_shortcut: Option<String>,
     pub mode: Option<Mode>,
+    pub live_mode: Option<LiveMode>,
     pub home_mode: Option<HomeMode>,
     pub sound_on: Option<bool>,
     #[serde(deserialize_with = "double_option")]
@@ -284,6 +304,9 @@ impl Settings {
         }
         if let Some(mode) = patch.mode {
             self.mode = mode;
+        }
+        if let Some(live_mode) = patch.live_mode {
+            self.live_mode = live_mode;
         }
         if let Some(home_mode) = patch.home_mode {
             self.home_mode = home_mode;

@@ -49,6 +49,15 @@ impl Target {
         })
     }
 
+    /// Like [`Target::is_still_foreground`] but never re-focuses the window.
+    ///
+    /// Mid-dictation typing must not pull focus back to the app the user
+    /// started in — if the user alt-tabbed away, that app stays behind.
+    pub fn is_still_foreground_strict(&self) -> bool {
+        let current = unsafe { GetForegroundWindow() };
+        current.0 as isize == self.hwnd
+    }
+
     /// True while the target is still the foreground window.
     ///
     /// Checked immediately before typing: if the user alt-tabbed away, Miro

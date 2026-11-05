@@ -33,6 +33,9 @@ pub enum InsertMethod {
     /// Partial SendInput, then clipboard pasted the whole text. Reported as
     /// used by the log; the fix is being tracked separately.
     SendInputAndClipboard,
+    /// All words were typed live during recording; the stop-time pass had
+    /// nothing left to do.
+    Live,
 }
 
 impl InsertMethod {
@@ -41,6 +44,7 @@ impl InsertMethod {
             InsertMethod::SendInput => "SendInput",
             InsertMethod::Clipboard => "Clipboard",
             InsertMethod::SendInputAndClipboard => "SendInput+Clipboard",
+            InsertMethod::Live => "live",
         }
     }
 }

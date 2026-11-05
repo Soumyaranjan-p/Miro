@@ -101,6 +101,9 @@ pub enum Event {
         errors: usize,
         fixed: usize,
     },
+    LiveInsert {
+        words: usize,
+    },
     InsertionAttempt {
         target: &'static str,
         mode: &'static str,
@@ -199,6 +202,9 @@ impl fmt::Display for Event {
             }
             Event::SpellcheckApplied { errors, fixed } => {
                 write!(f, "spellcheck.applied errors={errors} fixed={fixed}")
+            }
+            Event::LiveInsert { words } => {
+                write!(f, "live.insert.chunk words={words}")
             }
             Event::InsertionAttempt { target, mode } => {
                 write!(f, "insertion.attempt target={target} mode={mode}")

@@ -25,7 +25,7 @@ use crate::engine::{self, Engine, EngineOptions};
 use crate::errors::{Failure, Result};
 use crate::events::{self, LiveText, OverlayState, RuntimeStatus};
 use crate::hotkeys::registry as shortcut_registry;
-use crate::insertion::{self, Target};
+use crate::insertion::{self, InsertOutcome, Target};
 use crate::keyboard_hook::{KeySignal, KeyboardHook, PressEvent};
 use crate::logging::{self, Event};
 use crate::privacy::{self, PendingText};
@@ -67,6 +67,11 @@ struct Inner {
     target: Option<Target>,
     pending: PendingText,
     next_retry_id: u64,
+    /// Words typed live during this recording (committed, spell-checked).
+    live_inserted_words: usize,
+    /// Characters actually typed live. Used so the overlay reports the true
+    /// delivered total, not just what the tail insert delivered.
+    live_inserted_characters: usize,
     probe: Option<CaptureControl>,
 }
 
@@ -120,9 +125,18 @@ impl Session {
         }
         logging::event(Event::DictationStarted { mode: "toggle" });
 
+        // Live dictation powers overlay preview and, in Insert mode, live
+        // typing into the app. Off means stop and transcribe once at the end.
+        let live_enabled = settings.live_mode != crate::config::LiveMode::Off;
+        let live_insert = settings.live_mode == crate::config::LiveMode::Insert;
+
         // Load the engine for live transcription during recording. If it fails
         // (model not installed, etc.), live transcription is simply skipped.
-        let engine = self.ensure_engine(app, &settings).ok();
+        let engine = if live_enabled {
+            self.ensure_engine(app, &settings).ok()
+        } else {
+            None
+        };
 
         {
             let mut inner = lock(&self.inner);
@@ -132,6 +146,8 @@ impl Session {
             // Claim the slot before doing anything slow, so a double hotkey
             // press cannot start two recordings.
             inner.phase = Phase::Recording;
+            inner.live_inserted_words = 0;
+            inner.live_inserted_characters = 0;
         }
 
         let target = match Target::capture_foreground() {
@@ -187,6 +203,8 @@ impl Session {
                 device_label.clone(),
                 started_at_ms,
                 settings.max_recording_seconds,
+                live_insert,
+                settings.language.clone(),
             )
         });
 
@@ -552,33 +570,58 @@ impl Session {
             return;
         }
 
-        // Word statistics are numeric aggregates only; the text itself is
-        // zeroized moments below and never stored anywhere.
-        let words = text.split_whitespace().count() as u32;
-        let characters = text.chars().count();
+        // How many words were already typed live into the app. Only the
+        // un-typed remainder is handed to the stop-time insertion pass.
+        let (live_words, live_chars) = {
+            let inner = lock(&self.inner);
+            (inner.live_inserted_words, inner.live_inserted_characters)
+        };
+        let all_words: Vec<&str> = text.split_whitespace().collect();
+        let skip = live_words.min(all_words.len());
+        let remaining = all_words[skip..].join(" ");
 
         // The transcript is handed to the pending store so the Home panel can
         // offer Copy and Paste-in without the text passing through disk,
-        // events or logs.
-        let retry_id = {
+        // events or logs. Only the words the user hasn't already got are
+        // kept; if the live pass typed everything, nothing is pending.
+        let retry_id = if remaining.is_empty() {
+            None
+        } else {
             let mut inner = lock(&self.inner);
             inner.next_retry_id += 1;
             let id = inner.next_retry_id;
-            inner.pending.store(text.clone(), id);
-            id
+            inner.pending.store(remaining.clone(), id);
+            Some(id)
         };
 
-        let utf16_units = text.encode_utf16().count();
-        let outcome = insertion::insert(&text, target);
+        // Word statistics are numeric aggregates only; the text itself is
+        // zeroized moments below and never stored anywhere.
+        let main_words = all_words.len() as u32;
+
+        let outcome = if remaining.is_empty() {
+            // Everything landed live; nothing to insert at stop. Report the
+            // whole dictation as delivered, honestly.
+            Ok(InsertOutcome {
+                method: insertion::InsertMethod::Live,
+                characters: live_chars,
+                utf16_units: text.encode_utf16().count(),
+                raw_events_sent: 0,
+                clipboard_restored: true,
+                clipboard_formats_skipped: 0,
+            })
+        } else {
+            insertion::insert(&remaining, target)
+        };
 
         match outcome {
             Ok(result) => {
                 privacy::zeroize_string(&mut text);
+                let delivered = live_chars + result.characters;
                 logging::event(Event::InsertionFinished {
                     ok: true,
                     code: "ok",
                     method: result.method.as_str(),
-                    characters: result.characters,
+                    characters: delivered,
                     utf16_units: result.utf16_units,
                     send_input_events: result.raw_events_sent,
                 });
@@ -592,14 +635,16 @@ impl Session {
                 emit_overlay(
                     app,
                     OverlayState::Inserted {
-                        characters: result.characters,
+                        characters: delivered,
                         audio_ms,
-                        retry_id: Some(retry_id),
+                        retry_id,
                     },
                 );
                 self.schedule_hide(app.clone());
-                crate::stats::record_dictation(app, words, u64::try_from(audio_ms).unwrap_or(0));
-                self.schedule_retry_expiry(app.clone(), retry_id, SUCCESS_WINDOW);
+                crate::stats::record_dictation(app, main_words, u64::try_from(audio_ms).unwrap_or(0));
+                if let Some(id) = retry_id {
+                    self.schedule_retry_expiry(app.clone(), id, SUCCESS_WINDOW);
+                }
 
                 if limit_reached {
                     // The safety limit stopped the recording, so say so even
@@ -614,24 +659,25 @@ impl Session {
                     ok: false,
                     code: failure.code().as_str(),
                     method: "none",
-                    characters: 0,
-                    utf16_units,
+                    characters: live_chars,
+                    utf16_units: remaining.encode_utf16().count(),
                     send_input_events: 0,
                 });
                 // The panel copy is already in the pending store under the id.
                 self.reset(app);
-                self.schedule_retry_expiry(app.clone(), retry_id, RETRY_WINDOW);
+                if let Some(id) = retry_id {
+                    self.schedule_retry_expiry(app.clone(), id, RETRY_WINDOW);
+                }
                 let code = failure.code();
                 let detail = failure.detail();
                 let retryable = failure.retryable();
-                let _ = characters;
                 emit_overlay(
                     app,
                     OverlayState::Error {
                         code,
                         detail,
                         retryable,
-                        retry_id: retryable.then_some(retry_id),
+                        retry_id: if retryable { retry_id } else { None },
                     },
                 );
             }
@@ -1013,6 +1059,55 @@ impl Default for HookBinding {
     }
 }
 
+/// Insert a batch of committed live-transcribe words into the app the user
+/// was dictating into when the recording started.
+///
+/// Mid-dictation latency targets the ~1.5 s decode cycle; the user gets text
+/// flowing into the app while they speak, exactly like system dictation.
+///
+/// Hard safety rules, all enforced without asking anyone:
+///   * Never re-focus the window. If the user alt-tabbed away, that app stays
+///     behind and nothing is typed.
+///   * Never move the cursor or touch selection in the target.
+///   * Spell-check every chunk before it is typed.
+///   * A chunk is small (a word or two) — SendInput delivers it whole, so no
+///     clipboard save/restore happens mid-dictation.
+///
+/// On any refusal (app busy, wrong window focused), the chunk is skipped —
+/// the remaining words are inserted at stop, where the full insertion path
+/// (including Retry/Copy offers) takes over.
+fn insert_live_chunk(app: &AppHandle, words: &[String], language: &str) {
+    if words.is_empty() {
+        return;
+    }
+    let Some(target) = lock(&app.state::<Session>().inner).target else {
+        return;
+    };
+    if !target.is_still_foreground_strict() {
+        return;
+    }
+    // A trailing space so the next chunk never fuses with this one.
+    let chunk = crate::spellcheck::correct_text(&format!("{} ", words.join(" ")), language);
+    if chunk.trim().is_empty() {
+        return;
+    }
+    match insertion::insert(&chunk, target) {
+        Ok(_) => {
+            logging::event(Event::LiveInsert { words: words.len() });
+            let session = app.state::<Session>();
+            let mut inner = lock(&session.inner);
+            inner.live_inserted_words += words.len();
+            inner.live_inserted_characters += chunk.chars().count();
+        }
+        Err(_) => {
+            // Honest failure: nothing was typed. At stop, the whole
+            // transcript (including these words) is inserted instead — the
+            // user will see the full text land in one shot, identical in
+            // effect to dictation with live preview off.
+        }
+    }
+}
+
 /// Transcribes the capture buffer periodically during recording, emitting
 /// partial results via overlay events so the user sees progress without
 /// waiting for the full dictation to finish.
@@ -1039,6 +1134,8 @@ impl LiveTranscriber {
         device_label: String,
         started_at_ms: u64,
         max_seconds: u32,
+        live_insert: bool,
+        language: String,
     ) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = Arc::clone(&stop);
@@ -1110,7 +1207,11 @@ impl LiveTranscriber {
                         agreed
                     };
                     if commit_upto > committed.len() {
-                        committed.extend_from_slice(&current[committed.len()..commit_upto]);
+                        let fresh: Vec<String> = current[committed.len()..commit_upto].to_vec();
+                        committed.extend_from_slice(&fresh);
+                        if live_insert {
+                            insert_live_chunk(&app, &fresh, &language);
+                        }
                     }
                     let unstable = if current.len() > committed.len() {
                         current[committed.len()..].join(" ")
